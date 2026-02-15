@@ -23,18 +23,31 @@ import (
 var client *mongo.Client
 
 func main() {
+	log.Println("Starting HireIt Backend...")
+
 	// Load .env file
 	if err := godotenv.Load(); err != nil {
-		log.Println("No .env file found")
+		log.Println("No .env file found (expected in production)")
 	}
 
 	// Set Gin mode
 	gin.SetMode(gin.ReleaseMode)
 
+	port := os.Getenv("PORT")
+	if port == "" {
+		port = "8080"
+		log.Println("WARNING: PORT env var not set, defaulting to 8080")
+	} else {
+		log.Printf("PORT env var detected: %s", port)
+	}
+
 	// MongoDB Connection with optimized pool settings
 	mongoURI := os.Getenv("MONGO_URI")
 	if mongoURI == "" {
+		log.Println("WARNING: MONGO_URI env var not set! Defaulting to localhost (will fail in production).")
 		mongoURI = "mongodb://localhost:27017"
+	} else {
+		log.Println("MONGO_URI env var detected.")
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
@@ -48,16 +61,17 @@ func main() {
 		SetMaxConnIdleTime(3 * time.Minute). // Close idle connections after 3 minutes
 		SetServerSelectionTimeout(5 * time.Second)
 
+	log.Println("Connecting to MongoDB...")
 	var err error
 	client, err = mongo.Connect(ctx, clientOptions)
 	if err != nil {
-		log.Fatal("Error connecting to MongoDB: ", err)
+		log.Fatal("FATAL: Error connecting to MongoDB: ", err)
 	}
 
 	// Check the connection
 	err = client.Ping(ctx, nil)
 	if err != nil {
-		log.Fatal("Could not ping MongoDB: ", err)
+		log.Fatal("FATAL: Could not ping MongoDB: ", err)
 	}
 	fmt.Println("Connected to MongoDB!")
 
