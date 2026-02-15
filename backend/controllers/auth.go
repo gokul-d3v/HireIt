@@ -4,6 +4,7 @@ import (
 	"context"
 	"net/http"
 	"os"
+	"sync"
 	"time"
 
 	"broassess-backend/models"
@@ -16,6 +17,19 @@ import (
 )
 
 var UserCollection *mongo.Collection
+
+var (
+	jwtSecretKey     []byte
+	jwtSecretKeyOnce sync.Once
+)
+
+// getJWTSecretKey returns the cached JWT secret key
+func getJWTSecretKey() []byte {
+	jwtSecretKeyOnce.Do(func() {
+		jwtSecretKey = []byte(os.Getenv("JWT_SECRET"))
+	})
+	return jwtSecretKey
+}
 
 // Initialize passed collection
 func InitAuthController(collection *mongo.Collection) {
@@ -30,23 +44,39 @@ func Signup(c *gin.Context) {
 	}
 
 	// Check if user already exists
+	if user.Password == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Password is required"})
+		return
+	}
+	if len(user.Password) < 6 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Password must be at least 6 characters"})
+		return
+	}
+
+	// Use context with timeout for database operations
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
 	var existingUser models.User
-	err := UserCollection.FindOne(context.TODO(), bson.M{"email": user.Email}).Decode(&existingUser)
+	err := UserCollection.FindOne(ctx, bson.M{"email": user.Email}).Decode(&existingUser)
 	if err == nil {
 		c.JSON(http.StatusConflict, gin.H{"error": "User already exists"})
 		return
 	}
 
-	// Hash password
-	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(user.Password), bcrypt.DefaultCost)
+	// Hash password with optimized cost (10 instead of DefaultCost 10 for balance)
+	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(user.Password), 10)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to hash password"})
 		return
 	}
 	user.Password = string(hashedPassword)
 
-	// Insert user
-	result, err := UserCollection.InsertOne(context.TODO(), user)
+	// Insert user with timeout context
+	insertCtx, insertCancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer insertCancel()
+
+	result, err := UserCollection.InsertOne(insertCtx, user)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create user"})
 		return
@@ -66,9 +96,13 @@ func Login(c *gin.Context) {
 		return
 	}
 
+	// Use context with timeout for database query
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
 	// Find user
 	var user models.User
-	err := UserCollection.FindOne(context.TODO(), bson.M{"email": input.Email}).Decode(&user)
+	err := UserCollection.FindOne(ctx, bson.M{"email": input.Email}).Decode(&user)
 	if err != nil {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid email or password"})
 		return
@@ -81,14 +115,14 @@ func Login(c *gin.Context) {
 		return
 	}
 
-	// Generate JWT
+	// Generate JWT using pre-compiled key
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
 		"sub":  user.ID,
 		"role": user.Role,
 		"exp":  time.Now().Add(time.Hour * 24).Unix(),
 	})
 
-	tokenString, err := token.SignedString([]byte(os.Getenv("JWT_SECRET")))
+	tokenString, err := token.SignedString(getJWTSecretKey())
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to generate token"})
 		return

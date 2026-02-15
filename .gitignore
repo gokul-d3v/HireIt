@@ -39,3 +39,5 @@ backend/broassess-backend
 backend/broassess-backend.exe
 *.exe
 *.test
+*.log
+tmp/

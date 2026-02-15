@@ -1,22 +1,66 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect, Suspense } from "react";
 import Link from "next/link";
 import { motion } from "framer-motion";
-import { User, Briefcase, ChevronLeft, Lock, Mail, ArrowRight } from "lucide-react";
+import { User, Briefcase, ChevronLeft, Lock, Mail, ArrowRight, AlertCircle } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { apiRequest } from "@/lib/api";
+import { useAuth } from "@/context/AuthContext";
+import { useRouter, useSearchParams } from "next/navigation";
 
 type Role = "candidate" | "interviewer";
 
-export default function LoginPage() {
+function LoginContent() {
     const [role, setRole] = useState<Role>("candidate");
     const [isLoading, setIsLoading] = useState(false);
+    const [error, setError] = useState<string | null>(null);
+    const { login, isAuthenticated, isLoading: isAuthLoading, user } = useAuth();
+    const router = useRouter();
+    const searchParams = useSearchParams();
 
-    const handleSubmit = (e: React.FormEvent) => {
+    useEffect(() => {
+        if (!isAuthLoading && isAuthenticated && user) {
+            if (user.role === "candidate") router.push("/candidate/dashboard");
+            else router.push("/interviewer/dashboard");
+        }
+
+        // Check for error params from OAuth redirect
+        const errorParam = searchParams.get("error");
+        const messageParam = searchParams.get("message");
+        if (errorParam === "role_mismatch" && messageParam) {
+            setError(decodeURIComponent(messageParam));
+        }
+    }, [isAuthLoading, isAuthenticated, user, router, searchParams]);
+
+    const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
         e.preventDefault();
         setIsLoading(true);
-        // Simulate login delay
-        setTimeout(() => setIsLoading(false), 2000);
+        setError(null);
+
+        const formData = new FormData(e.currentTarget);
+        const email = formData.get("email") as string;
+        const password = formData.get("password") as string;
+
+        try {
+            const data = await apiRequest("/login", "POST", {
+                email,
+                password,
+                role, // Pass the selected role to the API
+            });
+
+            login(data.token, data.role);
+            // Optionally redirect based on role or to a default dashboard
+            if (data.role === "candidate") {
+                router.push("/candidate/dashboard");
+            } else if (data.role === "interviewer") {
+                router.push("/interviewer/dashboard");
+            }
+        } catch (err: any) {
+            setError(err.message || "Invalid credentials");
+        } finally {
+            setIsLoading(false);
+        }
     };
 
     return (
@@ -100,6 +144,13 @@ export default function LoginPage() {
 
                     {/* Login Form */}
                     <form onSubmit={handleSubmit} className="space-y-6">
+                        {error && (
+                            <div className="bg-red-50 text-red-600 p-3 rounded-lg text-sm flex items-center gap-2">
+                                <AlertCircle size={16} />
+                                {error}
+                            </div>
+                        )}
+
                         <div>
                             <label htmlFor="email" className="block text-sm font-medium text-gray-700 mb-1.5">
                                 Email address
@@ -122,7 +173,7 @@ export default function LoginPage() {
 
                         <div>
                             <div className="flex items-center justify-between mb-1.5">
-                                <label htmlFor="password" classNae="block text-sm font-medium text-gray-700">
+                                <label htmlFor="password" className="block text-sm font-medium text-gray-700">
                                     Password
                                 </label>
                                 <Link
@@ -175,15 +226,15 @@ export default function LoginPage() {
                         </div>
 
                         <div className="mt-6 grid grid-cols-2 gap-3">
-                            <button
-                                type="button"
+                            <a
+                                href={`http://localhost:8080/auth/google/login?role=${role}`}
                                 className="w-full inline-flex justify-center py-3 px-4 border border-gray-200 rounded-xl shadow-sm bg-white text-sm font-medium text-gray-500 hover:bg-gray-50 transition-colors"
                             >
                                 <svg className="h-5 w-5 mr-2" viewBox="0 0 24 24">
                                     <path d="M12.545,10.539H24c0.125,0.852,0.208,1.758,0.208,2.724c0,2.71-0.732,5.132-1.956,7.129 c-1.637,2.693-4.484,4.607-8.254,4.607C6.271,25,0,18.729,0,12.5C0,6.271,6.271,0,14,0c3.781,0,6.965,1.402,9.394,3.692l-3.328,3.208 C18.769,5.772,16.579,4.688,14,4.688c-4.309,0-7.813,3.496-7.813,7.813s3.504,7.813,7.813,7.813c3.676,0,6.902-2.289,8.082-5.772 h-9.537V10.539z" fill="#4285F4" />
                                 </svg>
                                 Google
-                            </button>
+                            </a>
                             <button
                                 type="button"
                                 className="w-full inline-flex justify-center py-3 px-4 border border-gray-200 rounded-xl shadow-sm bg-white text-sm font-medium text-gray-500 hover:bg-gray-50 transition-colors"
@@ -205,5 +256,14 @@ export default function LoginPage() {
                 </p>
             </div>
         </div>
+    );
+
+}
+
+export default function LoginPage() {
+    return (
+        <Suspense fallback={<div className="min-h-screen flex items-center justify-center">Loading...</div>}>
+            <LoginContent />
+        </Suspense>
     );
 }
