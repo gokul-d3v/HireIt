@@ -120,7 +120,7 @@ func GoogleLoginCallback(c *gin.Context) {
 		if user.Role != role {
 			// Role mismatch - redirect to login with error
 			errorMsg := fmt.Sprintf("You have an existing %s account. Please sign in as %s.", user.Role, user.Role)
-			frontendURL := fmt.Sprintf("http://localhost:3000/login?error=role_mismatch&message=%s", errorMsg)
+			frontendURL := fmt.Sprintf("%s/login?error=role_mismatch&message=%s", os.Getenv("FRONTEND_URL"), errorMsg)
 			c.Redirect(http.StatusTemporaryRedirect, frontendURL)
 			return
 		}
@@ -140,6 +140,6 @@ func GoogleLoginCallback(c *gin.Context) {
 	}
 
 	// Redirect to Frontend with Token
-	frontendURL := fmt.Sprintf("http://localhost:3000/google-callback?token=%s&role=%s", tokenString, user.Role)
+	frontendURL := fmt.Sprintf("%s/google-callback?token=%s&role=%s", os.Getenv("FRONTEND_URL"), tokenString, user.Role)
 	c.Redirect(http.StatusTemporaryRedirect, frontendURL)
 }
