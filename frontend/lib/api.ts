@@ -42,6 +42,15 @@ export async function apiRequest(endpoint: string, method: string, body?: unknow
         }
 
         if (!response.ok) {
+            if (response.status === 401) {
+                // Token invalid or expired
+                localStorage.removeItem("token");
+                localStorage.removeItem("role");
+                if (window.location.pathname !== "/login") {
+                    window.location.href = "/login";
+                }
+                throw new Error("Session expired. Please login again.");
+            }
             throw new Error(data?.error || data?.message || `Request failed with status ${response.status}`);
         }
 

@@ -7,6 +7,8 @@ import { Users, FilePlus, PlayCircle, BarChart3, Plus, Trash2, Layers, Share2 } 
 import { apiRequest } from "@/lib/api";
 import { useToast } from "@/components/ui/Toast";
 import { Modal } from "@/components/ui/Modal";
+import { useSearchParams } from "next/navigation";
+import { SetPasswordModal } from "@/components/auth/SetPasswordModal";
 
 interface Assessment {
     id: string;
@@ -40,6 +42,14 @@ export default function InterviewerDashboard() {
     const [loadingStats, setLoadingStats] = useState(true);
     const [deleteModalOpen, setDeleteModalOpen] = useState(false);
     const [selectedAssessmentId, setSelectedAssessmentId] = useState<string | null>(null);
+    const searchParams = useSearchParams();
+    const [showPasswordModal, setShowPasswordModal] = useState(false);
+
+    useEffect(() => {
+        if (searchParams.get("setup_password") === "true") {
+            setShowPasswordModal(true);
+        }
+    }, [searchParams]);
 
     // Protect the route
     useEffect(() => {
@@ -301,6 +311,14 @@ export default function InterviewerDashboard() {
                     Warning: This will delete all connected phases and submissions!
                 </p>
             </Modal>
-        </main>
+            <SetPasswordModal
+                isOpen={showPasswordModal}
+                onClose={() => {
+                    setShowPasswordModal(false);
+                    const newUrl = window.location.pathname;
+                    window.history.replaceState({}, '', newUrl);
+                }}
+            />
+        </main >
     );
 }

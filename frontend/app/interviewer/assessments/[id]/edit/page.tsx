@@ -14,7 +14,7 @@ interface Question {
     type: QuestionType;
     options: string[];
     correct_answer: string;
-    points: number;
+    points: number | string;
 }
 
 export default function EditAssessmentPage() {
@@ -25,7 +25,7 @@ export default function EditAssessmentPage() {
 
     const [title, setTitle] = useState("");
     const [description, setDescription] = useState("");
-    const [duration, setDuration] = useState(60);
+    const [duration, setDuration] = useState<number | string>(60);
     const [questions, setQuestions] = useState<Question[]>([]);
     const [loading, setLoading] = useState(true);
     const [submitting, setSubmitting] = useState(false);
@@ -71,6 +71,9 @@ export default function EditAssessmentPage() {
     };
 
     const updateQuestion = (index: number, field: keyof Question, value: any) => {
+        if (field === 'points') {
+            if (!/^\d*$/.test(value)) return;
+        }
         const newQuestions = [...questions];
         newQuestions[index] = { ...newQuestions[index], [field]: value };
         setQuestions(newQuestions);
@@ -105,7 +108,7 @@ export default function EditAssessmentPage() {
                 title,
                 description,
                 duration: Number(duration),
-                questions,
+                questions: questions.map(q => ({ ...q, points: Number(q.points) })),
             });
             showToast("Assessment updated successfully!", "success");
             router.push("/interviewer/assessments");
@@ -159,9 +162,11 @@ export default function EditAssessmentPage() {
                         <div>
                             <label className="block text-sm font-medium text-gray-700 mb-1">Duration (minutes)</label>
                             <input
-                                type="number"
+                                type="text"
                                 value={duration}
-                                onChange={(e) => setDuration(Number(e.target.value))}
+                                onChange={(e) => {
+                                    if (/^\d*$/.test(e.target.value)) setDuration(e.target.value)
+                                }}
                                 className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
                             />
                         </div>

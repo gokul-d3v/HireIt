@@ -141,5 +141,11 @@ func GoogleLoginCallback(c *gin.Context) {
 
 	// Redirect to Frontend with Token
 	frontendURL := fmt.Sprintf("%s/google-callback?token=%s&role=%s", os.Getenv("FRONTEND_URL"), tokenString, user.Role)
+
+	// Add flag if user is new or has no password
+	if user.Password == "" {
+		frontendURL += "&is_new_user=true"
+	}
+
 	c.Redirect(http.StatusTemporaryRedirect, frontendURL)
 }

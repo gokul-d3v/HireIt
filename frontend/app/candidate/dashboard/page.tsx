@@ -6,6 +6,8 @@ import { useEffect, useState } from "react";
 import { motion } from "framer-motion";
 import { FileText, Clock, CheckCircle, Play, Users, ArrowRight } from "lucide-react";
 import { apiRequest } from "@/lib/api";
+import { useSearchParams } from "next/navigation";
+import { SetPasswordModal } from "@/components/auth/SetPasswordModal";
 
 interface Assessment {
     id: string;
@@ -41,6 +43,14 @@ export default function CandidateDashboard() {
     const [groupedAssessments, setGroupedAssessments] = useState<AssessmentCardData[]>([]);
     const [completedCount, setCompletedCount] = useState(0);
     const [loading, setLoading] = useState(true);
+    const searchParams = useSearchParams();
+    const [showPasswordModal, setShowPasswordModal] = useState(false);
+
+    useEffect(() => {
+        if (searchParams.get("setup_password") === "true") {
+            setShowPasswordModal(true);
+        }
+    }, [searchParams]);
 
     // Protect the route
     useEffect(() => {
@@ -268,6 +278,15 @@ export default function CandidateDashboard() {
                     </div>
                 )}
             </div>
-        </main>
+            <SetPasswordModal
+                isOpen={showPasswordModal}
+                onClose={() => {
+                    setShowPasswordModal(false);
+                    // Remove param from URL without reload
+                    const newUrl = window.location.pathname;
+                    window.history.replaceState({}, '', newUrl);
+                }}
+            />
+        </main >
     );
 }

@@ -18,13 +18,14 @@ function GoogleCallbackContent() {
             login(token, role as any);
 
             // Redirect based on role
-            if (role === "candidate") {
-                router.push("/candidate/dashboard");
-            } else if (role === "interviewer") {
-                router.push("/interviewer/dashboard");
-            } else {
-                router.push("/login");
+            let redirectPath = role === "candidate" ? "/candidate/dashboard" : "/interviewer/dashboard";
+
+            const isNewUser = searchParams.get("is_new_user");
+            if (isNewUser === "true") {
+                redirectPath += "?setup_password=true";
             }
+
+            router.push(redirectPath);
         } else {
             // Handle error or missing params
             router.push("/login?error=google_auth_failed");

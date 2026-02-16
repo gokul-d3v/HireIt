@@ -95,6 +95,13 @@ func UpdateAssessment(c *gin.Context) {
 		return
 	}
 
+	// Generate IDs for questions if not present
+	for i := range assessment.Questions {
+		if assessment.Questions[i].ID.IsZero() {
+			assessment.Questions[i].ID = primitive.NewObjectID()
+		}
+	}
+
 	assessment.UpdatedAt = time.Now()
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)

@@ -15,14 +15,14 @@ interface Question {
     type: QuestionType;
     options: string[];
     correct_answer: string;
-    points: number;
+    points: number | string;
 }
 
 interface PhaseConfig {
     name: string;
-    duration: number;
-    total_marks: number;
-    passing_score: number;
+    duration: number | string;
+    total_marks: number | string;
+    passing_score: number | string;
     questions: Question[];
 }
 
@@ -69,6 +69,9 @@ export default function CreateAssessmentPage() {
     }, [step, phaseCount, phases.length]);
 
     const updatePhaseConfig = (index: number, field: keyof PhaseConfig, value: any) => {
+        if (field === 'duration' || field === 'total_marks' || field === 'passing_score') {
+            if (!/^\d*$/.test(value)) return;
+        }
         const newPhases = [...phases];
         newPhases[index] = { ...newPhases[index], [field]: value };
         setPhases(newPhases);
@@ -87,6 +90,9 @@ export default function CreateAssessmentPage() {
     };
 
     const updateQuestion = (qIndex: number, field: keyof Question, value: any) => {
+        if (field === 'points') {
+            if (!/^\d*$/.test(value)) return;
+        }
         const newPhases = [...phases];
         newPhases[currentPhaseIndex].questions[qIndex] = {
             ...newPhases[currentPhaseIndex].questions[qIndex],
@@ -135,9 +141,9 @@ export default function CreateAssessmentPage() {
         } else if (step === 3) {
             // Validate current phase marks
             const currentPhase = phases[currentPhaseIndex];
-            const currentTotal = currentPhase.questions.reduce((sum, q) => sum + q.points, 0);
+            const currentTotal = currentPhase.questions.reduce((sum, q) => sum + Number(q.points || 0), 0);
 
-            if (currentTotal !== currentPhase.total_marks) {
+            if (currentTotal !== Number(currentPhase.total_marks || 0)) {
                 showToast(`Phase ${currentPhaseIndex + 1} Question Points (${currentTotal}) must match Total Marks (${currentPhase.total_marks})`, "error");
                 return;
             }
@@ -177,16 +183,16 @@ export default function CreateAssessmentPage() {
                 const phase = phases[i];
 
                 // Calculate total marks from question points
-                const calculatedTotalMarks = phase.questions.reduce((sum, q) => sum + q.points, 0);
+                // const calculatedTotalMarks = phase.questions.reduce((sum, q) => sum + Number(q.points), 0);
 
                 const payload: any = {
                     title: `${assessmentTitle} - ${phase.name}`,
                     description: i === 0 ? assessmentDescription : `${assessmentDescription} (${phase.name})`,
-                    duration: phase.duration,
-                    questions: phase.questions,
+                    duration: Number(phase.duration),
+                    questions: phase.questions.map(q => ({ ...q, points: Number(q.points) })),
                     phase: i + 1,
-                    passing_score: phase.passing_score,
-                    total_marks: phase.total_marks, // Use configured value (validated in step 3)
+                    passing_score: Number(phase.passing_score),
+                    total_marks: Number(phase.total_marks), // Use configured value (validated in step 3)
                 };
 
                 // Link to next phase if exists
@@ -345,9 +351,9 @@ export default function CreateAssessmentPage() {
                                                 <Clock size={14} className="inline mr-1" /> Duration (minutes)
                                             </label>
                                             <input
-                                                type="number"
-                                                value={phase.duration || ''}
-                                                onChange={(e) => updatePhaseConfig(idx, 'duration', Number(e.target.value))}
+                                                type="text"
+                                                value={phase.duration}
+                                                onChange={(e) => updatePhaseConfig(idx, 'duration', e.target.value)}
                                                 className="w-full p-3 text-gray-900 border border-gray-200 rounded-lg focus:ring-2 focus:ring-indigo-100 focus:border-indigo-500 focus:outline-none"
                                             />
                                         </div>
@@ -356,9 +362,9 @@ export default function CreateAssessmentPage() {
                                                 <Award size={14} className="inline mr-1" /> Total Marks
                                             </label>
                                             <input
-                                                type="number"
-                                                value={phase.total_marks || ''}
-                                                onChange={(e) => updatePhaseConfig(idx, 'total_marks', Number(e.target.value))}
+                                                type="text"
+                                                value={phase.total_marks}
+                                                onChange={(e) => updatePhaseConfig(idx, 'total_marks', e.target.value)}
                                                 className="w-full p-3 text-gray-900 border border-gray-200 rounded-lg focus:ring-2 focus:ring-indigo-100 focus:border-indigo-500 focus:outline-none"
                                                 placeholder="e.g. 100"
                                             />
@@ -368,9 +374,9 @@ export default function CreateAssessmentPage() {
                                                 <Target size={14} className="inline mr-1" /> Passing Score
                                             </label>
                                             <input
-                                                type="number"
-                                                value={phase.passing_score || ''}
-                                                onChange={(e) => updatePhaseConfig(idx, 'passing_score', Number(e.target.value))}
+                                                type="text"
+                                                value={phase.passing_score}
+                                                onChange={(e) => updatePhaseConfig(idx, 'passing_score', e.target.value)}
                                                 className="w-full p-3 text-gray-900 border border-gray-200 rounded-lg focus:ring-2 focus:ring-indigo-100 focus:border-indigo-500 focus:outline-none"
                                             />
                                         </div>
@@ -479,9 +485,9 @@ export default function CreateAssessmentPage() {
                                                     <div className="flex items-center gap-2 mr-4">
                                                         <label className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Points</label>
                                                         <input
-                                                            type="number"
+                                                            type="text"
                                                             value={question.points}
-                                                            onChange={(e) => updateQuestion(qIdx, 'points', Number(e.target.value))}
+                                                            onChange={(e) => updateQuestion(qIdx, 'points', e.target.value)}
                                                             className="w-16 p-1 text-center text-sm font-bold text-gray-900 border border-gray-200 rounded focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 focus:outline-none"
                                                         />
                                                     </div>
