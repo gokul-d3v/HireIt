@@ -63,9 +63,9 @@ export default function CandidateAssessmentsPage() {
                 apiRequest("/api/submissions/me", "GET")
             ]);
 
-            setAssessments(assessmentsData);
-            setSubmissions(submissionsData);
-            processAssessments(assessmentsData, submissionsData);
+            setAssessments(assessmentsData || []);
+            setSubmissions(submissionsData || []);
+            processAssessments(assessmentsData || [], submissionsData || []);
         } catch (err) {
             console.error("Failed to fetch data", err);
         } finally {

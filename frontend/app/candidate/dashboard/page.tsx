@@ -1,5 +1,8 @@
 "use client";
 
+// Force Next.js to dynamically render this page to avoid CSR bailout errors with useSearchParams
+export const dynamic = "force-dynamic";
+import { Suspense } from "react";
 import { useAuth } from "@/context/AuthContext";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
@@ -36,7 +39,7 @@ interface AssessmentCardData {
     status: 'Start' | 'Resume' | 'Completed' | 'Failed';
 }
 
-export default function CandidateDashboard() {
+function CandidateDashboardContent() {
     const { user, isAuthenticated, isLoading } = useAuth();
     const router = useRouter();
     const [rawAssessments, setRawAssessments] = useState<Assessment[]>([]);
@@ -78,7 +81,7 @@ export default function CandidateDashboard() {
             setRawAssessments(assessmentsData || []);
 
             // Calculate completed tests
-            const uniqueCompleted = new Set(submissionsData.map((s: Submission) => s.assessment_id));
+            const uniqueCompleted = new Set((submissionsData || []).map((s: Submission) => s.assessment_id));
             setCompletedCount(uniqueCompleted.size);
 
             processAssessments(assessmentsData || [], submissionsData || []);
@@ -288,5 +291,13 @@ export default function CandidateDashboard() {
                 }}
             />
         </main >
+    );
+}
+
+export default function CandidateDashboard() {
+    return (
+        <Suspense fallback={<div className="min-h-screen flex items-center justify-center">Loading dashboard...</div>}>
+            <CandidateDashboardContent />
+        </Suspense>
     );
 }

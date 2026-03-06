@@ -42,7 +42,7 @@ export async function apiRequest(endpoint: string, method: string, body?: unknow
         }
 
         if (!response.ok) {
-            if (response.status === 401) {
+            if (response.status === 401 && endpoint !== "/login" && endpoint !== "/signup") {
                 // Token invalid or expired
                 localStorage.removeItem("token");
                 localStorage.removeItem("role");

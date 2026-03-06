@@ -88,7 +88,8 @@ func main() {
 
 	// Initialize Router with custom middleware for better performance
 	router := gin.New()
-	router.Use(gin.Recovery()) // Only recovery middleware, no default logger
+	router.Use(gin.Recovery())
+	router.Use(gin.Logger()) // Add logger
 
 	// CORS Configuration
 	router.Use(cors.New(cors.Config{

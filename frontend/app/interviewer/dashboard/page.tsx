@@ -1,5 +1,8 @@
 "use client";
 
+// Force Next.js to dynamically render this page to avoid CSR bailout errors with useSearchParams
+export const dynamic = "force-dynamic";
+import { Suspense } from "react";
 import { useAuth } from "@/context/AuthContext";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
@@ -26,7 +29,7 @@ interface DashboardStats {
     pendingReview: number;
 }
 
-export default function InterviewerDashboard() {
+function InterviewerDashboardContent() {
     const { user, isAuthenticated, isLoading } = useAuth();
     const router = useRouter();
     const { showToast } = useToast();
@@ -320,5 +323,13 @@ export default function InterviewerDashboard() {
                 }}
             />
         </main >
+    );
+}
+
+export default function InterviewerDashboard() {
+    return (
+        <Suspense fallback={<div className="min-h-screen flex items-center justify-center">Loading dashboard...</div>}>
+            <InterviewerDashboardContent />
+        </Suspense>
     );
 }
