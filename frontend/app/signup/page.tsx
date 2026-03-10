@@ -13,7 +13,7 @@ import { useRouter } from "next/navigation";
 type Role = "candidate" | "interviewer";
 
 export default function SignupPage() {
-  const [role, setRole] = useState<Role>("candidate");
+  const role: Role = "interviewer";
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [showPassword, setShowPassword] = useState(false);
@@ -62,11 +62,7 @@ export default function SignupPage() {
 
       login(loginData.token, loginData.role);
 
-      if (role === "candidate") {
-        router.push("/candidate/dashboard");
-      } else {
-        router.push("/interviewer/dashboard");
-      }
+      router.push("/interviewer/dashboard");
     } catch (err: any) {
       setError(err.message || "Failed to create account");
     } finally {
@@ -92,15 +88,9 @@ export default function SignupPage() {
             <div className="mt-8 space-y-4">
               <div className="flex items-center gap-4 text-indigo-100/80">
                 <div className="p-2 bg-white/10 rounded-lg">
-                  <UserPlus size={20} />
-                </div>
-                <span>Create an account to get started</span>
-              </div>
-              <div className="flex items-center gap-4 text-indigo-100/80">
-                <div className="p-2 bg-white/10 rounded-lg">
                   <Briefcase size={20} />
                 </div>
-                <span>Hire top talent or land your dream job</span>
+                <span>Hire top talent with secure technical assessments</span>
               </div>
             </div>
           </motion.div>
@@ -121,36 +111,8 @@ export default function SignupPage() {
           <div className="mb-10">
             <h1 className="text-3xl font-bold text-gray-900 tracking-tight">Create Account</h1>
             <p className="mt-2 text-gray-500">
-              Sign up as a {role} to get started.
+              Sign up as an Interviewer to get started.
             </p>
-          </div>
-
-          {/* Role Toggle */}
-          <div className="bg-gray-100 p-1 rounded-xl flex mb-8">
-            <button
-              onClick={() => setRole("candidate")}
-              className={cn(
-                "flex-1 flex items-center justify-center gap-2 py-2.5 text-sm font-medium rounded-lg transition-all duration-200",
-                role === "candidate"
-                  ? "bg-white text-indigo-600 shadow-sm"
-                  : "text-gray-500 hover:text-gray-700"
-              )}
-            >
-              <User size={18} />
-              Candidate
-            </button>
-            <button
-              onClick={() => setRole("interviewer")}
-              className={cn(
-                "flex-1 flex items-center justify-center gap-2 py-2.5 text-sm font-medium rounded-lg transition-all duration-200",
-                role === "interviewer"
-                  ? "bg-white text-indigo-600 shadow-sm"
-                  : "text-gray-500 hover:text-gray-700"
-              )}
-            >
-              <Briefcase size={18} />
-              Interviewer
-            </button>
           </div>
 
           {/* Signup Form */}

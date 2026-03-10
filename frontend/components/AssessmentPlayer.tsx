@@ -5,7 +5,9 @@ import { useRouter } from "next/navigation"; // Note: used for navigation after 
 import { apiRequest } from "@/lib/api";
 import { useToast } from "@/components/ui/Toast";
 import { Modal } from "@/components/ui/Modal";
-import { Clock, CheckCircle, ChevronLeft, ChevronRight, AlertTriangle } from "lucide-react";
+import { Clock, CheckCircle, ChevronLeft, ChevronRight, AlertTriangle, ShieldAlert, Camera, Maximize2 } from "lucide-react";
+import * as tf from "@tensorflow/tfjs";
+import * as blazeface from "@tensorflow-models/blazeface";
 
 interface Question {
     id: string;
@@ -41,6 +43,131 @@ export default function AssessmentPlayer({ assessmentId, onComplete }: Assessmen
     const [timeLeft, setTimeLeft] = useState<number | null>(null);
     const [submitting, setSubmitting] = useState(false);
     const timerRef = useRef<NodeJS.Timeout | null>(null);
+
+    // Anti-Cheat State
+    const [examStarted, setExamStarted] = useState(false);
+    const [violations, setViolations] = useState(0);
+    const [showWarningModal, setShowWarningModal] = useState(false);
+    const [violationReason, setViolationReason] = useState("");
+    const [violationEvidence, setViolationEvidence] = useState<string | null>(null);
+    const [modelsLoaded, setModelsLoaded] = useState(false);
+
+    const videoRef = useRef<HTMLVideoElement>(null);
+    const canvasRef = useRef<HTMLCanvasElement>(null);
+    const detectionInterval = useRef<NodeJS.Timeout | null>(null);
+
+    useEffect(() => {
+        const loadModels = async () => {
+            try {
+                await tf.ready();
+                await blazeface.load();
+                setModelsLoaded(true);
+            } catch (err) {
+                console.error("Failed to load TFJS models", err);
+            }
+        };
+        loadModels();
+    }, []);
+
+    const handleViolation = (reason: string, evidenceBase64?: string) => {
+        setViolations(prev => {
+            const newCount = prev + 1;
+            setViolationReason(reason);
+            if (evidenceBase64) setViolationEvidence(evidenceBase64);
+            setShowWarningModal(true);
+
+            if (newCount >= 3) {
+                submitAssessment(true); // Auto submit on 3rd violation
+            }
+            return newCount;
+        });
+    };
+
+    useEffect(() => {
+        if (!examStarted) return;
+
+        const handleVisibilityChange = () => {
+            if (document.hidden) {
+                handleViolation("Tab switching detected");
+            }
+        };
+
+        const handleBlur = () => {
+            handleViolation("Application lost focus");
+        };
+
+        const handleFullscreenChange = () => {
+            if (!document.fullscreenElement) {
+                handleViolation("Exited Full-Screen mode");
+            }
+        };
+
+        document.addEventListener("visibilitychange", handleVisibilityChange);
+        window.addEventListener("blur", handleBlur);
+        document.addEventListener("fullscreenchange", handleFullscreenChange);
+
+        return () => {
+            document.removeEventListener("visibilitychange", handleVisibilityChange);
+            window.removeEventListener("blur", handleBlur);
+            document.removeEventListener("fullscreenchange", handleFullscreenChange);
+        };
+    }, [examStarted]);
+
+    const captureEvidenceAndViolate = (reason: string) => {
+        if (!canvasRef.current || !videoRef.current) return;
+
+        const canvas = canvasRef.current;
+        const video = videoRef.current;
+
+        canvas.width = video.videoWidth;
+        canvas.height = video.videoHeight;
+
+        const ctx = canvas.getContext('2d');
+        if (ctx) {
+            ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+            const base64Image = canvas.toDataURL('image/jpeg');
+            handleViolation(reason, base64Image);
+        } else {
+            handleViolation(reason);
+        }
+    };
+
+    const startExamMode = async () => {
+        try {
+            await document.documentElement.requestFullscreen();
+
+            const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+            if (videoRef.current) {
+                videoRef.current.srcObject = stream;
+            }
+
+            setExamStarted(true);
+
+            const model = await blazeface.load();
+            detectionInterval.current = setInterval(async () => {
+                if (videoRef.current && videoRef.current.readyState === 4) {
+                    const predictions = await model.estimateFaces(videoRef.current, false);
+                    if (predictions.length > 1) {
+                        captureEvidenceAndViolate("Multiple people detected in frame");
+                    }
+                }
+            }, 3000);
+
+        } catch (err) {
+            console.error("Failed to start exam mode", err);
+            alert("Please allow Camera permissions and Full-Screen to begin the exam.");
+        }
+    };
+
+    useEffect(() => {
+        return () => {
+            if (detectionInterval.current) clearInterval(detectionInterval.current);
+            if (videoRef.current && videoRef.current.srcObject) {
+                const stream = videoRef.current.srcObject as MediaStream;
+                stream.getTracks().forEach(track => track.stop());
+            }
+        };
+    }, []);
 
     useEffect(() => {
         if (assessmentId) {
@@ -205,7 +332,7 @@ export default function AssessmentPlayer({ assessmentId, onComplete }: Assessmen
 
     if (!assessment) return <div className="p-8 text-center">Assessment not found or failed to load.</div>;
 
-    const currentQuestion = assessment.questions[currentQuestionIndex];
+    const currentQuestion = assessment.questions ? assessment.questions[currentQuestionIndex] : null;
 
     if (!currentQuestion) {
         return (
@@ -217,15 +344,60 @@ export default function AssessmentPlayer({ assessmentId, onComplete }: Assessmen
         );
     }
 
-    const isLastQuestion = currentQuestionIndex === assessment.questions.length - 1;
+    const isLastQuestion = assessment.questions ? currentQuestionIndex === assessment.questions.length - 1 : true;
+
+    if (!examStarted) {
+        return (
+            <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
+                <div className="bg-white rounded-xl shadow-lg border border-gray-200 p-8 max-w-lg w-full text-center">
+                    <ShieldAlert className="text-indigo-600 mx-auto mb-6" size={56} />
+                    <h1 className="text-2xl font-bold text-gray-900 mb-2">{assessment.title}</h1>
+                    <p className="text-gray-600 mb-6 text-sm">
+                        This is a secure assessment. Once started, you must remain in <strong>Full-Screen Mode</strong>.
+                        Do not exit full-screen, switch tabs, or open other applications.
+                    </p>
+
+                    <div className="bg-orange-50 border border-orange-200 rounded-lg p-4 mb-6 text-left text-sm text-orange-800">
+                        <ul className="list-disc pl-5 space-y-1">
+                            <li><strong>Violation 1 & 2:</strong> You will receive a strict warning.</li>
+                            <li><strong>Violation 3:</strong> Your exam will be immediately aborted and submitted as-is.</li>
+                        </ul>
+                    </div>
+
+                    {!modelsLoaded && (
+                        <div className="mb-4 text-sm font-medium text-amber-600 flex items-center justify-center gap-2">
+                            <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-amber-600"></div>
+                            Loading AI secure environment...
+                        </div>
+                    )}
+
+                    <button
+                        onClick={startExamMode}
+                        disabled={!modelsLoaded || !assessment.questions || assessment.questions.length === 0}
+                        className="w-full flex justify-center items-center gap-2 px-6 py-3 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed shadow-sm font-medium transition-colors"
+                    >
+                        <Camera size={18} />
+                        {(!assessment.questions || assessment.questions.length === 0) ? "No Questions Available" : "Enable Camera & Start"}
+                    </button>
+                </div>
+            </div>
+        );
+    }
 
     return (
         <div className="min-h-screen bg-gray-50 flex flex-col">
             {/* Header */}
             <div className="bg-white border-b border-gray-200 px-8 py-4 sticky top-0 z-10 shadow-sm flex justify-between items-center">
-                <div>
-                    <h1 className="text-xl font-bold text-gray-900">{assessment.title}</h1>
-                    <div className="text-sm text-gray-500">Question {currentQuestionIndex + 1} of {assessment.questions.length}</div>
+                <div className="flex items-center gap-4">
+                    <div>
+                        <h1 className="text-xl font-bold text-gray-900">{assessment.title}</h1>
+                        <div className="text-sm text-gray-500">
+                            Question {currentQuestionIndex + 1} of {assessment.questions ? assessment.questions.length : 0}
+                        </div>
+                    </div>
+                    {/* Hidden video feed for monitoring */}
+                    <video ref={videoRef} autoPlay playsInline muted className="h-16 w-24 object-cover rounded border border-gray-200 bg-black" />
+                    <canvas ref={canvasRef} className="hidden" />
                 </div>
 
                 <div className={`flex items-center gap-2 font-mono text-xl font-bold px-4 py-2 rounded-lg ${timeLeft !== null && timeLeft < 300 ? "bg-red-50 text-red-600" : "bg-gray-100 text-gray-700"
@@ -335,6 +507,46 @@ export default function AssessmentPlayer({ assessmentId, onComplete }: Assessmen
                     <br />
                     You cannot change your answers after submission.
                 </p>
+            </Modal>
+
+            {/* Anti Cheat Warning Modal */}
+            <Modal
+                isOpen={showWarningModal}
+                onClose={() => { }} // Disable closing via background click or Esc
+                title="SECURE EXAM VIOLATION"
+            >
+                <div className="text-center">
+                    <AlertTriangle className="text-red-600 mx-auto mb-4" size={48} />
+                    <h3 className="text-xl font-bold text-gray-900 mb-2">Warning {violations} of 3</h3>
+                    <p className="text-gray-600 mb-4">{violationReason}</p>
+
+                    {violationEvidence && (
+                        <div className="mb-6 rounded-lg overflow-hidden border border-gray-200">
+                            <div className="bg-red-50 px-3 py-2 border-b border-red-100 text-sm font-medium text-red-800">
+                                EVIDENCE CAPTURE
+                            </div>
+                            {/* eslint-disable-next-line @next/next/no-img-element */}
+                            <img src={violationEvidence} alt="Violation Evidence" className="w-full h-auto" />
+                        </div>
+                    )}
+
+                    {violations >= 3 ? (
+                        <p className="text-red-600 font-bold">Your assessment is being submitted automatically.</p>
+                    ) : (
+                        <button
+                            onClick={async () => {
+                                setShowWarningModal(false);
+                                setViolationEvidence(null);
+                                try {
+                                    await document.documentElement.requestFullscreen();
+                                } catch (e) { }
+                            }}
+                            className="w-full py-2 bg-indigo-600 text-white rounded-lg font-medium hover:bg-indigo-700"
+                        >
+                            Acknowledge & Resume
+                        </button>
+                    )}
+                </div>
             </Modal>
         </div>
     );

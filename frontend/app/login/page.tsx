@@ -12,7 +12,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 type Role = "candidate" | "interviewer";
 
 function LoginContent() {
-    const [role, setRole] = useState<Role>("candidate");
+    const role: Role = "interviewer";
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const { login, isAuthenticated, isLoading: isAuthLoading, user } = useAuth();
@@ -21,8 +21,7 @@ function LoginContent() {
 
     useEffect(() => {
         if (!isAuthLoading && isAuthenticated && user) {
-            if (user.role === "candidate") router.push("/candidate/dashboard");
-            else router.push("/interviewer/dashboard");
+            router.push("/interviewer/dashboard");
         }
 
         // Check for error params from OAuth redirect
@@ -50,12 +49,7 @@ function LoginContent() {
             });
 
             login(data.token, data.role);
-            // Optionally redirect based on role or to a default dashboard
-            if (data.role === "candidate") {
-                router.push("/candidate/dashboard");
-            } else if (data.role === "interviewer") {
-                router.push("/interviewer/dashboard");
-            }
+            router.push("/interviewer/dashboard");
         } catch (err: any) {
             setError(err.message || "Invalid credentials");
         } finally {
@@ -81,12 +75,6 @@ function LoginContent() {
                         <div className="mt-8 space-y-4">
                             <div className="flex items-center gap-4 text-indigo-100/80">
                                 <div className="p-2 bg-white/10 rounded-lg">
-                                    <User size={20} />
-                                </div>
-                                <span>Candidate Portal for taking tests</span>
-                            </div>
-                            <div className="flex items-center gap-4 text-indigo-100/80">
-                                <div className="p-2 bg-white/10 rounded-lg">
                                     <Briefcase size={20} />
                                 </div>
                                 <span>Interviewer Dashboard for management</span>
@@ -110,36 +98,8 @@ function LoginContent() {
                     <div className="mb-10">
                         <h1 className="text-3xl font-bold text-gray-900 tracking-tight">Sign in</h1>
                         <p className="mt-2 text-gray-500">
-                            Access your dashboard to continue.
+                            Access your Interviewer dashboard to continue.
                         </p>
-                    </div>
-
-                    {/* Role Toggle */}
-                    <div className="bg-gray-100 p-1 rounded-xl flex mb-8">
-                        <button
-                            onClick={() => setRole("candidate")}
-                            className={cn(
-                                "flex-1 flex items-center justify-center gap-2 py-2.5 text-sm font-medium rounded-lg transition-all duration-200",
-                                role === "candidate"
-                                    ? "bg-white text-indigo-600 shadow-sm"
-                                    : "text-gray-500 hover:text-gray-700"
-                            )}
-                        >
-                            <User size={18} />
-                            Candidate
-                        </button>
-                        <button
-                            onClick={() => setRole("interviewer")}
-                            className={cn(
-                                "flex-1 flex items-center justify-center gap-2 py-2.5 text-sm font-medium rounded-lg transition-all duration-200",
-                                role === "interviewer"
-                                    ? "bg-white text-indigo-600 shadow-sm"
-                                    : "text-gray-500 hover:text-gray-700"
-                            )}
-                        >
-                            <Briefcase size={18} />
-                            Interviewer
-                        </button>
                     </div>
 
                     {/* Login Form */}
@@ -208,7 +168,7 @@ function LoginContent() {
                                 <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
                             ) : (
                                 <>
-                                    Sign in as {role === "candidate" ? "Candidate" : "Interviewer"}
+                                    Sign in
                                     <ArrowRight size={18} className="ml-2" />
                                 </>
                             )}

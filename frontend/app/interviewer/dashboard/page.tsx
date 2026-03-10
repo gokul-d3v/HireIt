@@ -96,10 +96,12 @@ function InterviewerDashboardContent() {
             // For now, calculate from available data
             const assessmentsData = await apiRequest("/api/assessments/my", "GET");
 
+            const activeAssessments = (assessmentsData || []).filter((a: any) => a.phase === 1 || !a.phase);
+
             // Calculate stats from assessments
             setStats({
                 totalCandidates: 0, // Would need a separate endpoint
-                activeTests: assessmentsData?.length || 0,
+                activeTests: activeAssessments.length,
                 completedTests: 0, // Would need submissions data
                 pendingReview: 0 // Would need submissions data
             });
