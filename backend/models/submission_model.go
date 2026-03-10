@@ -24,6 +24,9 @@ type Submission struct {
 	ID           primitive.ObjectID `bson:"_id,omitempty" json:"id"`
 	AssessmentID primitive.ObjectID `bson:"assessment_id" json:"assessment_id"`
 	CandidateID  primitive.ObjectID `bson:"candidate_id" json:"candidate_id"`
+	CandidateName  string             `bson:"candidate_name" json:"candidate_name"`
+	CandidateEmail string             `bson:"candidate_email" json:"candidate_email"`
+	CandidatePhone string             `bson:"candidate_phone" json:"candidate_phone"`
 	Answers      []Answer           `bson:"answers" json:"answers"`
 	Violations   []Violation        `bson:"violations,omitempty" json:"violations,omitempty"`
 	Score        int                `bson:"score" json:"score"`   // Total score

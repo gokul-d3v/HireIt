@@ -1,6 +1,7 @@
 package controllers
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -10,16 +11,27 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"go.mongodb.org/mongo-driver/bson/primitive"
 	"golang.org/x/oauth2"
 	"golang.org/x/oauth2/google"
 	"google.golang.org/api/option"
 	"google.golang.org/api/youtube/v3"
+	"hireit-backend/repositories"
+	"hireit-backend/services"
+	"hireit-backend/utils"
+	"io"
 )
 
-type YouTubeController struct{}
+type YouTubeController struct {
+	userRepo   repositories.UserRepository
+	assessRepo repositories.AssessmentRepository
+}
 
-func NewYouTubeController() *YouTubeController {
-	return &YouTubeController{}
+func NewYouTubeController(userRepo repositories.UserRepository, assessRepo repositories.AssessmentRepository) *YouTubeController {
+	return &YouTubeController{
+		userRepo:   userRepo,
+		assessRepo: assessRepo,
+	}
 }
 
 var youtubeOauthConfig *oauth2.Config
@@ -41,7 +53,7 @@ func getYouTubeOauthConfig() *oauth2.Config {
 func (ctrl *YouTubeController) AuthYouTube(c *gin.Context) {
 	config := getYouTubeOauthConfig()
 	// AuthCodeURL with offline access gives us a refresh token
-	url := config.AuthCodeURL("state-token", oauth2.AccessTypeOffline, oauth2.ApprovalForce)
+	url := config.AuthCodeURL("state-token", oauth2.AccessTypeOffline)
 	c.Redirect(http.StatusTemporaryRedirect, url)
 }
 
@@ -94,9 +106,10 @@ func getYouTubeClient(ctx context.Context) (*http.Client, error) {
 	return config.Client(ctx, token), nil
 }
 
-// UploadEvidence receives a video file, uploads it to YouTube, and returns the URL.
+// UploadEvidence receives a video file and offloads processing to a background worker pool.
 func (ctrl *YouTubeController) UploadEvidence(c *gin.Context) {
-	candidateID, _ := c.Get("userID")
+	candidateIDPtr, _ := c.Get("userID")
+	assessmentIDStr := c.Param("id")
 
 	file, _, err := c.Request.FormFile("video")
 	if err != nil {
@@ -105,26 +118,69 @@ func (ctrl *YouTubeController) UploadEvidence(c *gin.Context) {
 	}
 	defer file.Close()
 
+	// Capture video data before the request context ends
+	videoBytes, err := io.ReadAll(file)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to read video file"})
+		return
+	}
+
+	// Fetch Candidate and Assessment details for the background task
+	ctx := context.Background()
+	candidateName := "Unknown Candidate"
+	assessmentTitle := "Unknown Assessment"
+
+	if candidateIDPtr != nil {
+		if uid, ok := candidateIDPtr.(primitive.ObjectID); ok {
+			user, err := ctrl.userRepo.FindByID(ctx, uid)
+			if err == nil {
+				candidateName = user.Name
+			}
+		}
+	}
+
+	if assessmentIDStr != "" {
+		aid, err := utils.ToObjectID(assessmentIDStr)
+		if err == nil {
+			assessment, err := ctrl.assessRepo.FindByID(ctx, aid)
+			if err == nil {
+				assessmentTitle = assessment.Title
+			}
+		}
+	}
+
+	// Generate a descriptive filename for the evidence (e.g., Joe_Doe_evidence.webm)
+	safeCandidateName := strings.ReplaceAll(candidateName, " ", "_")
+	filename := fmt.Sprintf("%s_evidence.webm", safeCandidateName)
+
+	// Submit task to background worker pool
+	utils.GetWorkerPool().Submit(func() {
+		processUpload(candidateName, assessmentTitle, assessmentIDStr, filename, videoBytes)
+	})
+
+	c.JSON(http.StatusAccepted, gin.H{
+		"message": "Evidence upload initiated in background",
+		"status":  "processing",
+	})
+}
+
+// processUpload handles the background YouTube and Telegram upload logic
+func processUpload(candidateName, assessmentTitle, assessmentIDStr, filename string, videoBytes []byte) {
 	ctx := context.Background()
 	client, err := getYouTubeClient(ctx)
 	if err != nil {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "YouTube client not authenticated. Admin must log in first."})
+		fmt.Printf("Background Upload Error: YouTube client not authenticated: %v\n", err)
 		return
 	}
 
 	service, err := youtube.NewService(ctx, option.WithHTTPClient(client))
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create YouTube client"})
+		fmt.Printf("Background Upload Error: Failed to create YouTube service: %v\n", err)
 		return
 	}
 
 	title := fmt.Sprintf("Malpractice Evidence - %s", time.Now().Format("20060102_150405"))
-	var desc string
-	if candidateID != nil {
-		desc = fmt.Sprintf("Automated malpractice evidence upload from HireIt for Candidate ID: %v.", candidateID)
-	} else {
-		desc = "Automated malpractice evidence upload from HireIt."
-	}
+	desc := fmt.Sprintf("Automated malpractice evidence upload from HireIt for Candidate: %s.", candidateName)
 
 	upload := &youtube.Video{
 		Snippet: &youtube.VideoSnippet{
@@ -137,14 +193,38 @@ func (ctrl *YouTubeController) UploadEvidence(c *gin.Context) {
 		},
 	}
 
+	// Use bytes.NewReader since we have the bytes in memory
 	call := service.Videos.Insert([]string{"snippet", "status"}, upload)
-	video, err := call.Media(file).Do()
+	video, err := call.Media(bytes.NewReader(videoBytes)).Do()
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("Failed to upload video to YouTube: %v", err)})
+		fmt.Printf("Background Upload Error: Failed to upload to YouTube: %v\n", err)
 		return
 	}
 
 	videoURL := "https://youtu.be/" + video.Id
 
-	c.JSON(http.StatusOK, gin.H{"url": videoURL})
+	// Send to Telegram
+	caption := fmt.Sprintf(
+		"<b>🚨 Malpractice Detected!</b>\n\n"+
+			"<b>Candidate:</b> %s\n"+
+			"<b>Assessment:</b> %s\n"+
+			"<b>Assessment ID:</b> %s\n"+
+			"<b>Date:</b> %s\n"+
+			"<b>Time:</b> %s\n\n"+
+			"<b>YouTube Link:</b> %s",
+		candidateName,
+		assessmentTitle,
+		assessmentIDStr,
+		time.Now().Format("2006-01-02"),
+		time.Now().Format("15:04:05"),
+		videoURL,
+	)
+
+	err = services.SendTelegramVideo(videoBytes, filename, caption)
+	if err != nil {
+		fmt.Printf("Background Upload Error: Failed to send video to Telegram: %v\n", err)
+	} else {
+		fmt.Printf("Successfully processed background evidence upload for %s\n", candidateName)
+	}
 }
+

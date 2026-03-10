@@ -10,10 +10,10 @@ func AssessmentRoutes(r *gin.RouterGroup, assessCtrl *controllers.AssessmentCont
 	assessments := r.Group("/assessments")
 	{
 		// Static Routes First
-		assessments.GET("/", assessCtrl.GetAssessments)
+		assessments.GET("", assessCtrl.GetAssessments)
 		assessments.GET("/my", assessCtrl.GetAssessments) // Map /my to GetAssessments for now
 		assessments.GET("/submissions/my", assessCtrl.GetMySubmissions)
-		assessments.POST("/", assessCtrl.CreateAssessment)
+		assessments.POST("", assessCtrl.CreateAssessment)
 
 		// Parametric Routes
 		assessments.GET("/:id", assessCtrl.GetAssessmentByID)

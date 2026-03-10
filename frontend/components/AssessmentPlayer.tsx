@@ -62,6 +62,7 @@ export default function AssessmentPlayer({ assessmentId, onComplete }: Assessmen
     const audioContextRef = useRef<AudioContext | null>(null);
     const audioIntervalRef = useRef<NodeJS.Timeout | null>(null);
     const isRecordingRef = useRef(false);
+    const lastViolationTimeRef = useRef<Record<string, number>>({});
     const [stream, setStream] = useState<MediaStream | null>(null);
 
     useEffect(() => {
@@ -140,6 +141,15 @@ export default function AssessmentPlayer({ assessmentId, onComplete }: Assessmen
         if (isFatal) {
             handleViolation(reason, evidenceBase64);
         } else {
+            const now = Date.now();
+            const lastTime = lastViolationTimeRef.current[type] || 0;
+            
+            // Apply a 60-second cooldown per non-fatal violation type to prevent spamming recordings
+            if (now - lastTime < 60000) {
+                return;
+            }
+            lastViolationTimeRef.current[type] = now;
+
             // Non-fatal logging
             const violation = {
                 timestamp: new Date().toISOString(),
@@ -295,11 +305,23 @@ export default function AssessmentPlayer({ assessmentId, onComplete }: Assessmen
             setExamStarted(true);
 
             const model = await blazeface.load();
+            let missingFaceCount = 0;
             detectionInterval.current = setInterval(async () => {
                 if (videoRef.current && videoRef.current.readyState === 4) {
                     const predictions = await model.estimateFaces(videoRef.current, false);
-                    if (predictions.length > 1) {
-                        captureEvidenceAndViolate("Multiple people detected in frame", false, "multiple_people");
+                    
+                    if (predictions.length === 0) {
+                        missingFaceCount++;
+                        // If face missing for 2 consecutive checks (approx. 6 seconds)
+                        if (missingFaceCount >= 2) {
+                            captureEvidenceAndViolate("Camera blocked or no face detected", false, "camera_blockage");
+                            missingFaceCount = 0; // Reset after logging
+                        }
+                    } else {
+                        missingFaceCount = 0; // Reset if face found
+                        if (predictions.length > 1) {
+                            captureEvidenceAndViolate("Multiple people detected in frame", false, "multiple_people");
+                        }
                     }
                 }
             }, 3000);

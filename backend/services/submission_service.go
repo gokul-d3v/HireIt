@@ -23,10 +23,11 @@ type SubmissionService interface {
 type submissionService struct {
 	repo           repositories.SubmissionRepository
 	assessmentRepo repositories.AssessmentRepository
+	userRepo       repositories.UserRepository
 }
 
-func NewSubmissionService(repo repositories.SubmissionRepository, assessmentRepo repositories.AssessmentRepository) SubmissionService {
-	return &submissionService{repo: repo, assessmentRepo: assessmentRepo}
+func NewSubmissionService(repo repositories.SubmissionRepository, assessmentRepo repositories.AssessmentRepository, userRepo repositories.UserRepository) SubmissionService {
+	return &submissionService{repo: repo, assessmentRepo: assessmentRepo, userRepo: userRepo}
 }
 
 func (r *submissionService) GetSubmissions(ctx context.Context, assessmentID string) ([]models.Submission, error) {
@@ -59,19 +60,32 @@ func (s *submissionService) SaveProgress(ctx context.Context, assessmentID, cand
 
 	submission, err := s.repo.FindOne(ctx, bson.M{"assessment_id": aID, "candidate_id": cID})
 	if err != nil {
+		// Fetch user details for denormalized submission
+		user, _ := s.userRepo.FindByID(ctx, cID)
+
 		// Create new in-progress submission
 		submission = &models.Submission{
 			AssessmentID: aID,
 			CandidateID:  cID,
 			CreatedBy:    cID,
 			CreatedAt:    time.Now(),
+			StartedAt:    time.Now(), // Initialize StartedAt
 			Answers:      answers,
 			Violations:   violations,
 			Status:       "in_progress",
 			UpdatedAt:    time.Now(),
 		}
+		if user != nil {
+			submission.CandidateName = user.Name
+			submission.CandidateEmail = user.Email
+			submission.CandidatePhone = user.Phone
+		}
 		_, err = s.repo.Create(ctx, submission)
 		return err
+	}
+
+	if submission.StartedAt.IsZero() {
+		submission.StartedAt = time.Now()
 	}
 
 	submission.Answers = answers
@@ -116,13 +130,24 @@ func (s *submissionService) SubmitAssessment(ctx context.Context, assessmentID, 
 
 	submission, err := s.repo.FindOne(ctx, bson.M{"assessment_id": aID, "candidate_id": cID})
 	if err != nil {
+		user, _ := s.userRepo.FindByID(ctx, cID)
 		submission = &models.Submission{
 			AssessmentID: aID,
 			CandidateID:  cID,
 			CreatedBy:    cID,
 			CreatedAt:    time.Now(),
+			StartedAt:    time.Now(),
+		}
+		if user != nil {
+			submission.CandidateName = user.Name
+			submission.CandidateEmail = user.Email
+			submission.CandidatePhone = user.Phone
 		}
 		_, _ = s.repo.Create(ctx, submission)
+	}
+
+	if submission.StartedAt.IsZero() {
+		submission.StartedAt = time.Now()
 	}
 
 	submission.Answers = answers

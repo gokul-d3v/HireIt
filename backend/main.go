@@ -93,15 +93,15 @@ func main() {
 	// Initialize Services
 	authService := services.NewAuthService(userRepo)
 	assessService := services.NewAssessmentService(assessRepo)
-	subService := services.NewSubmissionService(subRepo, assessRepo)
+	submissionService := services.NewSubmissionService(subRepo, assessRepo, userRepo)
 	interviewService := services.NewInterviewService(interviewRepo)
 
 	// Initialize Controllers
 	authCtrl := controllers.NewAuthController(authService)
 	googleCtrl := controllers.NewGoogleAuthController(authService)
-	youtubeCtrl := controllers.NewYouTubeController()
+	youtubeCtrl := controllers.NewYouTubeController(userRepo, assessRepo)
 	publicCtrl := controllers.NewPublicController(authService)
-	assessCtrl := controllers.NewAssessmentController(assessService, subService)
+	assessCtrl := controllers.NewAssessmentController(assessService, submissionService)
 	interviewCtrl := controllers.NewInterviewController(interviewService)
 
 	// Initialize Router with custom middleware for better performance
@@ -111,9 +111,9 @@ func main() {
 
 	// CORS Configuration
 	router.Use(cors.New(cors.Config{
-		AllowOrigins:     []string{"http://localhost:3000", "https://hire-it.vercel.app", "https://hireit-nine.vercel.app"},
+		AllowOrigins:     []string{"http://localhost:3000", "http://127.0.0.1:3000", "https://hire-it.vercel.app", "https://hireit-nine.vercel.app"},
 		AllowMethods:     []string{"GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"},
-		AllowHeaders:     []string{"Origin", "Content-Type", "Accept", "Authorization"},
+		AllowHeaders:     []string{"Origin", "Content-Type", "Accept", "Authorization", "X-Requested-With"},
 		ExposeHeaders:    []string{"Content-Length"},
 		AllowCredentials: true,
 		MaxAge:           12 * time.Hour,
@@ -137,7 +137,11 @@ func main() {
 		IdleTimeout:  60 * time.Second,
 	}
 
-	// Start server in a goroutine for graceful shutdown
+	// Initialize Worker Pool (5 workers, queue size of 100)
+	pool := utils.InitWorkerPool(5, 100)
+	defer pool.Shutdown()
+
+	// Start Server in a goroutine for graceful shutdown
 	go func() {
 		logger.Infof("Server running on port %s", port)
 		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {

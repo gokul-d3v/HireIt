@@ -43,13 +43,6 @@ export default function CreateAssessmentPage() {
     // Modal state
     const [isConfirmModalOpen, setIsConfirmModalOpen] = useState(false);
 
-    // Auth protection
-    if (isLoading) return <div className="min-h-screen flex items-center justify-center bg-gray-50 text-gray-600">Loading...</div>;
-    if (!isAuthenticated || user?.role !== "interviewer") {
-        router.push("/login");
-        return null;
-    }
-
     // Initialize phases when phase count changes
     useEffect(() => {
         if (step === 2 && phases.length === 0) {
@@ -67,6 +60,13 @@ export default function CreateAssessmentPage() {
             setPhases(defaultPhases);
         }
     }, [step, phaseCount, phases.length]);
+
+    // Auth protection
+    if (isLoading) return <div className="min-h-screen flex items-center justify-center bg-gray-50 text-gray-600">Loading...</div>;
+    if (!isAuthenticated || user?.role !== "interviewer") {
+        router.push("/login");
+        return null;
+    }
 
     const updatePhaseConfig = (index: number, field: keyof PhaseConfig, value: any) => {
         if (field === 'duration' || field === 'total_marks' || field === 'passing_score') {
