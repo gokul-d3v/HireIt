@@ -60,7 +60,7 @@ export default function CandidateAssessmentsPage() {
         try {
             const [assessmentsData, submissionsData] = await Promise.all([
                 apiRequest("/api/assessments", "GET"),
-                apiRequest("/api/submissions/me", "GET")
+                apiRequest("/api/assessments/submissions/my", "GET")
             ]);
 
             setAssessments(assessmentsData || []);

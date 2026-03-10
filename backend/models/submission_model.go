@@ -13,11 +13,19 @@ type Answer struct {
 	Points     int                `bson:"points" json:"points"`
 }
 
+type Violation struct {
+	Timestamp time.Time `bson:"timestamp" json:"timestamp"`
+	Type      string    `bson:"type" json:"type"` // "multiple_people", "audio_anomaly", "tab_switch", etc.
+	Reason    string    `bson:"reason" json:"reason"`
+	Evidence  string    `bson:"evidence,omitempty" json:"evidence,omitempty"` // Optional base64 image or audio snippet
+}
+
 type Submission struct {
 	ID           primitive.ObjectID `bson:"_id,omitempty" json:"id"`
 	AssessmentID primitive.ObjectID `bson:"assessment_id" json:"assessment_id"`
 	CandidateID  primitive.ObjectID `bson:"candidate_id" json:"candidate_id"`
 	Answers      []Answer           `bson:"answers" json:"answers"`
+	Violations   []Violation        `bson:"violations,omitempty" json:"violations,omitempty"`
 	Score        int                `bson:"score" json:"score"`   // Total score
 	Status       string             `bson:"status" json:"status"` // "in_progress", "submitted", "graded"
 	CreatedBy    primitive.ObjectID `bson:"created_by" json:"created_by"`

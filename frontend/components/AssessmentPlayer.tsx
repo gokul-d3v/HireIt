@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation"; // Note: used for navigation after 
 import { apiRequest } from "@/lib/api";
 import { useToast } from "@/components/ui/Toast";
 import { Modal } from "@/components/ui/Modal";
-import { Clock, CheckCircle, ChevronLeft, ChevronRight, AlertTriangle, ShieldAlert, Camera, Maximize2 } from "lucide-react";
+import { Clock, CheckCircle, ChevronLeft, ChevronRight, AlertTriangle, ShieldAlert, Camera, Maximize2, Mic } from "lucide-react";
 import * as tf from "@tensorflow/tfjs";
 import * as blazeface from "@tensorflow-models/blazeface";
 
@@ -47,14 +47,22 @@ export default function AssessmentPlayer({ assessmentId, onComplete }: Assessmen
     // Anti-Cheat State
     const [examStarted, setExamStarted] = useState(false);
     const [violations, setViolations] = useState(0);
+    const [loggedViolations, setLoggedViolations] = useState<any[]>([]); // Non-fatal (faces, voice)
     const [showWarningModal, setShowWarningModal] = useState(false);
     const [violationReason, setViolationReason] = useState("");
     const [violationEvidence, setViolationEvidence] = useState<string | null>(null);
     const [modelsLoaded, setModelsLoaded] = useState(false);
+    const [calibrationStep, setCalibrationStep] = useState<'not_started' | 'calibrating' | 'completed'>('not_started');
+    const [calibrationFeedback, setCalibrationFeedback] = useState("Position your face within the frame");
+    const [isPostureCorrect, setIsPostureCorrect] = useState(false);
 
     const videoRef = useRef<HTMLVideoElement>(null);
     const canvasRef = useRef<HTMLCanvasElement>(null);
     const detectionInterval = useRef<NodeJS.Timeout | null>(null);
+    const audioContextRef = useRef<AudioContext | null>(null);
+    const audioIntervalRef = useRef<NodeJS.Timeout | null>(null);
+    const isRecordingRef = useRef(false);
+    const [stream, setStream] = useState<MediaStream | null>(null);
 
     useEffect(() => {
         const loadModels = async () => {
@@ -113,7 +121,7 @@ export default function AssessmentPlayer({ assessmentId, onComplete }: Assessmen
         };
     }, [examStarted]);
 
-    const captureEvidenceAndViolate = (reason: string) => {
+    const captureEvidenceAndViolate = (reason: string, isFatal = true, type = "tab_switch") => {
         if (!canvasRef.current || !videoRef.current) return;
 
         const canvas = canvasRef.current;
@@ -123,22 +131,165 @@ export default function AssessmentPlayer({ assessmentId, onComplete }: Assessmen
         canvas.height = video.videoHeight;
 
         const ctx = canvas.getContext('2d');
+        let evidenceBase64 = "";
         if (ctx) {
             ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-            const base64Image = canvas.toDataURL('image/jpeg');
-            handleViolation(reason, base64Image);
+            evidenceBase64 = canvas.toDataURL('image/jpeg');
+        }
+
+        if (isFatal) {
+            handleViolation(reason, evidenceBase64);
         } else {
-            handleViolation(reason);
+            // Non-fatal logging
+            const violation = {
+                timestamp: new Date().toISOString(),
+                type: type,
+                reason: reason,
+                evidence: evidenceBase64
+            };
+            setLoggedViolations(prev => [...prev, violation]);
+            console.warn(`[Non-Fatal Violation Logged]: ${reason}`);
+
+            // Start 7-second Video Evidence Recording
+            if (stream && !isRecordingRef.current) {
+                isRecordingRef.current = true;
+                const mediaRecorder = new MediaRecorder(stream, { mimeType: 'video/webm' });
+                const chunks: BlobPart[] = [];
+
+                mediaRecorder.ondataavailable = (e) => {
+                    if (e.data.size > 0) chunks.push(e.data);
+                };
+
+                mediaRecorder.onstop = async () => {
+                    isRecordingRef.current = false;
+                    const blob = new Blob(chunks, { type: 'video/webm' });
+                    const formData = new FormData();
+                    formData.append("video", blob, "evidence.webm");
+
+                    try {
+                        const token = localStorage.getItem("token");
+                        const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || "http://localhost:8080"}/api/assessments/${assessmentId}/upload-evidence`, {
+                            method: "POST",
+                            headers: token ? { "Authorization": `Bearer ${token}` } : {},
+                            body: formData
+                        });
+                        if (res.ok) {
+                            const data = await res.json();
+                            if (data.url) {
+                                setLoggedViolations(prev => prev.map(v =>
+                                    v.timestamp === violation.timestamp ? { ...v, evidence: data.url } : v
+                                ));
+                                console.log("Evidence uploaded securely to YouTube:", data.url);
+                            }
+                        }
+                    } catch (err) {
+                        console.error("Failed to upload video evidence", err);
+                    }
+                };
+
+                mediaRecorder.start();
+                setTimeout(() => {
+                    if (mediaRecorder.state === "recording") {
+                        mediaRecorder.stop();
+                    }
+                }, 7000); // 7 seconds clip
+            }
+        }
+    };
+
+    const containerRef = useRef<HTMLDivElement>(null);
+
+    const analyzePosture = async (model: blazeface.BlazeFaceModel) => {
+        if (!videoRef.current || videoRef.current.readyState !== 4) return;
+
+        const predictions = await model.estimateFaces(videoRef.current, false);
+
+        if (predictions.length === 0) {
+            setCalibrationFeedback("No face detected. Please face the camera.");
+            setIsPostureCorrect(false);
+            return;
+        }
+
+        if (predictions.length > 1) {
+            setCalibrationFeedback("Multiple people detected. Only one person allowed.");
+            setIsPostureCorrect(false);
+            return;
+        }
+
+        const face = predictions[0] as any;
+        const landmarks = face.landmarks;
+        const rightEye = landmarks[0];
+        const leftEye = landmarks[1];
+        const nose = landmarks[2];
+
+        // 1. Centering (Horizontal)
+        const videoWidth = videoRef.current.videoWidth;
+        const faceCenterX = nose[0];
+        const centerOffset = Math.abs(faceCenterX - videoWidth / 2);
+        const maxOffset = videoWidth * 0.15; // 15% tolerance
+
+        // 2. Alignment (Tilt/Level)
+        const eyeLevelDiff = Math.abs(rightEye[1] - leftEye[1]);
+        const maxTilt = 20; // Tolerance in pixels
+
+        // 3. Distance (Eye Gap)
+        const eyeGap = Math.sqrt(Math.pow(rightEye[0] - leftEye[0], 2) + Math.pow(rightEye[1] - leftEye[1], 2));
+        const minGap = videoWidth * 0.15;
+        const maxGap = videoWidth * 0.4;
+
+        let feedback = "";
+        let correct = true;
+
+        if (centerOffset > maxOffset) {
+            feedback = "Please sit in the center of the frame.";
+            correct = false;
+        } else if (eyeLevelDiff > maxTilt) {
+            feedback = "Please level your head (don't tilt).";
+            correct = false;
+        } else if (eyeGap < minGap) {
+            feedback = "You are too far from the camera.";
+            correct = false;
+        } else if (eyeGap > maxGap) {
+            feedback = "You are too close to the camera.";
+            correct = false;
+        } else {
+            feedback = "Posture is perfect. You may proceed.";
+            correct = true;
+        }
+
+        setCalibrationFeedback(feedback);
+        setIsPostureCorrect(correct);
+    };
+
+    const startCalibration = async () => {
+        try {
+            const s = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+            setStream(s);
+            setCalibrationStep('calibrating');
+
+            const model = await blazeface.load();
+            const interval = setInterval(() => {
+                analyzePosture(model);
+            }, 200);
+
+            detectionInterval.current = interval;
+        } catch (err) {
+            console.error("Calibration failed", err);
+            showToast("Failed to access camera", "error");
         }
     };
 
     const startExamMode = async () => {
-        try {
-            await document.documentElement.requestFullscreen();
+        if (!isPostureCorrect) return;
 
-            const stream = await navigator.mediaDevices.getUserMedia({ video: true });
-            if (videoRef.current) {
-                videoRef.current.srcObject = stream;
+        try {
+            if (detectionInterval.current) clearInterval(detectionInterval.current);
+            setCalibrationStep('completed');
+
+            if (containerRef.current) {
+                await containerRef.current.requestFullscreen();
+            } else {
+                await document.documentElement.requestFullscreen();
             }
 
             setExamStarted(true);
@@ -148,26 +299,69 @@ export default function AssessmentPlayer({ assessmentId, onComplete }: Assessmen
                 if (videoRef.current && videoRef.current.readyState === 4) {
                     const predictions = await model.estimateFaces(videoRef.current, false);
                     if (predictions.length > 1) {
-                        captureEvidenceAndViolate("Multiple people detected in frame");
+                        captureEvidenceAndViolate("Multiple people detected in frame", false, "multiple_people");
                     }
                 }
             }, 3000);
 
+            // Start Audio Analysis (Voice Detection)
+            if (stream && stream.getAudioTracks().length > 0) {
+                const audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
+                audioContextRef.current = audioCtx;
+                const analyser = audioCtx.createAnalyser();
+                analyser.fftSize = 256;
+                const source = audioCtx.createMediaStreamSource(stream);
+                source.connect(analyser);
+
+                const dataArray = new Uint8Array(analyser.frequencyBinCount);
+                let consecutiveNoiseCount = 0;
+
+                audioIntervalRef.current = setInterval(() => {
+                    analyser.getByteFrequencyData(dataArray);
+                    let sum = 0;
+                    for (let i = 0; i < dataArray.length; i++) {
+                        sum += dataArray[i];
+                    }
+                    const averageVolume = sum / dataArray.length;
+
+                    // Threshold for speech/noise. Needs tuning, usually > 30-40 indicates clear sound
+                    if (averageVolume > 40) {
+                        consecutiveNoiseCount++;
+                        // If noisy for ~3 seconds (6 * 500ms)
+                        if (consecutiveNoiseCount > 6) {
+                            captureEvidenceAndViolate("Continuous speaking or background noise detected", false, "audio_anomaly");
+                            consecutiveNoiseCount = 0; // Reset after logging
+                        }
+                    } else {
+                        consecutiveNoiseCount = 0;
+                    }
+                }, 500);
+            }
+
         } catch (err) {
             console.error("Failed to start exam mode", err);
-            alert("Please allow Camera permissions and Full-Screen to begin the exam.");
+            alert("Please ensure Full-Screen is enabled to begin.");
         }
     };
 
     useEffect(() => {
+        if ((examStarted || calibrationStep === 'calibrating') && videoRef.current && stream) {
+            if (videoRef.current.srcObject !== stream) {
+                videoRef.current.srcObject = stream;
+            }
+        }
+    }, [examStarted, calibrationStep, stream]);
+
+    useEffect(() => {
         return () => {
             if (detectionInterval.current) clearInterval(detectionInterval.current);
-            if (videoRef.current && videoRef.current.srcObject) {
-                const stream = videoRef.current.srcObject as MediaStream;
+            if (audioIntervalRef.current) clearInterval(audioIntervalRef.current);
+            if (audioContextRef.current) audioContextRef.current.close().catch(console.error);
+            if (stream) {
                 stream.getTracks().forEach(track => track.stop());
             }
         };
-    }, []);
+    }, [stream]);
 
     useEffect(() => {
         if (assessmentId) {
@@ -184,7 +378,7 @@ export default function AssessmentPlayer({ assessmentId, onComplete }: Assessmen
             // We assume the token is already in localStorage (managed by parent or login)
             const [responseData, submissionsData] = await Promise.all([
                 apiRequest(`/api/assessments/${id}`, "GET"),
-                apiRequest("/api/submissions/me", "GET")
+                apiRequest("/api/assessments/submissions/my", "GET")
             ]);
 
             // Handle new response structure { assessment, saved_answers }
@@ -205,7 +399,19 @@ export default function AssessmentPlayer({ assessmentId, onComplete }: Assessmen
             }
 
             setAssessment(assessmentData);
-            setAnswers(savedAnswers); // Restore saved answers
+
+            // Map saved answers back to indices if MCQ
+            const restoredAnswers: Record<string, string> = {};
+            Object.entries(savedAnswers as Record<string, string>).forEach(([qid, val]) => {
+                const q = assessmentData.questions.find((q: any) => q.id === qid);
+                if (q && q.type === "MCQ") {
+                    const idx = q.options.indexOf(val);
+                    restoredAnswers[qid] = idx !== -1 ? idx.toString() : val;
+                } else {
+                    restoredAnswers[qid] = val;
+                }
+            });
+            setAnswers(restoredAnswers);
 
             // Initialize timer (duration in minutes * 60)
             // Ideally we should adjust time based on started_at if resuming
@@ -239,15 +445,26 @@ export default function AssessmentPlayer({ assessmentId, onComplete }: Assessmen
     const saveProgress = async () => {
         if (!assessment) return;
         try {
-            const formattedAnswers = assessment.questions.map(q => ({
-                question_id: q.id,
-                value: answers[q.id] || ""
-            })).filter(a => a.value !== ""); // Only save what we have
+            const formattedAnswers = assessment.questions.map(q => {
+                let value = answers[q.id] || "";
+                // If MCQ, mapping index back to text
+                if (q.type === "MCQ" && value !== "") {
+                    const idx = parseInt(value);
+                    if (!isNaN(idx) && q.options[idx]) {
+                        value = q.options[idx];
+                    }
+                }
+                return {
+                    question_id: q.id,
+                    value: value
+                };
+            }).filter(a => a.value !== ""); // Only save what we have
 
             if (formattedAnswers.length === 0) return;
 
             await apiRequest(`/api/assessments/${assessment.id}/progress`, "POST", {
-                answers: formattedAnswers
+                answers: formattedAnswers,
+                violations: loggedViolations
             });
             // Quietly save, no toast needed for background save
         } catch (err) {
@@ -301,13 +518,24 @@ export default function AssessmentPlayer({ assessmentId, onComplete }: Assessmen
         setShowSubmitModal(false);
 
         try {
-            const formattedAnswers = assessment.questions.map(q => ({
-                question_id: q.id,
-                value: answers[q.id] || ""
-            }));
+            const formattedAnswers = assessment.questions.map(q => {
+                let value = answers[q.id] || "";
+                // If MCQ, mapping index back to text
+                if (q.type === "MCQ" && value !== "") {
+                    const idx = parseInt(value);
+                    if (!isNaN(idx) && q.options[idx]) {
+                        value = q.options[idx];
+                    }
+                }
+                return {
+                    question_id: q.id,
+                    value: value
+                };
+            });
 
             await apiRequest(`/api/assessments/${assessment.id}/submit`, "POST", {
-                answers: formattedAnswers
+                answers: formattedAnswers,
+                violations: loggedViolations
             });
 
             if (autoSubmit) {
@@ -364,6 +592,23 @@ export default function AssessmentPlayer({ assessmentId, onComplete }: Assessmen
                         </ul>
                     </div>
 
+                    {calibrationStep === 'calibrating' && (
+                        <div className="mb-6">
+                            <div className="relative inline-block overflow-hidden rounded-lg border-2 border-indigo-200 bg-black">
+                                <video
+                                    ref={videoRef}
+                                    autoPlay
+                                    playsInline
+                                    muted
+                                    className="h-48 w-64 object-cover scale-x-[-1]"
+                                />
+                                <div className={`absolute bottom-0 left-0 right-0 p-2 text-xs font-bold ${isPostureCorrect ? "bg-green-500" : "bg-red-500"} text-white`}>
+                                    {calibrationFeedback}
+                                </div>
+                            </div>
+                        </div>
+                    )}
+
                     {!modelsLoaded && (
                         <div className="mb-4 text-sm font-medium text-amber-600 flex items-center justify-center gap-2">
                             <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-amber-600"></div>
@@ -371,21 +616,35 @@ export default function AssessmentPlayer({ assessmentId, onComplete }: Assessmen
                         </div>
                     )}
 
-                    <button
-                        onClick={startExamMode}
-                        disabled={!modelsLoaded || !assessment.questions || assessment.questions.length === 0}
-                        className="w-full flex justify-center items-center gap-2 px-6 py-3 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed shadow-sm font-medium transition-colors"
-                    >
-                        <Camera size={18} />
-                        {(!assessment.questions || assessment.questions.length === 0) ? "No Questions Available" : "Enable Camera & Start"}
-                    </button>
+                    {calibrationStep === 'not_started' ? (
+                        <button
+                            onClick={startCalibration}
+                            disabled={!modelsLoaded || !assessment.questions || assessment.questions.length === 0}
+                            className="w-full flex justify-center items-center gap-2 px-6 py-3 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed shadow-sm font-medium transition-colors"
+                        >
+                            <Camera size={18} />
+                            {(!assessment.questions || assessment.questions.length === 0) ? "No Questions Available" : "Enable Camera & Verify Posture"}
+                        </button>
+                    ) : (
+                        <button
+                            onClick={startExamMode}
+                            disabled={!isPostureCorrect}
+                            className={`w-full flex justify-center items-center gap-2 px-6 py-3 rounded-lg shadow-sm font-medium transition-colors ${isPostureCorrect
+                                ? "bg-green-600 text-white hover:bg-green-700"
+                                : "bg-gray-200 text-gray-400 cursor-not-allowed"
+                                }`}
+                        >
+                            <CheckCircle size={18} />
+                            Acknowledge & Start Exam
+                        </button>
+                    )}
                 </div>
             </div>
         );
     }
 
     return (
-        <div className="min-h-screen bg-gray-50 flex flex-col">
+        <div ref={containerRef} className={`min-h-screen bg-gray-50 flex flex-col ${examStarted ? "z-[9999] fixed inset-0 !top-0 !left-0 !right-0 !bottom-0 !m-0 !w-screen !h-screen" : ""}`}>
             {/* Header */}
             <div className="bg-white border-b border-gray-200 px-8 py-4 sticky top-0 z-10 shadow-sm flex justify-between items-center">
                 <div className="flex items-center gap-4">
@@ -395,8 +654,24 @@ export default function AssessmentPlayer({ assessmentId, onComplete }: Assessmen
                             Question {currentQuestionIndex + 1} of {assessment.questions ? assessment.questions.length : 0}
                         </div>
                     </div>
-                    {/* Hidden video feed for monitoring */}
-                    <video ref={videoRef} autoPlay playsInline muted className="h-16 w-24 object-cover rounded border border-gray-200 bg-black" />
+                    {/* Mirrored video feed for monitoring */}
+                    <div className="relative">
+                        <video
+                            ref={videoRef}
+                            autoPlay
+                            playsInline
+                            muted
+                            className="h-16 w-24 object-cover rounded border border-gray-200 bg-black scale-x-[-1]"
+                        />
+                        <div className="absolute top-1 left-1 flex items-center gap-1.5 bg-black/70 px-2 py-0.5 rounded text-[9px] font-bold text-white tracking-wider">
+                            <div className="flex items-center gap-1">
+                                <div className="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse"></div>
+                                LIVE
+                            </div>
+                            <div className="w-px h-2.5 bg-white/30 mx-0.5"></div>
+                            <Mic size={10} className="text-white" />
+                        </div>
+                    </div>
                     <canvas ref={canvasRef} className="hidden" />
                 </div>
 
@@ -420,16 +695,16 @@ export default function AssessmentPlayer({ assessmentId, onComplete }: Assessmen
 
                         <div className="space-y-4">
                             {currentQuestion.type === "MCQ" && currentQuestion.options.map((opt, idx) => (
-                                <label key={idx} className={`flex items-center p-4 border rounded-lg cursor-pointer transition ${answers[currentQuestion.id] === opt
+                                <label key={idx} className={`flex items-center p-4 border rounded-lg cursor-pointer transition ${answers[currentQuestion.id] === idx.toString()
                                     ? "border-indigo-500 bg-indigo-50 ring-1 ring-indigo-500"
                                     : "border-gray-200 hover:bg-gray-50"
                                     }`}>
                                     <input
                                         type="radio"
                                         name={`question-${currentQuestion.id}`}
-                                        value={opt}
-                                        checked={answers[currentQuestion.id] === opt}
-                                        onChange={() => handleAnswerChange(opt)}
+                                        value={idx.toString()}
+                                        checked={answers[currentQuestion.id] === idx.toString()}
+                                        onChange={() => handleAnswerChange(idx.toString())}
                                         className="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300"
                                     />
                                     <span className="ml-3 text-gray-700">{opt}</span>

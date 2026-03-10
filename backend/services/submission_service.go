@@ -15,8 +15,9 @@ import (
 type SubmissionService interface {
 	GetSubmissions(ctx context.Context, assessmentID string) ([]models.Submission, error)
 	GetCandidateResult(ctx context.Context, assessmentID, candidateID string) (*models.Submission, error)
-	SubmitAssessment(ctx context.Context, assessmentID, candidateID string, answers []models.Answer) (*models.Submission, error)
-	SaveProgress(ctx context.Context, assessmentID, candidateID string, answers []models.Answer) error
+	SubmitAssessment(ctx context.Context, assessmentID, candidateID string, answers []models.Answer, violations []models.Violation) (*models.Submission, error)
+	SaveProgress(ctx context.Context, assessmentID, candidateID string, answers []models.Answer, violations []models.Violation) error
+	GetSubmissionsByCandidate(ctx context.Context, candidateID string) ([]models.Submission, error)
 }
 
 type submissionService struct {
@@ -52,7 +53,7 @@ func (r *submissionService) GetCandidateResult(ctx context.Context, assessmentID
 	return r.repo.FindOne(ctx, bson.M{"assessment_id": aID, "candidate_id": cID, "deleted_at": nil})
 }
 
-func (s *submissionService) SaveProgress(ctx context.Context, assessmentID, candidateID string, answers []models.Answer) error {
+func (s *submissionService) SaveProgress(ctx context.Context, assessmentID, candidateID string, answers []models.Answer, violations []models.Violation) error {
 	aID, _ := primitive.ObjectIDFromHex(assessmentID)
 	cID, _ := primitive.ObjectIDFromHex(candidateID)
 
@@ -65,6 +66,7 @@ func (s *submissionService) SaveProgress(ctx context.Context, assessmentID, cand
 			CreatedBy:    cID,
 			CreatedAt:    time.Now(),
 			Answers:      answers,
+			Violations:   violations,
 			Status:       "in_progress",
 			UpdatedAt:    time.Now(),
 		}
@@ -73,11 +75,14 @@ func (s *submissionService) SaveProgress(ctx context.Context, assessmentID, cand
 	}
 
 	submission.Answers = answers
+	if violations != nil {
+		submission.Violations = violations
+	}
 	submission.UpdatedAt = time.Now()
 	return s.repo.Update(ctx, submission.ID, submission)
 }
 
-func (s *submissionService) SubmitAssessment(ctx context.Context, assessmentID, candidateID string, answers []models.Answer) (*models.Submission, error) {
+func (s *submissionService) SubmitAssessment(ctx context.Context, assessmentID, candidateID string, answers []models.Answer, violations []models.Violation) (*models.Submission, error) {
 	aID, _ := primitive.ObjectIDFromHex(assessmentID)
 	cID, _ := primitive.ObjectIDFromHex(candidateID)
 
@@ -121,6 +126,9 @@ func (s *submissionService) SubmitAssessment(ctx context.Context, assessmentID, 
 	}
 
 	submission.Answers = answers
+	if violations != nil {
+		submission.Violations = violations
+	}
 	submission.Score = totalScore
 	submission.Passed = passed
 	submission.Status = "completed"
@@ -129,4 +137,12 @@ func (s *submissionService) SubmitAssessment(ctx context.Context, assessmentID, 
 
 	err = s.repo.Update(ctx, submission.ID, submission)
 	return submission, err
+}
+
+func (s *submissionService) GetSubmissionsByCandidate(ctx context.Context, candidateID string) ([]models.Submission, error) {
+	cID, err := primitive.ObjectIDFromHex(candidateID)
+	if err != nil {
+		return nil, err
+	}
+	return s.repo.FindAll(ctx, bson.M{"candidate_id": cID, "deleted_at": nil}, options.Find().SetSort(bson.D{{Key: "updated_at", Value: -1}}))
 }

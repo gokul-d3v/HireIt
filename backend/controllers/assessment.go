@@ -149,7 +149,8 @@ func (ctrl *AssessmentController) SubmitAssessment(c *gin.Context) {
 	candidateID, _ := c.Get("userID")
 
 	var input struct {
-		Answers []models.Answer `json:"answers"`
+		Answers    []models.Answer    `json:"answers"`
+		Violations []models.Violation `json:"violations"`
 	}
 	if err := c.ShouldBindJSON(&input); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
@@ -159,7 +160,7 @@ func (ctrl *AssessmentController) SubmitAssessment(c *gin.Context) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
-	submission, err := ctrl.submissionService.SubmitAssessment(ctx, assessmentID, candidateID.(primitive.ObjectID).Hex(), input.Answers)
+	submission, err := ctrl.submissionService.SubmitAssessment(ctx, assessmentID, candidateID.(primitive.ObjectID).Hex(), input.Answers, input.Violations)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to submit assessment"})
 		return
@@ -173,7 +174,8 @@ func (ctrl *AssessmentController) SaveAssessmentProgress(c *gin.Context) {
 	candidateID, _ := c.Get("userID")
 
 	var input struct {
-		Answers []models.Answer `json:"answers"`
+		Answers    []models.Answer    `json:"answers"`
+		Violations []models.Violation `json:"violations"`
 	}
 	if err := c.ShouldBindJSON(&input); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
@@ -183,7 +185,7 @@ func (ctrl *AssessmentController) SaveAssessmentProgress(c *gin.Context) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	err := ctrl.submissionService.SaveProgress(ctx, assessmentID, candidateID.(primitive.ObjectID).Hex(), input.Answers)
+	err := ctrl.submissionService.SaveProgress(ctx, assessmentID, candidateID.(primitive.ObjectID).Hex(), input.Answers, input.Violations)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to save progress"})
 		return
@@ -193,6 +195,17 @@ func (ctrl *AssessmentController) SaveAssessmentProgress(c *gin.Context) {
 }
 
 func (ctrl *AssessmentController) GetMySubmissions(c *gin.Context) {
-	// For simplicity, just return an empty list or implement if needed
-	c.JSON(http.StatusOK, []interface{}{})
+	userID, _ := c.Get("userID")
+	id := userID.(primitive.ObjectID)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	submissions, err := ctrl.submissionService.GetSubmissionsByCandidate(ctx, id.Hex())
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch submissions"})
+		return
+	}
+
+	c.JSON(http.StatusOK, submissions)
 }

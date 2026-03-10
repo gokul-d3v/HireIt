@@ -99,6 +99,7 @@ func main() {
 	// Initialize Controllers
 	authCtrl := controllers.NewAuthController(authService)
 	googleCtrl := controllers.NewGoogleAuthController(authService)
+	youtubeCtrl := controllers.NewYouTubeController()
 	publicCtrl := controllers.NewPublicController(authService)
 	assessCtrl := controllers.NewAssessmentController(assessService, subService)
 	interviewCtrl := controllers.NewInterviewController(interviewService)
@@ -119,7 +120,7 @@ func main() {
 	}))
 
 	// Setup Routes
-	routes.SetupRoutes(router, authCtrl, googleCtrl, publicCtrl, assessCtrl, interviewCtrl)
+	routes.SetupRoutes(router, authCtrl, googleCtrl, youtubeCtrl, publicCtrl, assessCtrl, interviewCtrl)
 
 	router.GET("/", func(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{

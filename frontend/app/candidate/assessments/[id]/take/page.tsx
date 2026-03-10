@@ -60,7 +60,7 @@ export default function TakeAssessmentPage() {
         try {
             const [assessmentData, submissionsData] = await Promise.all([
                 apiRequest(`/api/assessments/${id}`, "GET"),
-                apiRequest("/api/submissions/me", "GET")
+                apiRequest("/api/assessments/submissions/my", "GET")
             ]);
 
             // Check if already submitted

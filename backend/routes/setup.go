@@ -10,12 +10,14 @@ import (
 func SetupRoutes(r *gin.Engine,
 	authCtrl *controllers.AuthController,
 	googleCtrl *controllers.GoogleAuthController,
+	youtubeCtrl *controllers.YouTubeController,
 	publicCtrl *controllers.PublicController,
 	assessCtrl *controllers.AssessmentController,
 	interviewCtrl *controllers.InterviewController,
 ) {
 	// Public Routes
 	AuthRoutes(r, authCtrl, googleCtrl)
+	YouTubeRoutes(r, youtubeCtrl)
 	SetupPublicRoutes(r, publicCtrl)
 
 	// Protected Routes
@@ -25,5 +27,8 @@ func SetupRoutes(r *gin.Engine,
 		UserRoutes(protected)
 		AssessmentRoutes(protected, assessCtrl)
 		InterviewRoutes(protected, interviewCtrl)
+
+		// YouTube Evidence Route
+		protected.POST("/assessments/:id/upload-evidence", youtubeCtrl.UploadEvidence)
 	}
 }
