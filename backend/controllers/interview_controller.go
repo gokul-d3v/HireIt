@@ -3,6 +3,7 @@ package controllers
 import (
 	"context"
 	"hireit-backend/models"
+	"hireit-backend/utils"
 	"net/http"
 	"time"
 
@@ -87,12 +88,19 @@ func CreateInterviewSlot(c *gin.Context) {
 	}
 
 	// Create the interview slot
+	// Sanitize User Input to prevent XSS
+	sanitizedTitle := utils.SanitizeStrict(req.Title)
+	sanitizedDescription := ""
+	if req.Description != "" {
+		sanitizedDescription = utils.SanitizeStrict(req.Description)
+	}
+
 	interview := models.Interview{
 		ID:            primitive.NewObjectID(),
 		InterviewerID: interviewerID,
 		CandidateID:   nil,
-		Title:         req.Title,
-		Description:   req.Description,
+		Title:         sanitizedTitle,
+		Description:   sanitizedDescription,
 		Type:          req.Type,
 		ScheduledAt:   req.ScheduledAt,
 		Duration:      req.Duration,
@@ -134,8 +142,10 @@ func GetAvailableSlots(c *gin.Context) {
 		}
 	}
 
-	// Sort by scheduled time
-	opts := options.Find().SetSort(bson.D{{Key: "scheduled_at", Value: 1}})
+	// Sort by scheduled time and project away private fields
+	opts := options.Find().
+		SetSort(bson.D{{Key: "scheduled_at", Value: 1}}).
+		SetProjection(bson.M{"notes": 0, "candidate_id": 0})
 
 	cursor, err := interviewCollection.Find(ctx, filter, opts)
 	if err != nil {
@@ -253,6 +263,13 @@ func GetMyInterviews(c *gin.Context) {
 		interviews = []models.Interview{}
 	}
 
+	// Security: If candidate is requesting, hide notes
+	if role != "interviewer" {
+		for i := range interviews {
+			interviews[i].Notes = ""
+		}
+	}
+
 	c.JSON(http.StatusOK, interviews)
 }
 
@@ -288,10 +305,10 @@ func UpdateInterview(c *gin.Context) {
 	}
 
 	if req.Title != "" {
-		updateDoc["title"] = req.Title
+		updateDoc["title"] = utils.SanitizeStrict(req.Title)
 	}
 	if req.Description != "" {
-		updateDoc["description"] = req.Description
+		updateDoc["description"] = utils.SanitizeStrict(req.Description)
 	}
 	if req.Type != "" {
 		updateDoc["type"] = req.Type
@@ -306,7 +323,7 @@ func UpdateInterview(c *gin.Context) {
 		updateDoc["meeting_link"] = req.MeetingLink
 	}
 	if req.Notes != "" {
-		updateDoc["notes"] = req.Notes
+		updateDoc["notes"] = utils.SanitizeStrict(req.Notes)
 	}
 
 	filter := bson.M{
@@ -411,10 +428,15 @@ func CompleteInterview(c *gin.Context) {
 		"interviewer_id": interviewerID,
 	}
 
+	sanitizedNotes := ""
+	if req.Notes != "" {
+		sanitizedNotes = utils.SanitizeStrict(req.Notes)
+	}
+
 	update := bson.M{
 		"$set": bson.M{
 			"status":     "completed",
-			"notes":      req.Notes,
+			"notes":      sanitizedNotes,
 			"updated_at": time.Now(),
 		},
 	}

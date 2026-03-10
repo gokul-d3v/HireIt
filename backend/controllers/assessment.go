@@ -2,12 +2,11 @@ package controllers
 
 import (
 	"context"
+	"hireit-backend/models"
+	"hireit-backend/utils"
 	"net/http"
 	"strconv"
 	"time"
-
-	"hireit-backend/models"
-	"hireit-backend/utils"
 
 	"github.com/gin-gonic/gin"
 	"go.mongodb.org/mongo-driver/bson"
@@ -57,10 +56,27 @@ func CreateAssessment(c *gin.Context) {
 		return
 	}
 
-	// Generate IDs for questions if not present
+	// Sanitize Assessment Input
+	assessment.Title = utils.SanitizeStrict(assessment.Title)
+	if assessment.Description != "" {
+		assessment.Description = utils.SanitizeStrict(assessment.Description)
+	}
+
+	// Sanitize and Generate IDs for questions if not present
 	for i := range assessment.Questions {
 		if assessment.Questions[i].ID.IsZero() {
 			assessment.Questions[i].ID = primitive.NewObjectID()
+		}
+
+		// Sanitize question text
+		assessment.Questions[i].Text = utils.SanitizeStrict(assessment.Questions[i].Text)
+
+		// Sanitize options and correct answer
+		for j, opt := range assessment.Questions[i].Options {
+			assessment.Questions[i].Options[j] = utils.SanitizeStrict(opt)
+		}
+		if assessment.Questions[i].CorrectAnswer != "" {
+			assessment.Questions[i].CorrectAnswer = utils.SanitizeStrict(assessment.Questions[i].CorrectAnswer)
 		}
 	}
 
@@ -95,10 +111,27 @@ func UpdateAssessment(c *gin.Context) {
 		return
 	}
 
-	// Generate IDs for questions if not present
+	// Sanitize Assessment Input
+	assessment.Title = utils.SanitizeStrict(assessment.Title)
+	if assessment.Description != "" {
+		assessment.Description = utils.SanitizeStrict(assessment.Description)
+	}
+
+	// Sanitize and Generate IDs for questions if not present
 	for i := range assessment.Questions {
 		if assessment.Questions[i].ID.IsZero() {
 			assessment.Questions[i].ID = primitive.NewObjectID()
+		}
+
+		// Sanitize question text
+		assessment.Questions[i].Text = utils.SanitizeStrict(assessment.Questions[i].Text)
+
+		// Sanitize options and correct answer
+		for j, opt := range assessment.Questions[i].Options {
+			assessment.Questions[i].Options[j] = utils.SanitizeStrict(opt)
+		}
+		if assessment.Questions[i].CorrectAnswer != "" {
+			assessment.Questions[i].CorrectAnswer = utils.SanitizeStrict(assessment.Questions[i].CorrectAnswer)
 		}
 	}
 
@@ -220,11 +253,12 @@ func GetAssessments(c *gin.Context) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	// Set options for pagination and sorting
+	// Set options for pagination, sorting and projection
 	findOptions := options.Find().
 		SetLimit(int64(limit)).
 		SetSkip(int64(skip)).
-		SetSort(bson.D{{Key: "created_at", Value: -1}}) // Most recent first
+		SetSort(bson.D{{Key: "created_at", Value: -1}}). // Most recent first
+		SetProjection(bson.M{"questions": 0})            // Exclude questions in list view
 
 	var assessments []models.Assessment
 	cursor, err := AssessmentCollection.Find(ctx, bson.M{}, findOptions)
@@ -407,6 +441,10 @@ func SaveAssessmentProgress(c *gin.Context) {
 	}
 
 	userID, _ := c.Get("userID")
+	// Sanitize candidate answers
+	for i := range input.Answers {
+		input.Answers[i].Value = utils.SanitizeStrict(input.Answers[i].Value)
+	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
@@ -466,6 +504,11 @@ func SubmitAssessment(c *gin.Context) {
 	// Fetch assessment to grade logic
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
+
+	// Sanitize candidate answers
+	for i := range submission.Answers {
+		submission.Answers[i].Value = utils.SanitizeStrict(submission.Answers[i].Value)
+	}
 
 	var assessment models.Assessment
 	err = AssessmentCollection.FindOne(ctx, bson.M{"_id": objID}).Decode(&assessment)
@@ -650,12 +693,22 @@ func GetCandidateResult(c *gin.Context) {
 		return
 	}
 
+	// Filter answers to remove IsCorrect and Points for candidates
+	filteredAnswers := make([]models.Answer, len(submission.Answers))
+	for i, ans := range submission.Answers {
+		filteredAnswers[i] = models.Answer{
+			QuestionID: ans.QuestionID,
+			Value:      ans.Value,
+			// IsCorrect and Points are left as zero values for candidates
+		}
+	}
+
 	// Create a response combining submission and assessment details
 	response := gin.H{
 		"id":                  submission.ID,
 		"assessment_id":       submission.AssessmentID,
 		"candidate_id":        submission.CandidateID,
-		"answers":             submission.Answers,
+		"answers":             filteredAnswers,
 		"score":               submission.Score,
 		"status":              submission.Status,
 		"started_at":          submission.StartedAt,
@@ -687,6 +740,11 @@ func GetMySubmissions(c *gin.Context) {
 	if err = cursor.All(ctx, &submissions); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to parse submissions"})
 		return
+	}
+
+	// Security: Remove Answers array from list view for candidates
+	for i := range submissions {
+		submissions[i].Answers = nil
 	}
 
 	c.JSON(http.StatusOK, submissions)

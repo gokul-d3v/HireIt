@@ -9,6 +9,6 @@ type User struct {
 	Name     string             `bson:"name" json:"name" binding:"required"`
 	Email    string             `bson:"email" json:"email" binding:"required,email"`
 	Phone    string             `bson:"phone" json:"phone"`
-	Password string             `bson:"password" json:"password"` // Removed required binding for Google Auth
+	Password string             `bson:"password" json:"-"` // Hidden from JSON responses
 	Role     string             `bson:"role" json:"role" binding:"required,oneof=candidate interviewer admin"`
 }

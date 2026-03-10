@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"hireit-backend/models"
+	"hireit-backend/utils"
 
 	"github.com/gin-gonic/gin"
 	"github.com/golang-jwt/jwt/v5"
@@ -43,16 +44,6 @@ func Signup(c *gin.Context) {
 		return
 	}
 
-	// Check if user already exists
-	if user.Password == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Password is required"})
-		return
-	}
-	if len(user.Password) < 6 {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Password must be at least 6 characters"})
-		return
-	}
-
 	// Use context with timeout for database operations
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
@@ -62,6 +53,12 @@ func Signup(c *gin.Context) {
 	if err == nil {
 		c.JSON(http.StatusConflict, gin.H{"error": "User already exists"})
 		return
+	}
+
+	// Sanitize User Input to prevent XSS
+	user.Name = utils.SanitizeStrict(user.Name)
+	if user.Phone != "" {
+		user.Phone = utils.SanitizeStrict(user.Phone)
 	}
 
 	// Hash password with optimized cost (10 instead of DefaultCost 10 for balance)
