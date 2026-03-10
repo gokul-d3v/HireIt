@@ -135,7 +135,7 @@ func (ctrl *AssessmentController) GetCandidateResult(c *gin.Context) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	result, err := ctrl.submissionService.GetCandidateResult(ctx, assessmentID, candidateID.(string))
+	result, err := ctrl.submissionService.GetCandidateResult(ctx, assessmentID, candidateID.(primitive.ObjectID).Hex())
 	if err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "Result not found"})
 		return
@@ -159,7 +159,7 @@ func (ctrl *AssessmentController) SubmitAssessment(c *gin.Context) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
-	submission, err := ctrl.submissionService.SubmitAssessment(ctx, assessmentID, candidateID.(string), input.Answers)
+	submission, err := ctrl.submissionService.SubmitAssessment(ctx, assessmentID, candidateID.(primitive.ObjectID).Hex(), input.Answers)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to submit assessment"})
 		return
@@ -183,7 +183,7 @@ func (ctrl *AssessmentController) SaveAssessmentProgress(c *gin.Context) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	err := ctrl.submissionService.SaveProgress(ctx, assessmentID, candidateID.(string), input.Answers)
+	err := ctrl.submissionService.SaveProgress(ctx, assessmentID, candidateID.(primitive.ObjectID).Hex(), input.Answers)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to save progress"})
 		return

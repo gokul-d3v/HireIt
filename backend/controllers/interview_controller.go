@@ -9,6 +9,7 @@ import (
 	"hireit-backend/services"
 
 	"github.com/gin-gonic/gin"
+	"go.mongodb.org/mongo-driver/bson/primitive"
 )
 
 type InterviewController struct {
@@ -26,12 +27,12 @@ func (ctrl *InterviewController) CreateInterviewSlot(c *gin.Context) {
 		return
 	}
 
-	interviewerID, _ := c.Get("userID")
+	userID, _ := c.Get("userID")
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	id, err := ctrl.interviewService.CreateSlot(ctx, interviewerID.(string), &req)
+	id, err := ctrl.interviewService.CreateSlot(ctx, userID.(primitive.ObjectID).Hex(), &req)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create interview slot"})
 		return
@@ -55,12 +56,12 @@ func (ctrl *InterviewController) GetAvailableSlots(c *gin.Context) {
 
 func (ctrl *InterviewController) BookInterview(c *gin.Context) {
 	slotID := c.Param("id")
-	candidateID, _ := c.Get("userID")
+	userID, _ := c.Get("userID")
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	err := ctrl.interviewService.BookInterview(ctx, candidateID.(string), slotID)
+	err := ctrl.interviewService.BookInterview(ctx, userID.(primitive.ObjectID).Hex(), slotID)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
@@ -76,7 +77,7 @@ func (ctrl *InterviewController) GetMyInterviews(c *gin.Context) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	interviews, err := ctrl.interviewService.GetMyInterviews(ctx, userID.(string), role.(string))
+	interviews, err := ctrl.interviewService.GetMyInterviews(ctx, userID.(primitive.ObjectID).Hex(), role.(string))
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch interviews"})
 		return

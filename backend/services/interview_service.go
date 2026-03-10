@@ -41,6 +41,7 @@ func (s *interviewService) CreateSlot(ctx context.Context, interviewerID string,
 		Duration:      req.Duration,
 		Status:        "available",
 		MeetingLink:   req.MeetingLink,
+		CreatedBy:     intID,
 		CreatedAt:     time.Now(),
 		UpdatedAt:     time.Now(),
 	}

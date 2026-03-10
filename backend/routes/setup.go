@@ -23,7 +23,7 @@ func SetupRoutes(r *gin.Engine,
 	protected.Use(middleware.AuthMiddleware())
 	{
 		UserRoutes(protected)
-		InterviewerRoutes(protected, assessCtrl, interviewCtrl)
-		CandidateRoutes(protected, assessCtrl, interviewCtrl)
+		AssessmentRoutes(protected, assessCtrl)
+		InterviewRoutes(protected, interviewCtrl)
 	}
 }

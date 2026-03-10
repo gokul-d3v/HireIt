@@ -19,6 +19,7 @@ type Interview struct {
 	Status        string              `bson:"status" json:"status"`     // available, scheduled, confirmed, completed, cancelled
 	MeetingLink   string              `bson:"meeting_link,omitempty" json:"meeting_link,omitempty"`
 	Notes         string              `bson:"notes,omitempty" json:"notes,omitempty"`
+	CreatedBy     primitive.ObjectID  `bson:"created_by" json:"created_by"`
 	CreatedAt     time.Time           `bson:"created_at" json:"created_at"`
 	UpdatedAt     time.Time           `bson:"updated_at" json:"updated_at"`
 }

@@ -49,6 +49,8 @@ func (s *submissionService) SaveProgress(ctx context.Context, assessmentID, cand
 		submission = &models.Submission{
 			AssessmentID: aID,
 			CandidateID:  cID,
+			CreatedBy:    cID,
+			CreatedAt:    time.Now(),
 			Answers:      answers,
 			Status:       "in_progress",
 			UpdatedAt:    time.Now(),
@@ -99,6 +101,8 @@ func (s *submissionService) SubmitAssessment(ctx context.Context, assessmentID, 
 		submission = &models.Submission{
 			AssessmentID: aID,
 			CandidateID:  cID,
+			CreatedBy:    cID,
+			CreatedAt:    time.Now(),
 		}
 		_, _ = s.repo.Create(ctx, submission)
 	}

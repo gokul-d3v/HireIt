@@ -50,6 +50,8 @@ func (s *authService) Signup(ctx context.Context, user *models.User) (string, er
 		return "", err
 	}
 	user.Password = string(hashedPassword)
+	user.CreatedAt = time.Now()
+	user.UpdatedAt = time.Now()
 
 	// Create user
 	id, err := s.userRepo.Create(ctx, user)
@@ -102,10 +104,12 @@ func (s *authService) GoogleLogin(ctx context.Context, email, name, role string)
 	if err != nil {
 		// Create new user
 		newUser := models.User{
-			Name:     name,
-			Email:    email,
-			Role:     role,
-			Password: "", // No password for Google users
+			Name:      name,
+			Email:     email,
+			Role:      role,
+			Password:  "", // No password for Google users
+			CreatedAt: time.Now(),
+			UpdatedAt: time.Now(),
 		}
 		id, err := s.userRepo.Create(ctx, &newUser)
 		if err != nil {
@@ -133,11 +137,13 @@ func (s *authService) StartPublicAssessment(ctx context.Context, name, email, ph
 		// Create legacy candidate
 		hashedPassword, _ := bcrypt.GenerateFromPassword([]byte("candidate123"), 10)
 		newUser := models.User{
-			Name:     name,
-			Email:    email,
-			Phone:    phone,
-			Password: string(hashedPassword),
-			Role:     "candidate",
+			Name:      name,
+			Email:     email,
+			Phone:     phone,
+			Password:  string(hashedPassword),
+			Role:      "candidate",
+			CreatedAt: time.Now(),
+			UpdatedAt: time.Now(),
 		}
 		id, err := s.userRepo.Create(ctx, &newUser)
 		if err != nil {
