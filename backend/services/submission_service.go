@@ -28,15 +28,28 @@ func NewSubmissionService(repo repositories.SubmissionRepository, assessmentRepo
 	return &submissionService{repo: repo, assessmentRepo: assessmentRepo}
 }
 
-func (s *submissionService) GetSubmissions(ctx context.Context, assessmentID string) ([]models.Submission, error) {
+func (r *submissionService) GetSubmissions(ctx context.Context, assessmentID string) ([]models.Submission, error) {
 	objID, _ := primitive.ObjectIDFromHex(assessmentID)
-	return s.repo.FindAll(ctx, bson.M{"assessment_id": objID}, options.Find().SetSort(bson.D{{Key: "submitted_at", Value: -1}}))
+	// Check if assessment exists and not deleted
+	_, err := r.assessmentRepo.FindByID(ctx, objID)
+	if err != nil {
+		return nil, errors.New("assessment not found or deleted")
+	}
+
+	return r.repo.FindAll(ctx, bson.M{"assessment_id": objID, "deleted_at": nil}, options.Find().SetSort(bson.D{{Key: "submitted_at", Value: -1}}))
 }
 
-func (s *submissionService) GetCandidateResult(ctx context.Context, assessmentID, candidateID string) (*models.Submission, error) {
+func (r *submissionService) GetCandidateResult(ctx context.Context, assessmentID, candidateID string) (*models.Submission, error) {
 	aID, _ := primitive.ObjectIDFromHex(assessmentID)
 	cID, _ := primitive.ObjectIDFromHex(candidateID)
-	return s.repo.FindOne(ctx, bson.M{"assessment_id": aID, "candidate_id": cID})
+
+	// Check if assessment exists
+	_, err := r.assessmentRepo.FindByID(ctx, aID)
+	if err != nil {
+		return nil, errors.New("assessment not found or deleted")
+	}
+
+	return r.repo.FindOne(ctx, bson.M{"assessment_id": aID, "candidate_id": cID, "deleted_at": nil})
 }
 
 func (s *submissionService) SaveProgress(ctx context.Context, assessmentID, candidateID string, answers []models.Answer) error {

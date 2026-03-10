@@ -15,4 +15,5 @@ type User struct {
 	Role      string             `bson:"role" json:"role" binding:"required,oneof=candidate interviewer admin"`
 	CreatedAt time.Time          `bson:"created_at" json:"created_at"`
 	UpdatedAt time.Time          `bson:"updated_at" json:"updated_at"`
+	DeletedAt *time.Time         `bson:"deleted_at,omitempty" json:"-"`
 }

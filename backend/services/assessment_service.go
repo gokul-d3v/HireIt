@@ -2,6 +2,7 @@ package services
 
 import (
 	"context"
+	"errors"
 	"hireit-backend/models"
 	"hireit-backend/repositories"
 	"hireit-backend/utils"
@@ -59,7 +60,8 @@ func (s *assessmentService) GetAssessments(ctx context.Context, limit, skip int,
 		opts.SetProjection(bson.M{"questions": 0})
 	}
 
-	return s.repo.FindAll(ctx, bson.M{}, opts)
+	filter := bson.M{"deleted_at": nil}
+	return s.repo.FindAll(ctx, filter, opts)
 }
 
 func (s *assessmentService) GetAssessmentByID(ctx context.Context, idStr string, role string) (*models.Assessment, error) {
@@ -80,6 +82,10 @@ func (s *assessmentService) GetAssessmentByID(ctx context.Context, idStr string,
 		}
 	}
 
+	if assessment.DeletedAt != nil {
+		return nil, errors.New("assessment deleted")
+	}
+
 	return assessment, nil
 }
 
@@ -87,6 +93,12 @@ func (s *assessmentService) UpdateAssessment(ctx context.Context, idStr string, 
 	id, err := utils.ToObjectID(idStr)
 	if err != nil {
 		return err
+	}
+
+	// Check if already deleted
+	existing, err := s.repo.FindByID(ctx, id)
+	if err != nil || existing.DeletedAt != nil {
+		return errors.New("assessment not found or deleted")
 	}
 
 	assessment.UpdatedAt = time.Now()
@@ -98,5 +110,9 @@ func (s *assessmentService) DeleteAssessment(ctx context.Context, idStr string) 
 	if err != nil {
 		return err
 	}
-	return s.repo.Delete(ctx, id)
+	now := time.Now()
+	update := &models.Assessment{
+		DeletedAt: &now,
+	}
+	return s.repo.Update(ctx, id, update)
 }

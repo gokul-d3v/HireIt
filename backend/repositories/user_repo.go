@@ -38,7 +38,7 @@ func (r *mongoUserRepo) Create(ctx context.Context, user *models.User) (primitiv
 
 func (r *mongoUserRepo) FindByEmail(ctx context.Context, email string) (*models.User, error) {
 	var user models.User
-	err := r.collection.FindOne(ctx, bson.M{"email": email}).Decode(&user)
+	err := r.collection.FindOne(ctx, bson.M{"email": email, "deleted_at": nil}).Decode(&user)
 	if err != nil {
 		return nil, err
 	}
@@ -47,7 +47,7 @@ func (r *mongoUserRepo) FindByEmail(ctx context.Context, email string) (*models.
 
 func (r *mongoUserRepo) FindByID(ctx context.Context, id primitive.ObjectID) (*models.User, error) {
 	var user models.User
-	err := r.collection.FindOne(ctx, bson.M{"_id": id}).Decode(&user)
+	err := r.collection.FindOne(ctx, bson.M{"_id": id, "deleted_at": nil}).Decode(&user)
 	if err != nil {
 		return nil, err
 	}

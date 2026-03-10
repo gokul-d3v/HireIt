@@ -38,4 +38,5 @@ type Assessment struct {
 	PassingScore int                 `bson:"passing_score" json:"passing_score"`                     // Minimum score to pass
 	TotalMarks   int                 `bson:"total_marks" json:"total_marks"`                         // Sum of all question points
 	NextPhaseID  *primitive.ObjectID `bson:"next_phase_id,omitempty" json:"next_phase_id,omitempty"` // Reference to next phase
+	DeletedAt    *time.Time          `bson:"deleted_at,omitempty" json:"-"`                          // For soft delete
 }

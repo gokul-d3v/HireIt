@@ -58,7 +58,7 @@ func (s *interviewService) GetAvailableSlots(ctx context.Context) ([]models.Inte
 		SetSort(bson.D{{Key: "scheduled_at", Value: 1}}).
 		SetProjection(bson.M{"notes": 0, "candidate_id": 0})
 
-	return s.repo.FindAll(ctx, bson.M{"status": "available"}, opts)
+	return s.repo.FindAll(ctx, bson.M{"status": "available", "deleted_at": nil}, opts)
 }
 
 func (s *interviewService) BookInterview(ctx context.Context, candidateIDStr string, slotIDStr string) error {
@@ -94,6 +94,7 @@ func (s *interviewService) GetMyInterviews(ctx context.Context, userID string, r
 	} else {
 		filter["candidate_id"] = uID
 	}
+	filter["deleted_at"] = nil
 
 	interviews, err := s.repo.FindAll(ctx, filter, options.Find().SetSort(bson.D{{Key: "scheduled_at", Value: 1}}))
 	if err != nil {
@@ -114,6 +115,12 @@ func (s *interviewService) UpdateInterview(ctx context.Context, idStr string, up
 	id, err := utils.ToObjectID(idStr)
 	if err != nil {
 		return err
+	}
+
+	// Check if deleted
+	existing, err := s.repo.FindByID(ctx, id)
+	if err != nil || existing.DeletedAt != nil {
+		return errors.New("interview not found or deleted")
 	}
 
 	upd := bson.M{
@@ -137,5 +144,11 @@ func (s *interviewService) DeleteInterview(ctx context.Context, idStr string) er
 	if err != nil {
 		return err
 	}
-	return s.repo.Delete(ctx, id)
+	now := time.Now()
+	upd := bson.M{
+		"$set": bson.M{
+			"deleted_at": &now,
+		},
+	}
+	return s.repo.Update(ctx, id, upd)
 }
