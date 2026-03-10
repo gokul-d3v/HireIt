@@ -22,6 +22,7 @@ type Submission struct {
 	Status       string             `bson:"status" json:"status"` // "in_progress", "submitted", "graded"
 	StartedAt    time.Time          `bson:"started_at" json:"started_at"`
 	SubmittedAt  time.Time          `bson:"submitted_at,omitempty" json:"submitted_at,omitempty"`
+	UpdatedAt    time.Time          `bson:"updated_at" json:"updated_at"`
 
 	// Phase System
 	Passed            bool                `bson:"passed" json:"passed"`

@@ -2,19 +2,24 @@ package controllers
 
 import (
 	"context"
-	"hireit-backend/models"
 	"net/http"
 	"time"
 
+	"hireit-backend/services"
+
 	"github.com/gin-gonic/gin"
-	"github.com/golang-jwt/jwt/v5"
-	"go.mongodb.org/mongo-driver/bson"
-	"go.mongodb.org/mongo-driver/bson/primitive"
-	"golang.org/x/crypto/bcrypt"
 )
 
+type PublicController struct {
+	authService services.AuthService
+}
+
+func NewPublicController(authService services.AuthService) *PublicController {
+	return &PublicController{authService: authService}
+}
+
 // StartPublicAssessment handles guest login/signup for taking a test
-func StartPublicAssessment(c *gin.Context) {
+func (ctrl *PublicController) StartPublicAssessment(c *gin.Context) {
 	var input struct {
 		Name         string `json:"name" binding:"required"`
 		Email        string `json:"email" binding:"required,email"`
@@ -30,46 +35,14 @@ func StartPublicAssessment(c *gin.Context) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
-	// 1. Check if user exists
-	var user models.User
-	err := UserCollection.FindOne(ctx, bson.M{"email": input.Email}).Decode(&user)
-
+	token, user, err := ctrl.authService.StartPublicAssessment(ctx, input.Name, input.Email, input.Phone)
 	if err != nil {
-		// User does not exist, create new one
-		hashedPassword, _ := bcrypt.GenerateFromPassword([]byte("candidate123"), 10) // Dummy password
-
-		newUser := models.User{
-			ID:       primitive.NewObjectID(),
-			Name:     input.Name,
-			Email:    input.Email,
-			Phone:    input.Phone,
-			Password: string(hashedPassword),
-			Role:     "candidate",
-		}
-
-		_, err := UserCollection.InsertOne(ctx, newUser)
-		if err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create candidate profile"})
-			return
-		}
-		user = newUser
-	}
-
-	// 2. Generate Token
-	token := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
-		"sub":  user.ID,
-		"role": user.Role,
-		"exp":  time.Now().Add(time.Hour * 24).Unix(),
-	})
-
-	tokenString, err := token.SignedString(getJWTSecretKey())
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to generate access token"})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to initiate assessment session"})
 		return
 	}
 
 	c.JSON(http.StatusOK, gin.H{
-		"token": tokenString,
+		"token": token,
 		"user": gin.H{
 			"id":    user.ID,
 			"name":  user.Name,

@@ -6,18 +6,23 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-func InterviewerRoutes(r *gin.RouterGroup) {
-	// Interviewer specific routes
-	r.POST("/assessments", controllers.CreateAssessment)
-	r.PUT("/assessments/:id", controllers.UpdateAssessment)
-	r.DELETE("/assessments/:id", controllers.DeleteAssessment)
-	r.GET("/assessments/my", controllers.GetMyAssessments)
-	r.GET("/assessments/:id/submissions", controllers.GetSubmissions)
+func InterviewerRoutes(r *gin.RouterGroup, assessCtrl *controllers.AssessmentController, interviewCtrl *controllers.InterviewController) {
+	assessments := r.Group("/assessments")
+	{
+		assessments.POST("/", assessCtrl.CreateAssessment)
+		assessments.GET("/", assessCtrl.GetAssessments)
+		assessments.GET("/:id", assessCtrl.GetAssessmentByID)
+		assessments.PUT("/:id", assessCtrl.UpdateAssessment)
+		assessments.DELETE("/:id", assessCtrl.DeleteAssessment)
+		assessments.GET("/:id/submissions", assessCtrl.GetSubmissions)
+	}
 
 	// Interview Management
-	r.POST("/interviews/slots", controllers.CreateInterviewSlot)
-	r.GET("/interviews/my", controllers.GetMyInterviews)
-	r.PUT("/interviews/:id", controllers.UpdateInterview)
-	r.DELETE("/interviews/:id", controllers.CancelInterview)
-	r.POST("/interviews/:id/complete", controllers.CompleteInterview)
+	interviews := r.Group("/interviews")
+	{
+		interviews.POST("/slots", interviewCtrl.CreateInterviewSlot)
+		interviews.GET("/my", interviewCtrl.GetMyInterviews)
+		interviews.PUT("/:id", interviewCtrl.UpdateInterview)
+		interviews.DELETE("/slots/:id", interviewCtrl.DeleteInterviewSlot)
+	}
 }

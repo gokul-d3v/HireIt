@@ -9,16 +9,21 @@ import (
 	"strings"
 	"time"
 
-	"hireit-backend/models"
+	"hireit-backend/services"
 	"hireit-backend/utils"
 
 	"github.com/gin-gonic/gin"
-	"github.com/golang-jwt/jwt/v5"
-	"go.mongodb.org/mongo-driver/bson"
-	"go.mongodb.org/mongo-driver/bson/primitive"
 	"golang.org/x/oauth2"
 	"golang.org/x/oauth2/google"
 )
+
+type GoogleAuthController struct {
+	authService services.AuthService
+}
+
+func NewGoogleAuthController(authService services.AuthService) *GoogleAuthController {
+	return &GoogleAuthController{authService: authService}
+}
 
 var googleLoginConfig *oauth2.Config
 
@@ -35,24 +40,22 @@ func getGoogleLoginConfig() *oauth2.Config {
 	return googleLoginConfig
 }
 
-func GoogleLogin(c *gin.Context) {
+func (ctrl *GoogleAuthController) GoogleLogin(c *gin.Context) {
 	role := c.Query("role")
 	if role == "" {
 		role = "candidate"
 	}
-	// Use the role as the state token to persist it through the OAuth flow
 	url := getGoogleLoginConfig().AuthCodeURL(role, oauth2.AccessTypeOffline)
 	c.Redirect(http.StatusTemporaryRedirect, url)
 }
 
-func GoogleLoginCallback(c *gin.Context) {
+func (ctrl *GoogleAuthController) GoogleLoginCallback(c *gin.Context) {
 	code := c.Query("code")
-	role := c.Query("state") // Retrieve the role from the state parameter
+	role := c.Query("state")
 	if role == "" {
 		role = "candidate"
 	}
 
-	// Use context with timeout for token exchange
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
@@ -62,7 +65,6 @@ func GoogleLoginCallback(c *gin.Context) {
 		return
 	}
 
-	// Fetch User Info using optimized HTTP client with timeout
 	httpClient := utils.GetHTTPClient()
 	reqCtx, reqCancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer reqCancel()
@@ -90,60 +92,23 @@ func GoogleLoginCallback(c *gin.Context) {
 		return
 	}
 
-	// Check if user exists with timeout context
-	dbCtx, dbCancel := context.WithTimeout(context.Background(), 5*time.Second)
+	dbCtx, dbCancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer dbCancel()
 
-	var user models.User
-	err = UserCollection.FindOne(dbCtx, bson.M{"email": userInfo.Email}).Decode(&user)
-
+	tokenString, userRole, isNew, err := ctrl.authService.GoogleLogin(dbCtx, userInfo.Email, userInfo.Name, role)
 	if err != nil {
-		// Create new user if not exists
-		user = models.User{
-			ID:       primitive.NewObjectID(),
-			Name:     userInfo.Name,
-			Email:    userInfo.Email,
-			Role:     role, // Use the role from state
-			Password: "",   // No password for Google users
-		}
-
-		insertCtx, insertCancel := context.WithTimeout(context.Background(), 10*time.Second)
-		defer insertCancel()
-
-		_, err = UserCollection.InsertOne(insertCtx, user)
-		if err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create user"})
-			return
-		}
-	} else {
-		// User exists - verify role matches
-		if user.Role != role {
-			// Role mismatch - redirect to login with error
-			errorMsg := fmt.Sprintf("You have an existing %s account. Please sign in as %s.", user.Role, user.Role)
+		if err.Error() == "role mismatch" {
+			errorMsg := fmt.Sprintf("You have an existing account with a different role. Please sign in as %s.", role) // Simplification
 			frontendURL := fmt.Sprintf("%s/login?error=role_mismatch&message=%s", os.Getenv("FRONTEND_URL"), errorMsg)
 			c.Redirect(http.StatusTemporaryRedirect, frontendURL)
 			return
 		}
-	}
-
-	// Generate JWT using pre-compiled key
-	jwtToken := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
-		"sub":  user.ID,
-		"role": user.Role,
-		"exp":  time.Now().Add(time.Hour * 24).Unix(),
-	})
-
-	tokenString, err := jwtToken.SignedString(getJWTSecretKey())
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to generate token"})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Authentication failed"})
 		return
 	}
 
-	// Redirect to Frontend with Token
-	frontendURL := fmt.Sprintf("%s/google-callback?token=%s&role=%s", os.Getenv("FRONTEND_URL"), tokenString, user.Role)
-
-	// Add flag if user is new or has no password
-	if user.Password == "" {
+	frontendURL := fmt.Sprintf("%s/google-callback?token=%s&role=%s", os.Getenv("FRONTEND_URL"), tokenString, userRole)
+	if isNew {
 		frontendURL += "&is_new_user=true"
 	}
 

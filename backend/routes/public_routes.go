@@ -6,9 +6,9 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-func SetupPublicRoutes(router *gin.Engine) {
+func SetupPublicRoutes(router *gin.Engine, publicCtrl *controllers.PublicController) {
 	public := router.Group("/api/public")
 	{
-		public.POST("/start", controllers.StartPublicAssessment)
+		public.POST("/start", publicCtrl.StartPublicAssessment)
 	}
 }

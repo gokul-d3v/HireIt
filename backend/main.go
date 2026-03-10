@@ -5,7 +5,9 @@ import (
 	"context"
 	"fmt"
 	"hireit-backend/controllers"
+	"hireit-backend/repositories"
 	"hireit-backend/routes"
+	"hireit-backend/services"
 	"log"
 	"net/http"
 	"os"
@@ -81,10 +83,24 @@ func main() {
 	submissionCollection := client.Database("broassess").Collection("submissions")
 	interviewCollection := client.Database("broassess").Collection("interviews")
 
-	controllers.InitAuthController(userCollection)
-	controllers.InitAssessmentController(assessmentCollection)
-	controllers.InitSubmissionController(submissionCollection)
-	controllers.InitInterviewController(interviewCollection)
+	// Initialize Repositories
+	userRepo := repositories.NewUserRepository(userCollection)
+	assessRepo := repositories.NewAssessmentRepository(assessmentCollection)
+	subRepo := repositories.NewSubmissionRepository(submissionCollection)
+	interviewRepo := repositories.NewInterviewRepository(interviewCollection)
+
+	// Initialize Services
+	authService := services.NewAuthService(userRepo)
+	assessService := services.NewAssessmentService(assessRepo)
+	subService := services.NewSubmissionService(subRepo, assessRepo)
+	interviewService := services.NewInterviewService(interviewRepo)
+
+	// Initialize Controllers
+	authCtrl := controllers.NewAuthController(authService)
+	googleCtrl := controllers.NewGoogleAuthController(authService)
+	publicCtrl := controllers.NewPublicController(authService)
+	assessCtrl := controllers.NewAssessmentController(assessService, subService)
+	interviewCtrl := controllers.NewInterviewController(interviewService)
 
 	// Initialize Router with custom middleware for better performance
 	router := gin.New()
@@ -102,7 +118,7 @@ func main() {
 	}))
 
 	// Setup Routes
-	routes.SetupRoutes(router)
+	routes.SetupRoutes(router, authCtrl, googleCtrl, publicCtrl, assessCtrl, interviewCtrl)
 
 	router.GET("/", func(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{

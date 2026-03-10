@@ -6,19 +6,23 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-func CandidateRoutes(r *gin.RouterGroup) {
-	// Candidate specific routes
-	r.GET("/assessments", controllers.GetAssessments)
-	r.GET("/assessments/:id", controllers.GetAssessmentByID)
-
-	r.POST("/assessments/:id/submit", controllers.SubmitAssessment)
-	r.POST("/assessments/:id/progress", controllers.SaveAssessmentProgress) // New route for saving progress
-	r.GET("/assessments/:id/result", controllers.GetCandidateResult)
-	r.GET("/submissions/me", controllers.GetMySubmissions)
-
+func CandidateRoutes(r *gin.RouterGroup, assessCtrl *controllers.AssessmentController, interviewCtrl *controllers.InterviewController) {
+	assessments := r.Group("/assessments")
+	{
+		assessments.GET("/", assessCtrl.GetAssessments)
+		assessments.GET("/:id", assessCtrl.GetAssessmentByID)
+		assessments.POST("/:id/submit", assessCtrl.SubmitAssessment)
+		assessments.POST("/:id/progress", assessCtrl.SaveAssessmentProgress)
+		assessments.GET("/:id/result", assessCtrl.GetCandidateResult)
+		assessments.GET("/submissions/my", assessCtrl.GetMySubmissions)
+	}
 	// Interview Booking
-	r.GET("/interviews/available", controllers.GetAvailableSlots)
-	r.POST("/interviews/:id/book", controllers.BookInterview)
-	// Note: GetMyInterviews and CancelInterview are in InterviewerRoutes
+	interviews := r.Group("/interviews")
+	{
+		interviews.GET("/available", interviewCtrl.GetAvailableSlots)
+		interviews.POST("/:id/book", interviewCtrl.BookInterview)
+		interviews.GET("/my", interviewCtrl.GetMyInterviews)
+	}
+	// Note: CancelInterview is in InterviewerRoutes
 	// They handle both roles internally based on user role
 }
