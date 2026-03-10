@@ -3,12 +3,11 @@ package main
 // Trigger rebuild to load new env
 import (
 	"context"
-	"fmt"
 	"hireit-backend/controllers"
 	"hireit-backend/repositories"
 	"hireit-backend/routes"
 	"hireit-backend/services"
-	"log"
+	"hireit-backend/utils"
 	"net/http"
 	"os"
 	"os/signal"
@@ -25,11 +24,13 @@ import (
 var client *mongo.Client
 
 func main() {
-	log.Println("Starting HireIt Backend...")
+	utils.InitLogger()
+	logger := utils.GetLogger()
+	logger.Info("Starting HireIt Backend...")
 
 	// Load .env file
 	if err := godotenv.Load(); err != nil {
-		log.Println("No .env file found (expected in production)")
+		logger.Warn("No .env file found (expected in production)")
 	}
 
 	// Set Gin mode
@@ -38,18 +39,18 @@ func main() {
 	port := os.Getenv("PORT")
 	if port == "" {
 		port = "8080"
-		log.Println("WARNING: PORT env var not set, defaulting to 8080")
+		logger.Warn("PORT env var not set, defaulting to 8080")
 	} else {
-		log.Printf("PORT env var detected: %s", port)
+		logger.Infof("PORT env var detected: %s", port)
 	}
 
 	// MongoDB Connection with optimized pool settings
 	mongoURI := os.Getenv("MONGO_URI")
 	if mongoURI == "" {
-		log.Println("WARNING: MONGO_URI env var not set! Defaulting to localhost (will fail in production).")
+		logger.Warn("MONGO_URI env var not set! Defaulting to localhost (will fail in production).")
 		mongoURI = "mongodb://localhost:27017"
 	} else {
-		log.Println("MONGO_URI env var detected.")
+		logger.Info("MONGO_URI env var detected.")
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
@@ -63,19 +64,19 @@ func main() {
 		SetMaxConnIdleTime(3 * time.Minute). // Close idle connections after 3 minutes
 		SetServerSelectionTimeout(5 * time.Second)
 
-	log.Println("Connecting to MongoDB...")
+	logger.Info("Connecting to MongoDB...")
 	var err error
 	client, err = mongo.Connect(ctx, clientOptions)
 	if err != nil {
-		log.Fatal("FATAL: Error connecting to MongoDB: ", err)
+		logger.Fatalf("FATAL: Error connecting to MongoDB: %v", err)
 	}
 
 	// Check the connection
 	err = client.Ping(ctx, nil)
 	if err != nil {
-		log.Fatal("FATAL: Could not ping MongoDB: ", err)
+		logger.Fatalf("FATAL: Could not ping MongoDB: %v", err)
 	}
-	fmt.Println("Connected to MongoDB!")
+	logger.Info("Connected to MongoDB!")
 
 	// Initialize Collections
 	userCollection := client.Database("broassess").Collection("users")
@@ -137,9 +138,9 @@ func main() {
 
 	// Start server in a goroutine for graceful shutdown
 	go func() {
-		fmt.Printf("Server running on port %s\n", port)
+		logger.Infof("Server running on port %s", port)
 		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-			log.Fatalf("Server failed to start: %v", err)
+			logger.Fatalf("Server failed to start: %v", err)
 		}
 	}()
 
@@ -148,20 +149,20 @@ func main() {
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
 	<-quit
 
-	fmt.Println("Shutting down server...")
+	logger.Info("Shutting down server...")
 
 	// Give outstanding requests 5 seconds to complete
 	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer shutdownCancel()
 
 	if err := srv.Shutdown(shutdownCtx); err != nil {
-		log.Fatal("Server forced to shutdown: ", err)
+		logger.Fatalf("Server forced to shutdown: %v", err)
 	}
 
 	// Disconnect MongoDB
 	if err := client.Disconnect(shutdownCtx); err != nil {
-		log.Fatal("Error disconnecting from MongoDB: ", err)
+		logger.Errorf("Error disconnecting from MongoDB: %v", err)
 	}
 
-	fmt.Println("Server exited gracefully")
+	logger.Info("Server exited gracefully")
 }
