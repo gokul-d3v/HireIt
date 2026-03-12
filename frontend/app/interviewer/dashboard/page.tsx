@@ -16,7 +16,7 @@ import { SetPasswordModal } from "@/components/auth/SetPasswordModal";
 interface Assessment {
     id: string;
     title: string;
-    questions: any[];
+    question_rules: any[];
     created_at: string;
     phase?: number;
     next_phase_id?: string;
@@ -251,7 +251,7 @@ function InterviewerDashboardContent() {
                                 assessments.slice(0, 5).map((assessment) => (
                                     <tr key={assessment.id} className="hover:bg-gray-50">
                                         <td className="px-6 py-4 font-medium text-gray-900">{assessment.title}</td>
-                                        <td className="px-6 py-4">{assessment.questions?.length || 0}</td>
+                                        <td className="px-6 py-4">{assessment.question_rules?.reduce((sum, r) => sum + (Number(r.count) || 0), 0) || 0}</td>
                                         <td className="px-6 py-4">
                                             {assessment.next_phase_id ? (
                                                 <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-purple-100 text-purple-800">

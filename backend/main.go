@@ -17,6 +17,7 @@ import (
 	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
 	"github.com/joho/godotenv"
+	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
 )
@@ -83,26 +84,36 @@ func main() {
 	assessmentCollection := client.Database("broassess").Collection("assessments")
 	submissionCollection := client.Database("broassess").Collection("submissions")
 	interviewCollection := client.Database("broassess").Collection("interviews")
+	questionBankCollection := client.Database("broassess").Collection("question_bank")
+
+	// Create Indexes
+	_, _ = submissionCollection.Indexes().CreateOne(ctx, mongo.IndexModel{
+		Keys:    bson.D{{Key: "assessment_id", Value: 1}, {Key: "candidate_id", Value: 1}},
+		Options: options.Index().SetUnique(true),
+	})
 
 	// Initialize Repositories
 	userRepo := repositories.NewUserRepository(userCollection)
 	assessRepo := repositories.NewAssessmentRepository(assessmentCollection)
 	subRepo := repositories.NewSubmissionRepository(submissionCollection)
 	interviewRepo := repositories.NewInterviewRepository(interviewCollection)
+	qbRepo := repositories.NewQuestionBankRepository(questionBankCollection)
 
 	// Initialize Services
 	authService := services.NewAuthService(userRepo)
-	assessService := services.NewAssessmentService(assessRepo)
-	submissionService := services.NewSubmissionService(subRepo, assessRepo, userRepo)
+	assessService := services.NewAssessmentService(assessRepo, qbRepo)
+	submissionService := services.NewSubmissionService(subRepo, assessRepo, userRepo, qbRepo)
 	interviewService := services.NewInterviewService(interviewRepo)
 
 	// Initialize Controllers
 	authCtrl := controllers.NewAuthController(authService)
 	googleCtrl := controllers.NewGoogleAuthController(authService)
-	youtubeCtrl := controllers.NewYouTubeController(userRepo, assessRepo)
+	youtubeCtrl := controllers.NewYouTubeController(userRepo, assessRepo, subRepo)
 	publicCtrl := controllers.NewPublicController(authService)
 	assessCtrl := controllers.NewAssessmentController(assessService, submissionService)
 	interviewCtrl := controllers.NewInterviewController(interviewService)
+	teleProxyCtrl := controllers.NewTelegramProxyController()
+	questionBankController := controllers.NewQuestionBankController(qbRepo) // Initialize QuestionBankController
 
 	// Initialize Router with custom middleware for better performance
 	router := gin.New()
@@ -121,6 +132,11 @@ func main() {
 
 	// Setup Routes
 	routes.SetupRoutes(router, authCtrl, googleCtrl, youtubeCtrl, publicCtrl, assessCtrl, interviewCtrl)
+
+	// Admin Question Import
+	router.POST("/api/admin/questions/import", questionBankController.ImportQuestions)
+
+	router.GET("/api/telegram/image/:fileId", teleProxyCtrl.GetTelegramImage)
 
 	router.GET("/", func(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{

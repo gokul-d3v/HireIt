@@ -40,4 +40,6 @@ backend/broassess-backend.exe
 *.exe
 *.test
 *.log
-tmp/
+# Data Files
+backend/questions.md
+backend/youtube_token.json

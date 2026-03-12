@@ -8,6 +8,9 @@ import { Modal } from "@/components/ui/Modal";
 import { Clock, CheckCircle, ChevronLeft, ChevronRight, AlertTriangle, ShieldAlert, Camera, Maximize2, Mic } from "lucide-react";
 import * as tf from "@tensorflow/tfjs";
 import * as blazeface from "@tensorflow-models/blazeface";
+import * as faceapi from "@vladmandic/face-api";
+import AssessmentSidebar from "./assessment/AssessmentSidebar";
+
 
 interface Question {
     id: string;
@@ -55,6 +58,7 @@ export default function AssessmentPlayer({ assessmentId, onComplete }: Assessmen
     const [calibrationStep, setCalibrationStep] = useState<'not_started' | 'calibrating' | 'completed'>('not_started');
     const [calibrationFeedback, setCalibrationFeedback] = useState("Position your face within the frame");
     const [isPostureCorrect, setIsPostureCorrect] = useState(false);
+    const [headerWarning, setHeaderWarning] = useState<string | null>(null);
 
     const videoRef = useRef<HTMLVideoElement>(null);
     const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -65,11 +69,22 @@ export default function AssessmentPlayer({ assessmentId, onComplete }: Assessmen
     const lastViolationTimeRef = useRef<Record<string, number>>({});
     const [stream, setStream] = useState<MediaStream | null>(null);
 
+    // Snapshot State
+    const [snapshots, setSnapshots] = useState<{
+        initial?: { image: string, descriptor?: Float32Array };
+        middle?: { image: string, descriptor?: Float32Array };
+        end?: { image: string, descriptor?: Float32Array };
+    }>({});
+    const [middleSnapshotTaken, setMiddleSnapshotTaken] = useState(false);
+
     useEffect(() => {
         const loadModels = async () => {
             try {
                 await tf.ready();
                 await blazeface.load();
+                await faceapi.nets.tinyFaceDetector.loadFromUri('/models');
+                await faceapi.nets.faceLandmark68Net.loadFromUri('/models');
+                await faceapi.nets.faceRecognitionNet.loadFromUri('/models');
                 setModelsLoaded(true);
             } catch (err) {
                 console.error("Failed to load TFJS models", err);
@@ -77,6 +92,64 @@ export default function AssessmentPlayer({ assessmentId, onComplete }: Assessmen
         };
         loadModels();
     }, []);
+
+    const captureSnapshot = async (type: 'initial' | 'middle' | 'end', retries = 5) => {
+        const video = videoRef.current;
+        if (!video) {
+            if (retries > 0) {
+                await new Promise(r => setTimeout(r, 500));
+                return captureSnapshot(type, retries - 1);
+            }
+            return null;
+        }
+
+        // Wait for video to be ready
+        if (video.readyState !== 4) {
+            if (retries > 0) {
+                await new Promise(r => setTimeout(r, 500));
+                return captureSnapshot(type, retries - 1);
+            }
+            return null;
+        }
+
+        const canvas = canvasRef.current;
+        if (!canvas) return null;
+
+        canvas.width = video.videoWidth;
+        canvas.height = video.videoHeight;
+        const ctx = canvas.getContext('2d');
+        if (ctx) {
+            ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+            const imageBase64 = canvas.toDataURL('image/jpeg', 0.8);
+
+            let descriptor: Float32Array | undefined = undefined;
+            try {
+                // Use a slightly larger detector for better accuracy on snapshots
+                const detection = await faceapi.detectSingleFace(video, new faceapi.TinyFaceDetectorOptions({ inputSize: 160, scoreThreshold: 0.5 }))
+                    .withFaceLandmarks()
+                    .withFaceDescriptor();
+                if (detection) {
+                    descriptor = detection.descriptor;
+                }
+            } catch (e) {
+                console.error(`Failed to extract face descriptor for ${type}`, e);
+            }
+
+            const snapshotData = { image: imageBase64, descriptor };
+            setSnapshots(prev => ({
+                ...prev,
+                [type]: snapshotData
+            }));
+            return snapshotData;
+        }
+        return null;
+    };
+
+    const showHeaderWarning = (msg: string) => {
+        setHeaderWarning(msg);
+        // Auto-clear after 5 seconds
+        setTimeout(() => setHeaderWarning(prev => prev === msg ? null : prev), 5000);
+    };
 
     const handleViolation = (reason: string, evidenceBase64?: string) => {
         setViolations(prev => {
@@ -141,16 +214,18 @@ export default function AssessmentPlayer({ assessmentId, onComplete }: Assessmen
         if (isFatal) {
             handleViolation(reason, evidenceBase64);
         } else {
+            showHeaderWarning(reason);
+            
             const now = Date.now();
             const lastTime = lastViolationTimeRef.current[type] || 0;
             
-            // Apply a 60-second cooldown per non-fatal violation type to prevent spamming recordings
+            // Apply a 60-second cooldown per non-fatal violation type for BACKEND logging only
             if (now - lastTime < 60000) {
                 return;
             }
             lastViolationTimeRef.current[type] = now;
 
-            // Non-fatal logging
+            // Non-fatal logging (backend only)
             const violation = {
                 timestamp: new Date().toISOString(),
                 type: type,
@@ -160,10 +235,20 @@ export default function AssessmentPlayer({ assessmentId, onComplete }: Assessmen
             setLoggedViolations(prev => [...prev, violation]);
             console.warn(`[Non-Fatal Violation Logged]: ${reason}`);
 
+            // Trigger immediate progress save so backend has the record for video linking
+            saveProgress([...loggedViolations, violation]);
             // Start 7-second Video Evidence Recording
             if (stream && !isRecordingRef.current) {
                 isRecordingRef.current = true;
-                const mediaRecorder = new MediaRecorder(stream, { mimeType: 'video/webm' });
+                
+                // Determine supported mime type
+                const mimeType = MediaRecorder.isTypeSupported('video/webm;codecs=vp8') 
+                    ? 'video/webm;codecs=vp8' 
+                    : MediaRecorder.isTypeSupported('video/webm') 
+                        ? 'video/webm' 
+                        : 'video/mp4';
+
+                const mediaRecorder = new MediaRecorder(stream, { mimeType });
                 const chunks: BlobPart[] = [];
 
                 mediaRecorder.ondataavailable = (e) => {
@@ -175,6 +260,7 @@ export default function AssessmentPlayer({ assessmentId, onComplete }: Assessmen
                     const blob = new Blob(chunks, { type: 'video/webm' });
                     const formData = new FormData();
                     formData.append("video", blob, "evidence.webm");
+                    formData.append("timestamp", violation.timestamp);
 
                     try {
                         const token = localStorage.getItem("token");
@@ -303,6 +389,14 @@ export default function AssessmentPlayer({ assessmentId, onComplete }: Assessmen
             }
 
             setExamStarted(true);
+            
+            // Notify backend that exam has started to initialize started_at
+            apiRequest(`/api/assessments/${assessmentId}/progress`, "POST", {
+                answers: [],
+                violations: []
+            }).catch(err => console.error("Failed to initialize exam start time", err));
+
+            setTimeout(() => captureSnapshot('initial'), 1000);
 
             const model = await blazeface.load();
             let missingFaceCount = 0;
@@ -311,20 +405,30 @@ export default function AssessmentPlayer({ assessmentId, onComplete }: Assessmen
                     const predictions = await model.estimateFaces(videoRef.current, false);
                     
                     if (predictions.length === 0) {
-                        missingFaceCount++;
-                        // If face missing for 2 consecutive checks (approx. 6 seconds)
-                        if (missingFaceCount >= 2) {
-                            captureEvidenceAndViolate("Camera blocked or no face detected", false, "camera_blockage");
-                            missingFaceCount = 0; // Reset after logging
-                        }
+                        captureEvidenceAndViolate("Camera blocked or no face detected", false, "camera_blockage");
                     } else {
-                        missingFaceCount = 0; // Reset if face found
                         if (predictions.length > 1) {
                             captureEvidenceAndViolate("Multiple people detected in frame", false, "multiple_people");
+                        } else {
+                            // Head Rotation Detection (Looking away)
+                            const face = predictions[0] as any;
+                            const landmarks = face.landmarks;
+                            const rightEye = landmarks[0];
+                            const leftEye = landmarks[1];
+                            const nose = landmarks[2];
+
+                            const eyesCenterX = (rightEye[0] + leftEye[0]) / 2;
+                            const eyeGap = Math.abs(rightEye[0] - leftEye[0]);
+                            const noseOffset = Math.abs(nose[0] - eyesCenterX);
+
+                            // If nose is offset by more than 35% of the eye gap, user is looking sideways
+                            if (noseOffset > eyeGap * 0.35) {
+                                captureEvidenceAndViolate("Candidate looking away from screen", false, "looking_away");
+                            }
                         }
                     }
                 }
-            }, 3000);
+            }, 400);
 
             // Start Audio Analysis (Voice Detection)
             if (stream && stream.getAudioTracks().length > 0) {
@@ -348,16 +452,9 @@ export default function AssessmentPlayer({ assessmentId, onComplete }: Assessmen
 
                     // Threshold for speech/noise. Needs tuning, usually > 30-40 indicates clear sound
                     if (averageVolume > 40) {
-                        consecutiveNoiseCount++;
-                        // If noisy for ~3 seconds (6 * 500ms)
-                        if (consecutiveNoiseCount > 6) {
-                            captureEvidenceAndViolate("Continuous speaking or background noise detected", false, "audio_anomaly");
-                            consecutiveNoiseCount = 0; // Reset after logging
-                        }
-                    } else {
-                        consecutiveNoiseCount = 0;
+                        captureEvidenceAndViolate("Continuous speaking or background noise detected", false, "audio_anomaly");
                     }
-                }, 500);
+                }, 300);
             }
 
         } catch (err) {
@@ -461,58 +558,75 @@ export default function AssessmentPlayer({ assessmentId, onComplete }: Assessmen
             saveProgress();
         }, 2000); // Auto-save every 2s after last change
 
-        return () => clearTimeout(timer);
-    }, [answers, assessment]);
+         return () => clearTimeout(timer);
+    }, [answers, assessment, loggedViolations]);
 
-    const saveProgress = async () => {
+    const saveProgress = async (overrideViolations?: any[]) => {
         if (!assessment) return;
+        const violationsToSave = overrideViolations || loggedViolations;
+
         try {
-            const formattedAnswers = assessment.questions.map(q => {
-                let value = answers[q.id] || "";
-                // If MCQ, mapping index back to text
-                if (q.type === "MCQ" && value !== "") {
-                    const idx = parseInt(value);
-                    if (!isNaN(idx) && q.options[idx]) {
-                        value = q.options[idx];
-                    }
-                }
-                return {
-                    question_id: q.id,
-                    value: value
-                };
-            }).filter(a => a.value !== ""); // Only save what we have
+           const formattedAnswers = assessment.questions.map(q => {
+               let value = answers[q.id] || "";
+               // If MCQ, mapping index back to text
+               if (q.type === "MCQ" && value !== "") {
+                   const idx = parseInt(value);
+                   if (!isNaN(idx) && q.options[idx]) {
+                       value = q.options[idx];
+                   }
+               }
+               return {
+                   question_id: q.id,
+                   value: value
+               };
+           }).filter(a => a.value !== ""); // Only save what we have
 
             if (formattedAnswers.length === 0) return;
 
-            await apiRequest(`/api/assessments/${assessment.id}/progress`, "POST", {
-                answers: formattedAnswers,
-                violations: loggedViolations
-            });
+             await apiRequest(`/api/assessments/${assessment.id}/progress`, "POST", {
+                 answers: formattedAnswers,
+                 violations: violationsToSave
+             });
             // Quietly save, no toast needed for background save
         } catch (err) {
             console.error("Failed to auto-save progress", err);
         }
     };
 
-    // Timer Logic
+    // Timer Logic - FIXED
     useEffect(() => {
-        if (timeLeft === null || timeLeft <= 0) return;
+        if (timeLeft === null || timeLeft <= 0 || !assessment || !examStarted) return;
+
+        const halfDuration = Math.floor((assessment.duration * 60) / 2);
+
+        // Clear existing interval if any (though useRef should prevent duplicates)
+        if (timerRef.current) clearInterval(timerRef.current);
 
         timerRef.current = setInterval(() => {
             setTimeLeft((prev) => {
-                if (prev !== null && prev <= 1) {
-                    clearInterval(timerRef.current!);
+                if (prev === null) return null;
+                
+                const next = prev - 1;
+
+                if (next === halfDuration && !middleSnapshotTaken) {
+                    setMiddleSnapshotTaken(true);
+                    captureSnapshot('middle');
+                }
+
+                if (next <= 0) {
+                    if (timerRef.current) clearInterval(timerRef.current);
                     submitAssessment(true); // Auto-submit
                     return 0;
                 }
-                return prev !== null ? prev - 1 : 0;
+                return next;
             });
         }, 1000);
 
         return () => {
             if (timerRef.current) clearInterval(timerRef.current);
         };
-    }, [timeLeft]);
+    }, [assessment?.id, examStarted]); // Only restart on assessment change or exam start
+
 
     const formatTime = (seconds: number) => {
         const mins = Math.floor(seconds / 60);
@@ -540,6 +654,9 @@ export default function AssessmentPlayer({ assessmentId, onComplete }: Assessmen
         setShowSubmitModal(false);
 
         try {
+            // Capture end snapshot exactly at submission
+            const endSnapshot = await captureSnapshot('end');
+
             const formattedAnswers = assessment.questions.map(q => {
                 let value = answers[q.id] || "";
                 // If MCQ, mapping index back to text
@@ -555,9 +672,35 @@ export default function AssessmentPlayer({ assessmentId, onComplete }: Assessmen
                 };
             });
 
+            // Calculate Face Verification Distances (lower is better, <0.6 is generally a match for ResNet)
+            let initialVsMiddleDistance = null;
+            let initialVsEndDistance = null;
+
+            if (snapshots.initial?.descriptor) {
+                if (snapshots.middle?.descriptor) {
+                    initialVsMiddleDistance = faceapi.euclideanDistance(snapshots.initial.descriptor, snapshots.middle.descriptor);
+                }
+                if (endSnapshot?.descriptor) {
+                    initialVsEndDistance = faceapi.euclideanDistance(snapshots.initial.descriptor, endSnapshot.descriptor);
+                }
+            }
+
+            console.log("DEBUG: Submitting Assessment", { 
+                assessment_id: assessment.id,
+                answers_count: formattedAnswers.length,
+                answers: formattedAnswers 
+            });
+
             await apiRequest(`/api/assessments/${assessment.id}/submit`, "POST", {
                 answers: formattedAnswers,
-                violations: loggedViolations
+                violations: loggedViolations,
+                face_snapshots: {
+                    initial_image: snapshots.initial?.image || "",
+                    middle_image: snapshots.middle?.image || "",
+                    end_image: endSnapshot?.image || "",
+                    initial_vs_middle_distance: initialVsMiddleDistance,
+                    initial_vs_end_distance: initialVsEndDistance
+                }
             });
 
             if (autoSubmit) {
@@ -668,44 +811,44 @@ export default function AssessmentPlayer({ assessmentId, onComplete }: Assessmen
     return (
         <div ref={containerRef} className={`min-h-screen bg-gray-50 flex flex-col ${examStarted ? "z-[9999] fixed inset-0 !top-0 !left-0 !right-0 !bottom-0 !m-0 !w-screen !h-screen" : ""}`}>
             {/* Header */}
-            <div className="bg-white border-b border-gray-200 px-8 py-4 sticky top-0 z-10 shadow-sm flex justify-between items-center">
-                <div className="flex items-center gap-4">
+            <div className="bg-white border-b border-gray-200 px-8 py-4 sticky top-0 z-10 shadow-sm flex justify-between items-center h-20">
+                <div className="flex items-center gap-4 flex-1">
                     <div>
-                        <h1 className="text-xl font-bold text-gray-900">{assessment.title}</h1>
-                        <div className="text-sm text-gray-500">
-                            Question {currentQuestionIndex + 1} of {assessment.questions ? assessment.questions.length : 0}
+                        <h1 className="text-xl font-black text-gray-900 tracking-tight">{assessment.title}</h1>
+                        <div className="flex items-center gap-2 mt-0.5">
+                            <span className="flex items-center gap-1 text-[10px] font-bold text-green-600 bg-green-50 px-2 py-0.5 rounded-full border border-green-100 uppercase tracking-widest">
+                                <div className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse"></div>
+                                Secure Session
+                            </span>
+                            <span className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Assessment in Progress</span>
                         </div>
                     </div>
-                    {/* Mirrored video feed for monitoring */}
-                    <div className="relative">
-                        <video
-                            ref={videoRef}
-                            autoPlay
-                            playsInline
-                            muted
-                            className="h-16 w-24 object-cover rounded border border-gray-200 bg-black scale-x-[-1]"
-                        />
-                        <div className="absolute top-1 left-1 flex items-center gap-1.5 bg-black/70 px-2 py-0.5 rounded text-[9px] font-bold text-white tracking-wider">
-                            <div className="flex items-center gap-1">
-                                <div className="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse"></div>
-                                LIVE
-                            </div>
-                            <div className="w-px h-2.5 bg-white/30 mx-0.5"></div>
-                            <Mic size={10} className="text-white" />
-                        </div>
-                    </div>
-                    <canvas ref={canvasRef} className="hidden" />
                 </div>
 
-                <div className={`flex items-center gap-2 font-mono text-xl font-bold px-4 py-2 rounded-lg ${timeLeft !== null && timeLeft < 300 ? "bg-red-50 text-red-600" : "bg-gray-100 text-gray-700"
-                    }`}>
-                    <Clock size={20} />
-                    {timeLeft !== null ? formatTime(timeLeft) : "--:--"}
+                {headerWarning && (
+                    <div className="flex-1 max-w-md mx-6 animate-in fade-in slide-in-from-top-2 duration-300">
+                        <div className="bg-red-50 border border-red-100 rounded-xl px-4 py-2 flex items-center gap-3 shadow-sm">
+                            <ShieldAlert className="text-red-600 shrink-0" size={18} />
+                            <div className="text-sm font-bold text-red-900 leading-tight">
+                                {headerWarning}
+                                <p className="text-[10px] font-medium text-red-600 mt-0.5 uppercase tracking-tighter">Immediate Attention Required</p>
+                            </div>
+                        </div>
+                    </div>
+                )}
+
+                <div className="flex items-center gap-4">
+                    <div className="text-right">
+                        <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest leading-none mb-1">Violations</p>
+                        <p className={`text-lg font-black leading-none ${violations > 0 ? 'text-red-600' : 'text-gray-900'}`}>{violations}/3</p>
+                    </div>
                 </div>
             </div>
 
-            {/* Main Content */}
-            <div className="flex-1 p-8 max-w-4xl mx-auto w-full">
+            {/* Main Content Layout */}
+            <div className="flex-1 p-8 max-w-[1400px] mx-auto w-full flex gap-8">
+                {/* Left Column: Question Area */}
+                <div className="flex-1">
                 <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-8 min-h-[400px] flex flex-col">
                     <div className="flex-1">
                         <div className="mb-6">
@@ -776,6 +919,19 @@ export default function AssessmentPlayer({ assessmentId, onComplete }: Assessmen
                         )}
                     </div>
                 </div>
+                </div>
+
+                {/* Right Column: Sidebar */}
+                <AssessmentSidebar
+                    timeLeft={timeLeft}
+                    formatTime={formatTime}
+                    questions={assessment.questions}
+                    currentQuestionIndex={currentQuestionIndex}
+                    answers={answers}
+                    onSelectQuestion={(idx) => setCurrentQuestionIndex(idx)}
+                    videoRef={videoRef}
+                    canvasRef={canvasRef}
+                />
             </div>
 
             <Modal

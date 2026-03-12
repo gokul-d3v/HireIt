@@ -13,7 +13,9 @@ func AssessmentRoutes(r *gin.RouterGroup, assessCtrl *controllers.AssessmentCont
 		assessments.GET("", assessCtrl.GetAssessments)
 		assessments.GET("/my", assessCtrl.GetAssessments) // Map /my to GetAssessments for now
 		assessments.GET("/submissions/my", assessCtrl.GetMySubmissions)
+		assessments.GET("/interviewer/logs", assessCtrl.GetSubmissionsByInterviewer)
 		assessments.POST("", assessCtrl.CreateAssessment)
+		assessments.POST("/preview", assessCtrl.PreviewQuestions)
 
 		// Parametric Routes
 		assessments.GET("/:id", assessCtrl.GetAssessmentByID)

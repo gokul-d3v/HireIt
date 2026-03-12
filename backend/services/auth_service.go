@@ -163,7 +163,7 @@ func (s *authService) StartPublicAssessment(ctx context.Context, name, email, ph
 
 func (s *authService) generateJWT(user *models.User) (string, error) {
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
-		"sub":  user.ID,
+		"sub":  user.ID.Hex(),
 		"role": user.Role,
 		"exp":  time.Now().Add(time.Hour * 24).Unix(),
 	})

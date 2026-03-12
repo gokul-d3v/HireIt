@@ -7,14 +7,16 @@ import { apiRequest } from "@/lib/api";
 import { useToast } from "@/components/ui/Toast";
 import { Plus, Trash2, Save, ArrowLeft } from "lucide-react";
 
-type QuestionType = "MCQ" | "SUBJECTIVE" | "CODING";
+interface DifficultyRule {
+    difficulty: string;
+    count: number | string;
+    points_per_question: number | string;
+}
 
-interface Question {
-    text: string;
-    type: QuestionType;
-    options: string[];
-    correct_answer: string;
-    points: number | string;
+interface RuleGroup {
+    category: string;
+    sub_category?: string;
+    difficulties: DifficultyRule[];
 }
 
 export default function EditAssessmentPage() {
@@ -26,7 +28,9 @@ export default function EditAssessmentPage() {
     const [title, setTitle] = useState("");
     const [description, setDescription] = useState("");
     const [duration, setDuration] = useState<number | string>(60);
-    const [questions, setQuestions] = useState<Question[]>([]);
+    const [totalMarks, setTotalMarks] = useState<number | string>(100);
+    const [passingScore, setPassingScore] = useState<number | string>(50);
+    const [ruleGroups, setRuleGroups] = useState<RuleGroup[]>([]);
     const [loading, setLoading] = useState(true);
     const [submitting, setSubmitting] = useState(false);
 
@@ -47,7 +51,31 @@ export default function EditAssessmentPage() {
             setTitle(data.title);
             setDescription(data.description);
             setDuration(data.duration);
-            setQuestions(data.questions || []);
+            setTotalMarks(data.total_marks || 100);
+            setPassingScore(data.passing_score || 50);
+            
+            // Group the flat rules back into RuleGroups
+            const flatRules: any[] = data.question_rules || [];
+            const groups: RuleGroup[] = [];
+            
+            flatRules.forEach(rule => {
+                let group = groups.find(g => g.category === rule.category && g.sub_category === rule.sub_category);
+                if (!group) {
+                    group = {
+                        category: rule.category,
+                        sub_category: rule.sub_category,
+                        difficulties: []
+                    };
+                    groups.push(group);
+                }
+                group.difficulties.push({
+                    difficulty: rule.difficulty,
+                    count: rule.count,
+                    points_per_question: rule.points_per_question
+                });
+            });
+            
+            setRuleGroups(groups);
         } catch (err) {
             console.error("Failed to fetch assessment", err);
             showToast("Failed to load assessment details", "error");
@@ -57,58 +85,90 @@ export default function EditAssessmentPage() {
         }
     };
 
-    const addQuestion = (type: QuestionType) => {
-        setQuestions([
-            ...questions,
+    const addGroup = () => {
+        setRuleGroups([
+            ...ruleGroups,
             {
-                text: "",
-                type,
-                options: type === "MCQ" ? ["", ""] : [],
-                correct_answer: "",
-                points: 10,
-            },
+                category: "Programming",
+                difficulties: [{ difficulty: "Easy", count: 1, points_per_question: 10 }]
+            }
         ]);
     };
 
-    const updateQuestion = (index: number, field: keyof Question, value: any) => {
-        if (field === 'points') {
-            if (!/^\d*$/.test(value)) return;
+    const updateGroup = (gIndex: number, field: keyof RuleGroup, value: string) => {
+        const newGroups = [...ruleGroups];
+        if (field === 'category' && value !== 'Communication') {
+             newGroups[gIndex] = { ...newGroups[gIndex], category: value, sub_category: undefined };
+        } else {
+            newGroups[gIndex] = { ...newGroups[gIndex], [field]: value };
         }
-        const newQuestions = [...questions];
-        newQuestions[index] = { ...newQuestions[index], [field]: value };
-        setQuestions(newQuestions);
+        setRuleGroups(newGroups);
     };
 
-    const updateOption = (qIndex: number, oIndex: number, value: string) => {
-        const newQuestions = [...questions];
-        newQuestions[qIndex].options[oIndex] = value;
-        setQuestions(newQuestions);
+    const removeGroup = (gIndex: number) => {
+        const newGroups = [...ruleGroups];
+        newGroups.splice(gIndex, 1);
+        setRuleGroups(newGroups);
     };
 
-    const addOption = (qIndex: number) => {
-        const newQuestions = [...questions];
-        newQuestions[qIndex].options.push("");
-        setQuestions(newQuestions);
+    const addDifficulty = (gIndex: number) => {
+        const newGroups = [...ruleGroups];
+        newGroups[gIndex].difficulties.push({ difficulty: "Medium", count: 1, points_per_question: 10 });
+        setRuleGroups(newGroups);
     };
 
-    const removeQuestion = (index: number) => {
-        const newQuestions = [...questions];
-        newQuestions.splice(index, 1);
-        setQuestions(newQuestions);
+    const updateDifficulty = (gIndex: number, dIndex: number, field: keyof DifficultyRule, value: string) => {
+        const newGroups = [...ruleGroups];
+        let finalValue: any = value;
+        if (field === 'count' || field === 'points_per_question') {
+            if (!/^\d*$/.test(value)) return;
+            finalValue = parseInt(value) || 0;
+        }
+        
+        newGroups[gIndex].difficulties[dIndex] = { ...newGroups[gIndex].difficulties[dIndex], [field]: finalValue };
+        setRuleGroups(newGroups);
     };
+
+    const removeDifficulty = (gIndex: number, dIndex: number) => {
+        const newGroups = [...ruleGroups];
+        newGroups[gIndex].difficulties.splice(dIndex, 1);
+        if (newGroups[gIndex].difficulties.length === 0) {
+            newGroups.splice(gIndex, 1);
+        }
+        setRuleGroups(newGroups);
+    };
+
+    const flattenedRules = ruleGroups.flatMap(g => 
+        g.difficulties.map(d => ({
+            category: g.category,
+            sub_category: g.sub_category,
+            difficulty: d.difficulty,
+            count: Number(d.count),
+            points_per_question: Number(d.points_per_question)
+        }))
+    );
 
     const handleSubmit = async () => {
         if (!title) {
             showToast("Please enter a title", "error");
             return;
         }
+        
+        const currentPointsTotal = flattenedRules.reduce((sum, r) => sum + (r.count * r.points_per_question), 0);
+        if (currentPointsTotal !== Number(totalMarks)) {
+            showToast(`Configured Question Points (${currentPointsTotal}) must exactly match Total Marks (${totalMarks})`, "error");
+            return;
+        }
+
         setSubmitting(true);
         try {
             await apiRequest(`/api/assessments/${params.id}`, "PUT", {
                 title,
                 description,
                 duration: Number(duration),
-                questions: questions.map(q => ({ ...q, points: Number(q.points) })),
+                total_marks: Number(totalMarks),
+                passing_score: Number(passingScore),
+                question_rules: flattenedRules,
             });
             showToast("Assessment updated successfully!", "success");
             router.push("/interviewer/assessments");
@@ -121,144 +181,249 @@ export default function EditAssessmentPage() {
 
     if (loading) return <div className="p-8 flex justify-center"><div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600"></div></div>;
 
+    const totalQuestions = flattenedRules.reduce((sum, r) => sum + r.count, 0);
+    const currentPointsTotal = flattenedRules.reduce((sum, r) => sum + (r.count * r.points_per_question), 0);
+
     return (
         <div className="min-h-screen bg-gray-50 p-8">
             <div className="max-w-4xl mx-auto">
                 <button
                     onClick={() => router.back()}
-                    className="flex items-center text-gray-500 hover:text-gray-900 mb-6"
+                    className="flex items-center text-gray-500 hover:text-gray-900 mb-6 transition-colors"
                 >
                     <ArrowLeft size={20} className="mr-2" />
                     Back to Assessments
                 </button>
 
-                <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden mb-6">
-                    <div className="p-6 border-b border-gray-200 bg-gray-50">
-                        <h1 className="text-2xl font-bold text-gray-900">Edit Assessment</h1>
-                        <p className="text-gray-500">Update validation rules and questions.</p>
+                <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden mb-8">
+                    <div className="p-6 border-b border-gray-200 bg-gray-50 flex justify-between items-center">
+                        <div>
+                            <h1 className="text-2xl font-bold text-gray-900">Edit Assessment</h1>
+                            <p className="text-gray-500">Update configuration and question sampling rules.</p>
+                        </div>
+                        <div className="text-right">
+                             <div className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-1">Status</div>
+                             <span className="px-3 py-1 bg-indigo-100 text-indigo-700 rounded-full text-xs font-bold tracking-wide">DRAFT</span>
+                        </div>
                     </div>
 
-                    <div className="p-6 space-y-6">
+                    <div className="p-8 space-y-8">
                         <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-1">Assessment Title</label>
+                            <label className="block text-sm font-semibold text-gray-700 mb-2">Assessment Title *</label>
                             <input
                                 type="text"
                                 value={title}
                                 onChange={(e) => setTitle(e.target.value)}
-                                className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+                                className="w-full text-xl font-bold text-gray-900 p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-100 focus:border-indigo-600 focus:outline-none transition-all"
                             />
                         </div>
 
                         <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-1">Description</label>
+                            <label className="block text-sm font-semibold text-gray-700 mb-2">Description</label>
                             <textarea
                                 value={description}
                                 onChange={(e) => setDescription(e.target.value)}
-                                className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+                                className="w-full p-3 text-gray-700 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-100 focus:border-indigo-600 focus:outline-none transition-all resize-none"
                                 rows={3}
                             />
                         </div>
 
-                        <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-1">Duration (minutes)</label>
-                            <input
-                                type="text"
-                                value={duration}
-                                onChange={(e) => {
-                                    if (/^\d*$/.test(e.target.value)) setDuration(e.target.value)
-                                }}
-                                className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
-                            />
-                        </div>
-                    </div>
-                </div>
-
-                <div className="space-y-6 mb-8">
-                    {questions.map((q, qIndex) => (
-                        <div key={qIndex} className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 relative">
-                            <button
-                                onClick={() => removeQuestion(qIndex)}
-                                className="absolute top-4 right-4 text-gray-400 hover:text-red-500"
-                            >
-                                <Trash2 size={20} />
-                            </button>
-
-                            <div className="mb-4">
-                                <span className="inline-block px-2 py-1 text-xs font-semibold bg-gray-100 rounded text-gray-600 mb-2">
-                                    {q.type}
-                                </span>
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-8 pt-4 border-t border-gray-100">
+                            <div>
+                                <label className="block text-sm font-semibold text-gray-700 mb-2">Duration (min) *</label>
                                 <input
                                     type="text"
-                                    value={q.text}
-                                    onChange={(e) => updateQuestion(qIndex, "text", e.target.value)}
-                                    className="w-full p-2 text-lg font-medium border-b border-gray-200 focus:border-indigo-500 focus:outline-none"
-                                    placeholder="Question text goes here..."
+                                    value={duration}
+                                    onChange={(e) => {
+                                        if (/^\d*$/.test(e.target.value)) setDuration(e.target.value)
+                                    }}
+                                    className="w-full p-3 font-bold text-gray-900 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-100 focus:border-indigo-600 focus:outline-none transition-all"
                                 />
                             </div>
-
-                            {q.type === "MCQ" && (
-                                <div className="space-y-3 ml-4">
-                                    {q.options.map((opt, oIndex) => (
-                                        <div key={oIndex} className="flex items-center gap-3">
-                                            <div
-                                                className={`w-4 h-4 rounded-full border cursor-pointer border-gray-300 ${q.correct_answer === opt && opt !== "" ? "bg-green-500 border-green-500" : ""}`}
-                                                onClick={() => updateQuestion(qIndex, "correct_answer", opt)}
-                                            />
-                                            <input
-                                                type="text"
-                                                value={opt}
-                                                onChange={(e) => updateOption(qIndex, oIndex, e.target.value)}
-                                                className="flex-1 p-2 border border-gray-200 rounded focus:ring-1 focus:ring-indigo-500"
-                                                placeholder={`Option ${oIndex + 1}`}
-                                            />
-                                        </div>
-                                    ))}
-                                    <button
-                                        onClick={() => addOption(qIndex)}
-                                        className="text-sm text-indigo-600 hover:text-indigo-700 font-medium pl-2"
-                                    >
-                                        + Add Option
-                                    </button>
-                                </div>
-                            )}
-
-                            <div className="mt-4 pt-4 border-t border-gray-100 flex justify-end items-center gap-2">
-                                <span className="text-sm text-gray-500">Points:</span>
+                            <div>
+                                <label className="block text-sm font-semibold text-gray-700 mb-2">Total Marks *</label>
                                 <input
-                                    type="number"
-                                    value={q.points}
-                                    onChange={(e) => updateQuestion(qIndex, "points", Number(e.target.value))}
-                                    className="w-20 p-1 border border-gray-200 rounded text-center"
+                                    type="text"
+                                    value={totalMarks}
+                                    onChange={(e) => {
+                                        if (/^\d*$/.test(e.target.value)) setTotalMarks(e.target.value)
+                                    }}
+                                    className="w-full p-3 font-bold text-gray-900 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-100 focus:border-indigo-600 focus:outline-none transition-all"
+                                />
+                            </div>
+                            <div>
+                                <label className="block text-sm font-semibold text-gray-700 mb-2">Passing Score *</label>
+                                <input
+                                    type="text"
+                                    value={passingScore}
+                                    onChange={(e) => {
+                                        if (/^\d*$/.test(e.target.value)) setPassingScore(e.target.value)
+                                    }}
+                                    className="w-full p-3 font-bold text-gray-900 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-100 focus:border-indigo-600 focus:outline-none transition-all"
                                 />
                             </div>
                         </div>
-                    ))}
+                    </div>
                 </div>
 
-                <div className="flex justify-between items-center mb-12">
-                    <div className="flex gap-4">
+                <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-8 mb-8">
+                    <div className="flex justify-between items-center mb-6">
+                        <div>
+                            <h2 className="text-2xl font-bold text-gray-900">Question Sampling Rules</h2>
+                            <p className="text-gray-500">Define how questions are picked for each candidate.</p>
+                        </div>
                         <button
-                            onClick={() => addQuestion("MCQ")}
-                            className="flex items-center gap-2 px-4 py-2 bg-white border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 shadow-sm"
+                            onClick={addGroup}
+                            className="flex items-center gap-2 px-5 py-2.5 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition shadow-sm text-sm font-medium"
                         >
-                            <Plus size={18} /> Add MCQ
-                        </button>
-                        <button
-                            onClick={() => addQuestion("SUBJECTIVE")}
-                            className="flex items-center gap-2 px-4 py-2 bg-white border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 shadow-sm"
-                        >
-                            <Plus size={18} /> Add Subjective
+                            <Plus size={16} /> Add Rule Group
                         </button>
                     </div>
 
+                    <div className="space-y-6">
+                        {ruleGroups.length === 0 ? (
+                            <div className="text-center py-12 bg-gray-50 rounded-xl border-2 border-dashed border-gray-200">
+                                 <Plus size={32} className="mx-auto text-gray-300 mb-2" />
+                                 <p className="text-gray-500">No sampling rules defined yet.</p>
+                            </div>
+                        ) : (
+                            ruleGroups.map((group, gIdx) => (
+                                <div key={gIdx} className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 flex flex-col gap-4 relative group hover:border-indigo-300 transition-all">
+                                    <button
+                                        onClick={() => removeGroup(gIdx)}
+                                        className="absolute top-4 right-4 p-2 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors opacity-0 group-hover:opacity-100"
+                                        title="Remove Rule Group"
+                                    >
+                                        <Trash2 size={18} />
+                                    </button>
+
+                                    <div className="flex flex-wrap gap-4 items-end pr-10">
+                                        <div className="flex-1 min-w-[200px]">
+                                            <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">Category</label>
+                                            <select
+                                                value={group.category}
+                                                onChange={(e) => updateGroup(gIdx, 'category', e.target.value)}
+                                                className="w-full p-2.5 text-gray-900 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-100 focus:border-indigo-500 focus:outline-none bg-white transition-all"
+                                            >
+                                                <option value="Programming">Programming</option>
+                                                <option value="Communication">Communication</option>
+                                                <option value="Aptitude">Aptitude</option>
+                                            </select>
+                                        </div>
+
+                                        {group.category === "Communication" && (
+                                            <div className="flex-1 min-w-[150px]">
+                                                <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">Sub Category</label>
+                                                <select
+                                                    value={group.sub_category || ""}
+                                                    onChange={(e) => updateGroup(gIdx, 'sub_category', e.target.value)}
+                                                    className="w-full p-2.5 text-gray-900 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-100 focus:border-indigo-500 focus:outline-none bg-white transition-all"
+                                                >
+                                                    <option value="">Any</option>
+                                                    <option value="Passage">Passage</option>
+                                                    <option value="Grammar">Grammar</option>
+                                                    <option value="Listening">Listening</option>
+                                                </select>
+                                            </div>
+                                        )}
+                                    </div>
+
+                                    <div className="mt-4 bg-gray-50 rounded-lg p-4 border border-gray-100">
+                                        <div className="flex justify-between items-center mb-4">
+                                            <h4 className="text-sm font-semibold text-gray-700">Difficulties & Questions</h4>
+                                        </div>
+                                        <div className="space-y-3">
+                                            {group.difficulties.map((diff, dIdx) => (
+                                                <div key={dIdx} className="flex flex-wrap gap-4 items-end">
+                                                    <div className="w-32">
+                                                        <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">Difficulty</label>
+                                                        <select
+                                                            value={diff.difficulty}
+                                                            onChange={(e) => updateDifficulty(gIdx, dIdx, 'difficulty', e.target.value)}
+                                                            className="w-full p-2.5 text-gray-900 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-100 focus:border-indigo-500 focus:outline-none bg-white transition-all"
+                                                        >
+                                                            <option value="Easy">Easy</option>
+                                                            <option value="Medium">Medium</option>
+                                                            <option value="Hard">Hard</option>
+                                                        </select>
+                                                    </div>
+
+                                                    <div className="w-24">
+                                                        <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">Count</label>
+                                                        <input
+                                                            type="text"
+                                                            value={diff.count}
+                                                            onChange={(e) => updateDifficulty(gIdx, dIdx, 'count', e.target.value)}
+                                                            className="w-full p-2.5 text-center font-bold text-gray-900 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-100 focus:border-indigo-500 focus:outline-none bg-white transition-all"
+                                                        />
+                                                    </div>
+
+                                                    <div className="w-32">
+                                                        <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">Pts / Q</label>
+                                                        <input
+                                                            type="text"
+                                                            value={diff.points_per_question}
+                                                            onChange={(e) => updateDifficulty(gIdx, dIdx, 'points_per_question', e.target.value)}
+                                                            className="w-full p-2.5 text-center font-bold text-gray-900 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-100 focus:border-indigo-500 focus:outline-none bg-white transition-all"
+                                                        />
+                                                    </div>
+                                                    
+                                                    <button
+                                                        onClick={() => removeDifficulty(gIdx, dIdx)}
+                                                        className="p-2.5 text-red-400 hover:text-red-600 hover:bg-white rounded-lg transition-all mb-[1px]"
+                                                        title="Remove Difficulty"
+                                                    >
+                                                        <Trash2 size={18} />
+                                                    </button>
+                                                </div>
+                                            ))}
+                                        </div>
+                                        
+                                        <button
+                                            onClick={() => addDifficulty(gIdx)}
+                                            className="mt-4 flex items-center gap-2 text-sm text-indigo-600 font-semibold hover:text-indigo-800 transition-colors"
+                                        >
+                                            <Plus size={16} /> Add Difficulty Level
+                                        </button>
+                                    </div>
+
+                                    <div className="flex-none w-full bg-indigo-50 rounded-lg p-3 border border-indigo-100 text-sm text-indigo-900 flex justify-between items-center mt-2">
+                                        <span>Total for {group.category} {group.sub_category ? ` - ${group.sub_category}` : ''}</span>
+                                        <span className="font-bold text-indigo-700">
+                                            Pts: {group.difficulties.reduce((sum, d) => sum + (Number(d.count) * Number(d.points_per_question)), 0)} 
+                                        </span>
+                                    </div>
+                                </div>
+                            ))
+                        )}
+
+                        <div className={`mt-6 p-6 rounded-xl flex items-center justify-between border-2 border-dashed ${currentPointsTotal === Number(totalMarks) ? 'bg-green-50 border-green-200 text-green-800' : 'bg-orange-50 border-orange-200 text-orange-800'} transition-all`}>
+                            <div>
+                                <div className="font-bold text-lg mb-1">Configured Points: {currentPointsTotal}</div>
+                                <div className="text-sm opacity-80 gap-2 flex items-center">
+                                    <span>Target Total Marks: <strong>{totalMarks}</strong></span>
+                                    {currentPointsTotal !== Number(totalMarks) && (
+                                        <span className="flex items-center gap-1 font-semibold text-orange-600 bg-white px-2 py-0.5 rounded shadow-sm">(Mismatch)</span>
+                                    )}
+                                </div>
+                            </div>
+                            <div className="text-right">
+                                <span className="text-sm font-bold opacity-80 block mb-1 uppercase tracking-wider">Total Questions</span>
+                                <span className="text-3xl font-black">{totalQuestions}</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div className="flex justify-end items-center mb-20">
                     <button
                         onClick={handleSubmit}
                         disabled={submitting}
-                        className="flex items-center gap-2 px-6 py-3 bg-indigo-600 text-white rounded-lg font-bold hover:bg-indigo-700 shadow-lg disabled:opacity-70"
+                        className="flex items-center gap-2 px-8 py-4 bg-indigo-600 text-white rounded-xl font-bold hover:bg-indigo-700 shadow-xl shadow-indigo-200 transition-all active:scale-95 disabled:opacity-70"
                     >
-                        {submitting ? "Saving..." : (
+                        {submitting ? "Saving Greatness..." : (
                             <>
-                                <Save size={18} /> Update Assessment
+                                <Save size={20} /> Update Assessment
                             </>
                         )}
                     </button>

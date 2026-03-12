@@ -25,12 +25,14 @@ import (
 type YouTubeController struct {
 	userRepo   repositories.UserRepository
 	assessRepo repositories.AssessmentRepository
+	subRepo    repositories.SubmissionRepository
 }
 
-func NewYouTubeController(userRepo repositories.UserRepository, assessRepo repositories.AssessmentRepository) *YouTubeController {
+func NewYouTubeController(userRepo repositories.UserRepository, assessRepo repositories.AssessmentRepository, subRepo repositories.SubmissionRepository) *YouTubeController {
 	return &YouTubeController{
 		userRepo:   userRepo,
 		assessRepo: assessRepo,
+		subRepo:    subRepo,
 	}
 }
 
@@ -125,13 +127,18 @@ func (ctrl *YouTubeController) UploadEvidence(c *gin.Context) {
 		return
 	}
 
+	timestamp := c.PostForm("timestamp")
+	utils.GetLogger().Infof("UploadEvidence Request: AID: %s, TS: %s", assessmentIDStr, timestamp)
+
 	// Fetch Candidate and Assessment details for the background task
 	ctx := context.Background()
 	candidateName := "Unknown Candidate"
 	assessmentTitle := "Unknown Assessment"
 
+	candidateID := primitive.NilObjectID
 	if candidateIDPtr != nil {
 		if uid, ok := candidateIDPtr.(primitive.ObjectID); ok {
+			candidateID = uid
 			user, err := ctrl.userRepo.FindByID(ctx, uid)
 			if err == nil {
 				candidateName = user.Name
@@ -155,7 +162,7 @@ func (ctrl *YouTubeController) UploadEvidence(c *gin.Context) {
 
 	// Submit task to background worker pool
 	utils.GetWorkerPool().Submit(func() {
-		processUpload(candidateName, assessmentTitle, assessmentIDStr, filename, videoBytes)
+		processUpload(ctrl, candidateID, candidateName, assessmentTitle, assessmentIDStr, filename, videoBytes, timestamp)
 	})
 
 	c.JSON(http.StatusAccepted, gin.H{
@@ -165,66 +172,96 @@ func (ctrl *YouTubeController) UploadEvidence(c *gin.Context) {
 }
 
 // processUpload handles the background YouTube and Telegram upload logic
-func processUpload(candidateName, assessmentTitle, assessmentIDStr, filename string, videoBytes []byte) {
+func processUpload(ctrl *YouTubeController, candidateID primitive.ObjectID, candidateName, assessmentTitle, assessmentIDStr, filename string, videoBytes []byte, timestamp string) {
+	logger := utils.GetLogger()
+	logger.Infof("Starting background process for %s, TS: %s", candidateName, timestamp)
 	ctx := context.Background()
+	var videoURL string
+
+	// 1. Try YouTube Upload
 	client, err := getYouTubeClient(ctx)
 	if err != nil {
-		fmt.Printf("Background Upload Error: YouTube client not authenticated: %v\n", err)
-		return
+		logger.Warnf("YouTube Upload Skipped: %v", err)
+	} else {
+		service, err := youtube.NewService(ctx, option.WithHTTPClient(client))
+		if err != nil {
+			logger.Errorf("YouTube Service Error: %v", err)
+		} else {
+			title := fmt.Sprintf("Malpractice Evidence - %s", time.Now().Format("20060102_150405"))
+			desc := fmt.Sprintf("Automated malpractice evidence upload from HireIt for Candidate: %s.", candidateName)
+
+			upload := &youtube.Video{
+				Snippet: &youtube.VideoSnippet{
+					Title:       title,
+					Description: desc,
+					CategoryId:  "22", // People & Blogs
+				},
+				Status: &youtube.VideoStatus{
+					PrivacyStatus: "unlisted",
+				},
+			}
+
+			call := service.Videos.Insert([]string{"snippet", "status"}, upload)
+			video, err := call.Media(bytes.NewReader(videoBytes)).Do()
+			if err != nil {
+				logger.Errorf("YouTube Upload Failed: %v", err)
+			} else {
+				videoURL = "https://youtu.be/" + video.Id
+				logger.Infof("YouTube Upload Success: %s", videoURL)
+			}
+		}
 	}
 
-	service, err := youtube.NewService(ctx, option.WithHTTPClient(client))
-	if err != nil {
-		fmt.Printf("Background Upload Error: Failed to create YouTube service: %v\n", err)
-		return
+	// 2. Send to Telegram (Crucial: ALWAYS try this if credentials exist)
+	captionTitle := "🚨 Malpractice Detected!"
+	if videoURL == "" {
+		captionTitle = "🚨 Malpractice Detected (YouTube Failed)"
 	}
 
-	title := fmt.Sprintf("Malpractice Evidence - %s", time.Now().Format("20060102_150405"))
-	desc := fmt.Sprintf("Automated malpractice evidence upload from HireIt for Candidate: %s.", candidateName)
-
-	upload := &youtube.Video{
-		Snippet: &youtube.VideoSnippet{
-			Title:       title,
-			Description: desc,
-			CategoryId:  "22", // People & Blogs
-		},
-		Status: &youtube.VideoStatus{
-			PrivacyStatus: "unlisted",
-		},
-	}
-
-	// Use bytes.NewReader since we have the bytes in memory
-	call := service.Videos.Insert([]string{"snippet", "status"}, upload)
-	video, err := call.Media(bytes.NewReader(videoBytes)).Do()
-	if err != nil {
-		fmt.Printf("Background Upload Error: Failed to upload to YouTube: %v\n", err)
-		return
-	}
-
-	videoURL := "https://youtu.be/" + video.Id
-
-	// Send to Telegram
 	caption := fmt.Sprintf(
-		"<b>🚨 Malpractice Detected!</b>\n\n"+
+		"<b>%s</b>\n\n"+
 			"<b>Candidate:</b> %s\n"+
 			"<b>Assessment:</b> %s\n"+
 			"<b>Assessment ID:</b> %s\n"+
 			"<b>Date:</b> %s\n"+
-			"<b>Time:</b> %s\n\n"+
-			"<b>YouTube Link:</b> %s",
+			"<b>Time:</b> %s\n",
+		captionTitle,
 		candidateName,
 		assessmentTitle,
 		assessmentIDStr,
 		time.Now().Format("2006-01-02"),
 		time.Now().Format("15:04:05"),
-		videoURL,
 	)
 
-	err = services.SendTelegramVideo(videoBytes, filename, caption)
+	if videoURL != "" {
+		caption += fmt.Sprintf("\n<b>YouTube Link:</b> %s", videoURL)
+	}
+
+	logger.Infof("Attempting Telegram upload for %s", candidateName)
+	tgFileID, err := services.SendTelegramVideo(videoBytes, filename, caption)
 	if err != nil {
-		fmt.Printf("Background Upload Error: Failed to send video to Telegram: %v\n", err)
+		logger.Errorf("Telegram Upload Error: %v", err)
 	} else {
-		fmt.Printf("Successfully processed background evidence upload for %s\n", candidateName)
+		logger.Infof("Telegram Upload Success (ID: %s) for %s", tgFileID, candidateName)
+		// Prioritize Telegram Proxy for immediate playback in the dashboard
+		if tgFileID != "" {
+			videoURL = "/api/telegram/image/" + tgFileID
+		}
+	}
+
+	// 3. Update Database with Video URL (YouTube or Telegram Proxy)
+	if videoURL != "" && assessmentIDStr != "" && !candidateID.IsZero() && timestamp != "" {
+		logger.Infof("Attempting DB update with URL: %s", videoURL)
+		aid, err := utils.ToObjectID(assessmentIDStr)
+		if err == nil {
+			err = ctrl.subRepo.AddVideoEvidence(ctx, candidateID, aid, timestamp, videoURL)
+			if err != nil {
+				logger.Errorf("Database Update Error: %v", err)
+			} else {
+				logger.Infof("Database Update Success (%s) for %s", videoURL, candidateName)
+			}
+		}
+	} else {
+		logger.Warnf("DB Update Skipped. URL: %s, AID: %s, CID: %s, TS: %s", videoURL, assessmentIDStr, candidateID.Hex(), timestamp)
 	}
 }
-

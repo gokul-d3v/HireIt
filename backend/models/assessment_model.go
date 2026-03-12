@@ -23,20 +23,26 @@ type Question struct {
 	Points        int                `bson:"points" json:"points" binding:"required"`
 }
 
+type QuestionRule struct {
+	Category          string `bson:"category" json:"category" binding:"required"`
+	SubCategory       string `bson:"sub_category,omitempty" json:"sub_category,omitempty"`
+	Difficulty        string `bson:"difficulty" json:"difficulty" binding:"required"`
+	Count             int    `bson:"count" json:"count" binding:"required"`
+	PointsPerQuestion int    `bson:"points_per_question" json:"points_per_question" binding:"required"`
+}
+
 type Assessment struct {
-	ID          primitive.ObjectID `bson:"_id,omitempty" json:"id"`
-	Title       string             `bson:"title" json:"title" binding:"required"`
-	Description string             `bson:"description" json:"description"`
-	Duration    int                `bson:"duration" json:"duration"` // In minutes
-	Questions   []Question         `bson:"questions" json:"questions"`
-	CreatedBy   primitive.ObjectID `bson:"created_by" json:"created_by"`
+	ID            primitive.ObjectID `bson:"_id,omitempty" json:"id"`
+	Title         string             `bson:"title" json:"title" binding:"required"`
+	Description   string             `bson:"description" json:"description"`
+	Duration      int                `bson:"duration" json:"duration"` // In minutes
+	QuestionRules []QuestionRule     `bson:"question_rules" json:"question_rules"`
+	Questions     []Question         `json:"questions,omitempty" bson:"-"` // Virtual field for API response
+	CreatedBy     primitive.ObjectID `bson:"created_by" json:"created_by"`
 	CreatedAt   time.Time          `bson:"created_at" json:"created_at"`
 	UpdatedAt   time.Time          `bson:"updated_at" json:"updated_at"`
 
-	// Phase System
-	Phase        int                 `bson:"phase" json:"phase"`                                     // 1, 2, or 3
-	PassingScore int                 `bson:"passing_score" json:"passing_score"`                     // Minimum score to pass
-	TotalMarks   int                 `bson:"total_marks" json:"total_marks"`                         // Sum of all question points
-	NextPhaseID  *primitive.ObjectID `bson:"next_phase_id,omitempty" json:"next_phase_id,omitempty"` // Reference to next phase
-	DeletedAt    *time.Time          `bson:"deleted_at,omitempty" json:"-"`                          // For soft delete
+	PassingScore  int                `bson:"passing_score" json:"passing_score"` // Minimum score to pass
+	TotalMarks    int                `bson:"total_marks" json:"total_marks"`     // Sum of all question points
+	DeletedAt     *time.Time         `bson:"deleted_at,omitempty" json:"-"`      // For soft delete
 }

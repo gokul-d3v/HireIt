@@ -7,18 +7,25 @@ import { useEffect, useState } from "react";
 export default function PublicTakeAssessmentPage() {
     const params = useParams();
     const router = useRouter();
-    const [mounted, setMounted] = useState(false);
+    const [isAuthorized, setIsAuthorized] = useState<boolean | null>(null);
 
     useEffect(() => {
-        setMounted(true);
-        // Basic check if token exists (set by previous page)
         const token = localStorage.getItem("token");
         if (!token) {
             router.replace(`/public/assessments/${params.id}`);
+            setIsAuthorized(false);
+        } else {
+            setIsAuthorized(true);
         }
     }, [params.id, router]);
 
-    if (!mounted) return null;
+    if (isAuthorized === null || isAuthorized === false) {
+        return (
+            <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+                <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600"></div>
+            </div>
+        );
+    }
 
     return (
         <AssessmentPlayer

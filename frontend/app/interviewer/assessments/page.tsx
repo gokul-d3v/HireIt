@@ -13,7 +13,7 @@ interface Assessment {
     title: string;
     description: string;
     duration: number;
-    questions: any[];
+    question_rules: any[];
     created_at: string;
     phase?: number;
     next_phase_id?: string;
@@ -159,7 +159,9 @@ export default function InterviewerAssessmentsPage() {
                                                         </span>
                                                     )}
                                                 </td>
-                                                <td className="p-4 text-gray-600">{assessment.questions?.length || 0} questions</td>
+                                                <td className="p-4 text-gray-600">
+                                                    {assessment.question_rules?.reduce((sum, r) => sum + (Number(r.count) || 0), 0) || 0} questions
+                                                </td>
                                                 <td className="p-4 text-gray-600 flex items-center gap-1">
                                                     <Clock size={16} /> {assessment.duration} mins
                                                 </td>

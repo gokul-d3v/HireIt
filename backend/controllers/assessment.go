@@ -66,14 +66,27 @@ func (ctrl *AssessmentController) GetAssessments(c *gin.Context) {
 func (ctrl *AssessmentController) GetAssessmentByID(c *gin.Context) {
 	id := c.Param("id")
 	role, _ := c.Get("role")
+	roleStr := role.(string)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	assessment, err := ctrl.assessmentService.GetAssessmentByID(ctx, id, role.(string))
+	assessment, err := ctrl.assessmentService.GetAssessmentByID(ctx, id, roleStr)
 	if err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "Assessment not found"})
 		return
+	}
+
+	// Inject candidate-specific generated questions
+	if roleStr != "interviewer" {
+		userID, exists := c.Get("userID")
+		if exists {
+			candidateID := userID.(primitive.ObjectID).Hex()
+			generatedQuestions, err := ctrl.submissionService.GetOrGenerateQuestions(ctx, id, candidateID)
+			if err == nil {
+				assessment.Questions = generatedQuestions
+			}
+		}
 	}
 
 	c.JSON(http.StatusOK, assessment)
@@ -149,8 +162,9 @@ func (ctrl *AssessmentController) SubmitAssessment(c *gin.Context) {
 	candidateID, _ := c.Get("userID")
 
 	var input struct {
-		Answers    []models.Answer    `json:"answers"`
-		Violations []models.Violation `json:"violations"`
+		Answers       []models.Answer       `json:"answers"`
+		Violations    []models.Violation    `json:"violations"`
+		FaceSnapshots *models.FaceSnapshots `json:"face_snapshots,omitempty"`
 	}
 	if err := c.ShouldBindJSON(&input); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
@@ -160,7 +174,7 @@ func (ctrl *AssessmentController) SubmitAssessment(c *gin.Context) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
-	submission, err := ctrl.submissionService.SubmitAssessment(ctx, assessmentID, candidateID.(primitive.ObjectID).Hex(), input.Answers, input.Violations)
+	submission, err := ctrl.submissionService.SubmitAssessment(ctx, assessmentID, candidateID.(primitive.ObjectID).Hex(), input.Answers, input.Violations, input.FaceSnapshots)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to submit assessment"})
 		return
@@ -208,4 +222,41 @@ func (ctrl *AssessmentController) GetMySubmissions(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, submissions)
+}
+
+func (ctrl *AssessmentController) GetSubmissionsByInterviewer(c *gin.Context) {
+	userID, _ := c.Get("userID")
+	id := userID.(primitive.ObjectID)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	submissions, err := ctrl.submissionService.GetSubmissionsByInterviewer(ctx, id.Hex())
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch interviewer submissions"})
+		return
+	}
+
+	c.JSON(http.StatusOK, submissions)
+}
+
+func (ctrl *AssessmentController) PreviewQuestions(c *gin.Context) {
+	var input struct {
+		Rules []models.QuestionRule `json:"question_rules" binding:"required"`
+	}
+	if err := c.ShouldBindJSON(&input); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	questions, err := ctrl.assessmentService.SampleQuestions(ctx, input.Rules)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to sample questions"})
+		return
+	}
+
+	c.JSON(http.StatusOK, questions)
 }

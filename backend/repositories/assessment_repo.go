@@ -58,7 +58,7 @@ func (r *mongoAssessmentRepo) FindByID(ctx context.Context, id primitive.ObjectI
 }
 
 func (r *mongoAssessmentRepo) Update(ctx context.Context, id primitive.ObjectID, assessment *models.Assessment) error {
-	_, err := r.collection.ReplaceOne(ctx, bson.M{"_id": id}, assessment)
+	_, err := r.collection.UpdateOne(ctx, bson.M{"_id": id}, bson.M{"$set": assessment})
 	return err
 }
 

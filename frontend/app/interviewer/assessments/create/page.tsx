@@ -1,29 +1,35 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/context/AuthContext";
 import { apiRequest } from "@/lib/api";
-import { Plus, Trash2, Save, ArrowLeft, ArrowRight, CheckCircle, FileText, Code, AlignLeft, Clock, Award, Target } from "lucide-react";
+import { Plus, Trash2, Save, ArrowLeft, ArrowRight, Clock, Award, Target, RefreshCw, FileText, CheckCircle } from "lucide-react";
 import { useToast } from "@/components/ui/Toast";
 import { Modal } from "@/components/ui/Modal";
 
-type QuestionType = "MCQ" | "SUBJECTIVE" | "CODING";
-
-interface Question {
-    text: string;
-    type: QuestionType;
-    options: string[];
-    correct_answer: string;
-    points: number | string;
+interface DifficultyRule {
+    difficulty: string;
+    count: number | string;
+    points_per_question: number | string;
 }
 
-interface PhaseConfig {
-    name: string;
-    duration: number | string;
-    total_marks: number | string;
-    passing_score: number | string;
-    questions: Question[];
+interface SubGroup {
+    sub_category: string;
+    difficulties: DifficultyRule[];
+}
+
+interface RuleGroup {
+    category: string;
+    sub_groups: SubGroup[];
+}
+
+interface QuestionRule {
+    category: string;
+    sub_category?: string;
+    difficulty: string;
+    count: number;
+    points_per_question: number;
 }
 
 export default function CreateAssessmentPage() {
@@ -33,33 +39,21 @@ export default function CreateAssessmentPage() {
 
     // Wizard state
     const [step, setStep] = useState(1);
-    const [assessmentTitle, setAssessmentTitle] = useState("");
-    const [assessmentDescription, setAssessmentDescription] = useState("");
-    const [phaseCount, setPhaseCount] = useState(1);
-    const [phases, setPhases] = useState<PhaseConfig[]>([]);
-    const [currentPhaseIndex, setCurrentPhaseIndex] = useState(0);
+    
+    // Assessment configuration state
+    const [title, setTitle] = useState("");
+    const [description, setDescription] = useState("");
+    const [duration, setDuration] = useState<number | string>(60);
+    const [totalMarks, setTotalMarks] = useState<number | string>(100);
+    const [passingScore, setPassingScore] = useState<number | string>(50);
+    const [ruleGroups, setRuleGroups] = useState<RuleGroup[]>([]);
+    
     const [submitting, setSubmitting] = useState(false);
-
-    // Modal state
     const [isConfirmModalOpen, setIsConfirmModalOpen] = useState(false);
-
-    // Initialize phases when phase count changes
-    useEffect(() => {
-        if (step === 2 && phases.length === 0) {
-            const defaultPhases: PhaseConfig[] = [];
-            const phaseNames = ["Foundation", "Pre-Intermediate", "Intermediate"];
-            for (let i = 0; i < phaseCount; i++) {
-                defaultPhases.push({
-                    name: phaseNames[i] || `Phase ${i + 1}`,
-                    duration: 0,
-                    total_marks: 0,
-                    passing_score: 0,
-                    questions: [],
-                });
-            }
-            setPhases(defaultPhases);
-        }
-    }, [step, phaseCount, phases.length]);
+    
+    // Preview questions state
+    const [previewQuestions, setPreviewQuestions] = useState<any[]>([]);
+    const [fetchingPreview, setFetchingPreview] = useState(false);
 
     // Auth protection
     if (isLoading) return <div className="min-h-screen flex items-center justify-center bg-gray-50 text-gray-600">Loading...</div>;
@@ -68,98 +62,143 @@ export default function CreateAssessmentPage() {
         return null;
     }
 
-    const updatePhaseConfig = (index: number, field: keyof PhaseConfig, value: any) => {
-        if (field === 'duration' || field === 'total_marks' || field === 'passing_score') {
-            if (!/^\d*$/.test(value)) return;
-        }
-        const newPhases = [...phases];
-        newPhases[index] = { ...newPhases[index], [field]: value };
-        setPhases(newPhases);
+    const addGroup = () => {
+        setRuleGroups([
+            ...ruleGroups,
+            {
+                category: "Programming",
+                sub_groups: [
+                    {
+                        sub_category: "",
+                        difficulties: [{ difficulty: "Easy", count: 1, points_per_question: 10 }]
+                    }
+                ]
+            }
+        ]);
     };
 
-    const addQuestion = (type: QuestionType) => {
-        const newPhases = [...phases];
-        newPhases[currentPhaseIndex].questions.push({
-            text: "",
-            type,
-            options: type === "MCQ" ? ["", ""] : [],
-            correct_answer: "",
-            points: 10,
+    const updateGroup = (gIndex: number, field: keyof RuleGroup, value: string) => {
+        const newGroups = [...ruleGroups];
+        newGroups[gIndex] = { ...newGroups[gIndex], [field]: value };
+        setRuleGroups(newGroups);
+    };
+
+    const removeGroup = (gIndex: number) => {
+        const newGroups = [...ruleGroups];
+        newGroups.splice(gIndex, 1);
+        setRuleGroups(newGroups);
+    };
+
+    const addSubGroup = (gIndex: number) => {
+        const newGroups = [...ruleGroups];
+        newGroups[gIndex].sub_groups.push({
+            sub_category: "",
+            difficulties: [{ difficulty: "Easy", count: 1, points_per_question: 10 }]
         });
-        setPhases(newPhases);
+        setRuleGroups(newGroups);
     };
 
-    const updateQuestion = (qIndex: number, field: keyof Question, value: any) => {
-        if (field === 'points') {
-            if (!/^\d*$/.test(value)) return;
+    const updateSubGroup = (gIndex: number, sIndex: number, value: string) => {
+        const newGroups = [...ruleGroups];
+        newGroups[gIndex].sub_groups[sIndex].sub_category = value;
+        setRuleGroups(newGroups);
+    };
+
+    const removeSubGroup = (gIndex: number, sIndex: number) => {
+        const newGroups = [...ruleGroups];
+        newGroups[gIndex].sub_groups.splice(sIndex, 1);
+        if (newGroups[gIndex].sub_groups.length === 0) {
+            newGroups.splice(gIndex, 1);
         }
-        const newPhases = [...phases];
-        newPhases[currentPhaseIndex].questions[qIndex] = {
-            ...newPhases[currentPhaseIndex].questions[qIndex],
-            [field]: value,
+        setRuleGroups(newGroups);
+    };
+
+    const addDifficulty = (gIndex: number, sIndex: number) => {
+        const newGroups = [...ruleGroups];
+        newGroups[gIndex].sub_groups[sIndex].difficulties.push({ difficulty: "Medium", count: 1, points_per_question: 10 });
+        setRuleGroups(newGroups);
+    };
+
+    const updateDifficulty = (gIndex: number, sIndex: number, dIndex: number, field: keyof DifficultyRule, value: string) => {
+        const newGroups = [...ruleGroups];
+        let finalValue: any = value;
+        if (field === 'count' || field === 'points_per_question') {
+            if (!/^\d*$/.test(value)) return;
+            finalValue = parseInt(value) || 0;
+        }
+        
+        newGroups[gIndex].sub_groups[sIndex].difficulties[dIndex] = { 
+            ...newGroups[gIndex].sub_groups[sIndex].difficulties[dIndex], 
+            [field]: finalValue 
         };
-        setPhases(newPhases);
+        setRuleGroups(newGroups);
     };
 
-    const updateOption = (qIndex: number, oIndex: number, value: string) => {
-        const newPhases = [...phases];
-        newPhases[currentPhaseIndex].questions[qIndex].options[oIndex] = value;
-        setPhases(newPhases);
+    const removeDifficulty = (gIndex: number, sIndex: number, dIndex: number) => {
+        const newGroups = [...ruleGroups];
+        newGroups[gIndex].sub_groups[sIndex].difficulties.splice(dIndex, 1);
+        if (newGroups[gIndex].sub_groups[sIndex].difficulties.length === 0) {
+            newGroups[gIndex].sub_groups.splice(sIndex, 1);
+        }
+        if (newGroups[gIndex].sub_groups.length === 0) {
+            newGroups.splice(gIndex, 1);
+        }
+        setRuleGroups(newGroups);
     };
 
-    const addOption = (qIndex: number) => {
-        const newPhases = [...phases];
-        newPhases[currentPhaseIndex].questions[qIndex].options.push("");
-        setPhases(newPhases);
-    };
+    const flattenedRules = ruleGroups.flatMap(g => 
+        g.sub_groups.flatMap(sg => 
+            sg.difficulties.map(d => ({
+                category: g.category,
+                sub_category: sg.sub_category,
+                difficulty: d.difficulty,
+                count: Number(d.count),
+                points_per_question: Number(d.points_per_question)
+            }))
+        )
+    );
 
-    const removeOption = (qIndex: number, oIndex: number) => {
-        const newPhases = [...phases];
-        newPhases[currentPhaseIndex].questions[qIndex].options.splice(oIndex, 1);
-        setPhases(newPhases);
-    };
+    const totalQuestions = flattenedRules.reduce((sum, r) => sum + r.count, 0);
+    const currentPointsTotal = flattenedRules.reduce((sum, r) => sum + (r.count * r.points_per_question), 0);
 
-    const removeQuestion = (qIndex: number) => {
-        const newPhases = [...phases];
-        newPhases[currentPhaseIndex].questions.splice(qIndex, 1);
-        setPhases(newPhases);
-    };
 
     const handleNext = () => {
         if (step === 1) {
-            if (!assessmentTitle) {
+            if (!title) {
                 showToast("Please enter an assessment title", "error");
+                return;
+            }
+            if (!duration || !totalMarks || !passingScore) {
+                showToast("Please fill out duration, total marks, and passing score", "error");
                 return;
             }
             setStep(2);
         } else if (step === 2) {
-            // Validate that configured total marks matches passing score logic if needed, 
-            // but strictly we just need to ensure fields are filled if required. 
-            // For now just proceed.
-            setStep(3);
-            setCurrentPhaseIndex(0);
-        } else if (step === 3) {
-            // Validate current phase marks
-            const currentPhase = phases[currentPhaseIndex];
-            const currentTotal = currentPhase.questions.reduce((sum, q) => sum + Number(q.points || 0), 0);
-
-            if (currentTotal !== Number(currentPhase.total_marks || 0)) {
-                showToast(`Phase ${currentPhaseIndex + 1} Question Points (${currentTotal}) must match Total Marks (${currentPhase.total_marks})`, "error");
+            if (currentPointsTotal !== Number(totalMarks || 0)) {
+                showToast(`Configured Question Points (${currentPointsTotal}) must exactly match Total Marks (${totalMarks})`, "error");
                 return;
             }
+            setStep(3); // Review step
+            fetchPreview();
+        }
+    };
 
-            if (currentPhaseIndex < phaseCount - 1) {
-                setCurrentPhaseIndex(currentPhaseIndex + 1);
-            } else {
-                setStep(4); // Review step
-            }
+    const fetchPreview = async () => {
+        setFetchingPreview(true);
+        try {
+            const res = await apiRequest("/api/assessments/preview", "POST", {
+                question_rules: flattenedRules
+            });
+            setPreviewQuestions(res || []);
+        } catch (err: any) {
+            showToast("Failed to fetch question preview", "error");
+        } finally {
+            setFetchingPreview(false);
         }
     };
 
     const handlePrevious = () => {
-        if (step === 3 && currentPhaseIndex > 0) {
-            setCurrentPhaseIndex(currentPhaseIndex - 1);
-        } else if (step > 1) {
+        if (step > 1) {
             setStep(step - 1);
         }
     };
@@ -176,52 +215,25 @@ export default function CreateAssessmentPage() {
     const handleSubmit = async () => {
         setSubmitting(true);
         try {
-            // Create assessments in reverse order (Phase 3 -> 2 -> 1) to get IDs for linking
-            const createdIds: string[] = [];
+            const payload = {
+                title: title,
+                description: description,
+                duration: Number(duration),
+                passing_score: Number(passingScore),
+                total_marks: Number(totalMarks),
+                question_rules: flattenedRules
+            };
 
-            for (let i = phases.length - 1; i >= 0; i--) {
-                const phase = phases[i];
+            await apiRequest("/api/assessments", "POST", payload);
 
-                // Calculate total marks from question points
-                // const calculatedTotalMarks = phase.questions.reduce((sum, q) => sum + Number(q.points), 0);
-
-                const payload: any = {
-                    title: `${assessmentTitle} - ${phase.name}`,
-                    description: i === 0 ? assessmentDescription : `${assessmentDescription} (${phase.name})`,
-                    duration: Number(phase.duration),
-                    questions: phase.questions.map(q => ({ ...q, points: Number(q.points) })),
-                    phase: i + 1,
-                    passing_score: Number(phase.passing_score),
-                    total_marks: Number(phase.total_marks), // Use configured value (validated in step 3)
-                };
-
-                // Link to next phase if exists
-                if (createdIds.length > 0) {
-                    payload.next_phase_id = createdIds[createdIds.length - 1];
-                }
-
-                const response = await apiRequest("/api/assessments", "POST", payload);
-                createdIds.push(response.id);
-            }
-
-            showToast(`Successfully created ${phaseCount} phase(s)!`, "success");
+            showToast(`Successfully created assessment!`, "success");
             router.push("/interviewer/assessments");
         } catch (err: any) {
-            showToast(err.message || "Failed to create assessments", "error");
+            showToast(err.message || "Failed to create assessment", "error");
         } finally {
             setSubmitting(false);
         }
     };
-
-    const getQuestionIcon = (type: QuestionType) => {
-        switch (type) {
-            case "MCQ": return <CheckCircle size={18} className="text-blue-500" />;
-            case "SUBJECTIVE": return <AlignLeft size={18} className="text-orange-500" />;
-            case "CODING": return <Code size={18} className="text-purple-500" />;
-        }
-    };
-
-    const totalQuestions = phases.reduce((sum, phase) => sum + phase.questions.length, 0);
 
     return (
         <div className="min-h-screen bg-gray-50 pb-20">
@@ -236,8 +248,8 @@ export default function CreateAssessmentPage() {
                             <ArrowLeft size={20} />
                         </button>
                         <div>
-                            <h1 className="text-xl font-bold text-gray-900">Create Multi-Phase Assessment</h1>
-                            <p className="text-xs text-gray-500">Step {step} of 4</p>
+                            <h1 className="text-xl font-bold text-gray-900">Create Assessment</h1>
+                            <p className="text-xs text-gray-500">Step {step} of 3</p>
                         </div>
                     </div>
                 </div>
@@ -247,13 +259,13 @@ export default function CreateAssessmentPage() {
             <div className="bg-white border-b border-gray-200">
                 <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
                     <div className="flex items-center justify-between">
-                        {["Basic Info", "Configure Phases", "Add Questions", "Review"].map((label, idx) => (
+                        {["Configuration", "Questions Format", "Review"].map((label, idx) => (
                             <div key={idx} className="flex items-center flex-1">
                                 <div className={`flex items-center justify-center w-8 h-8 rounded-full ${step > idx + 1 ? 'bg-green-500' : step === idx + 1 ? 'bg-indigo-600' : 'bg-gray-300'} text-white font-semibold text-sm`}>
                                     {step > idx + 1 ? '✓' : idx + 1}
                                 </div>
                                 <div className="ml-2 text-sm font-medium text-gray-700">{label}</div>
-                                {idx < 3 && <div className={`flex-1 h-1 mx-4 ${step > idx + 1 ? 'bg-green-500' : 'bg-gray-300'}`} />}
+                                {idx < 2 && <div className={`flex-1 h-1 mx-4 ${step > idx + 1 ? 'bg-green-500' : 'bg-gray-300'}`} />}
                             </div>
                         ))}
                     </div>
@@ -261,342 +273,296 @@ export default function CreateAssessmentPage() {
             </div>
 
             <main className="max-w-4xl mx-auto px-4 py-8">
-                {/* Step 1: Basic Info */}
+                {/* Step 1: Basic Info & Configuration */}
                 {step === 1 && (
                     <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-8 space-y-6">
                         <div>
-                            <h2 className="text-2xl font-bold text-gray-900 mb-2">Assessment Basic Information</h2>
-                            <p className="text-gray-600">Start by entering the basic details of your assessment</p>
+                            <h2 className="text-2xl font-bold text-gray-900 mb-2">Assessment Information</h2>
+                            <p className="text-gray-600">Enter the basic details and configuration for this assessment.</p>
                         </div>
 
                         <div>
                             <label className="block text-sm font-semibold text-gray-700 mb-2">Assessment Title *</label>
                             <input
                                 type="text"
-                                value={assessmentTitle}
-                                onChange={(e) => setAssessmentTitle(e.target.value)}
+                                value={title}
+                                onChange={(e) => setTitle(e.target.value)}
                                 className="w-full text-xl font-bold text-gray-900 p-3 border-2 border-gray-200 rounded-lg focus:border-indigo-600 focus:ring-0 focus:outline-none"
-                                placeholder="e.g., Complete Programming Assessment"
+                                placeholder="e.g., Senior Frontend Developer Test"
                             />
                         </div>
 
                         <div>
                             <label className="block text-sm font-semibold text-gray-700 mb-2">Description</label>
                             <textarea
-                                value={assessmentDescription}
-                                onChange={(e) => setAssessmentDescription(e.target.value)}
+                                value={description}
+                                onChange={(e) => setDescription(e.target.value)}
                                 className="w-full p-3 text-gray-900 border-2 border-gray-200 rounded-lg focus:border-indigo-600 focus:outline-none resize-none"
                                 rows={4}
-                                placeholder="Add instructions or context for candidates..."
+                                placeholder="Add instructions, context, or notes for candidates..."
                             />
                         </div>
 
-                        <div>
-                            <label className="block text-sm font-semibold text-gray-700 mb-2">Number of Phases *</label>
-                            <div className="grid grid-cols-3 gap-4">
-                                {[1, 2, 3].map((count) => (
-                                    <button
-                                        key={count}
-                                        onClick={() => setPhaseCount(count)}
-                                        className={`p-4 border-2 rounded-lg font-semibold transition ${phaseCount === count
-                                            ? 'border-indigo-600 bg-indigo-50 text-indigo-700'
-                                            : 'border-gray-200 hover:border-gray-300'
-                                            }`}
-                                    >
-                                        {count} Phase{count > 1 ? 's' : ''}
-                                    </button>
-                                ))}
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 pt-4 border-t border-gray-100">
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-2">
+                                    <Clock size={16} className="inline mr-1 text-gray-400" /> Duration (min) *
+                                </label>
+                                <input
+                                    type="number"
+                                    value={duration}
+                                    onChange={(e) => setDuration(e.target.value)}
+                                    className="w-full p-3 font-medium text-gray-900 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-100 focus:border-indigo-600 focus:outline-none"
+                                    placeholder="e.g. 60"
+                                    min={1}
+                                />
+                            </div>
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-2">
+                                    <Award size={16} className="inline mr-1 text-gray-400" /> Total Marks *
+                                </label>
+                                <input
+                                    type="number"
+                                    value={totalMarks}
+                                    onChange={(e) => setTotalMarks(e.target.value)}
+                                    className="w-full p-3 font-medium text-gray-900 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-100 focus:border-indigo-600 focus:outline-none"
+                                    placeholder="e.g. 100"
+                                    min={1}
+                                />
+                            </div>
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-2">
+                                    <Target size={16} className="inline mr-1 text-gray-400" /> Passing Score *
+                                </label>
+                                <input
+                                    type="number"
+                                    value={passingScore}
+                                    onChange={(e) => setPassingScore(e.target.value)}
+                                    className="w-full p-3 font-medium text-gray-900 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-100 focus:border-indigo-600 focus:outline-none"
+                                    placeholder="e.g. 50"
+                                    min={1}
+                                />
                             </div>
                         </div>
 
-                        <div className="flex justify-end pt-4">
+                        <div className="flex justify-end pt-6 border-t border-gray-100">
                             <button
                                 onClick={handleNext}
                                 className="flex items-center gap-2 px-6 py-3 bg-indigo-600 text-white rounded-lg font-semibold hover:bg-indigo-700 transition"
                             >
-                                Next: Configure Phases <ArrowRight size={18} />
+                                Next: Format Questions <ArrowRight size={18} />
                             </button>
                         </div>
                     </div>
                 )}
 
-                {/* Step 2: Configure Phases */}
+                {/* Step 2: Add Questions */}
                 {step === 2 && (
                     <div className="space-y-6">
                         <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-8">
-                            <h2 className="text-2xl font-bold text-gray-900 mb-2">Configure Each Phase</h2>
-                            <p className="text-gray-600 mb-6">Set the duration, marks, and passing criteria for each phase</p>
-
-                            {phases.map((phase, idx) => (
-                                <div key={idx} className="mb-6 pb-6 border-b border-gray-200 last:border-0">
-                                    <h3 className="text-lg font-bold text-gray-800 mb-4 flex items-center gap-2">
-                                        <span className="w-8 h-8 bg-indigo-100 text-indigo-700 rounded-full flex items-center justify-center text-sm font-bold">
-                                            {idx + 1}
-                                        </span>
-                                        Phase {idx + 1}
-                                    </h3>
-
-                                    <div className="grid grid-cols-2 gap-4">
-                                        <div>
-                                            <label className="block text-sm font-medium text-gray-700 mb-2">Phase Name</label>
-                                            <input
-                                                type="text"
-                                                value={phase.name}
-                                                onChange={(e) => updatePhaseConfig(idx, 'name', e.target.value)}
-                                                className="w-full p-3 text-gray-900 border border-gray-200 rounded-lg focus:ring-2 focus:ring-indigo-100 focus:border-indigo-500 focus:outline-none"
-                                            />
-                                        </div>
-                                        <div>
-                                            <label className="block text-sm font-medium text-gray-700 mb-2">
-                                                <Clock size={14} className="inline mr-1" /> Duration (minutes)
-                                            </label>
-                                            <input
-                                                type="text"
-                                                value={phase.duration}
-                                                onChange={(e) => updatePhaseConfig(idx, 'duration', e.target.value)}
-                                                className="w-full p-3 text-gray-900 border border-gray-200 rounded-lg focus:ring-2 focus:ring-indigo-100 focus:border-indigo-500 focus:outline-none"
-                                            />
-                                        </div>
-                                        <div>
-                                            <label className="block text-sm font-medium text-gray-700 mb-2">
-                                                <Award size={14} className="inline mr-1" /> Total Marks
-                                            </label>
-                                            <input
-                                                type="text"
-                                                value={phase.total_marks}
-                                                onChange={(e) => updatePhaseConfig(idx, 'total_marks', e.target.value)}
-                                                className="w-full p-3 text-gray-900 border border-gray-200 rounded-lg focus:ring-2 focus:ring-indigo-100 focus:border-indigo-500 focus:outline-none"
-                                                placeholder="e.g. 100"
-                                            />
-                                        </div>
-                                        <div>
-                                            <label className="block text-sm font-medium text-gray-700 mb-2">
-                                                <Target size={14} className="inline mr-1" /> Passing Score
-                                            </label>
-                                            <input
-                                                type="text"
-                                                value={phase.passing_score}
-                                                onChange={(e) => updatePhaseConfig(idx, 'passing_score', e.target.value)}
-                                                className="w-full p-3 text-gray-900 border border-gray-200 rounded-lg focus:ring-2 focus:ring-indigo-100 focus:border-indigo-500 focus:outline-none"
-                                            />
-                                        </div>
-                                    </div>
-                                </div>
-                            ))}
-                        </div>
-
-                        <div className="flex justify-between">
-                            <button
-                                onClick={handlePrevious}
-                                className="flex items-center gap-2 px-6 py-3 bg-white border border-gray-300 text-gray-700 rounded-lg font-semibold hover:bg-gray-50 transition"
-                            >
-                                <ArrowLeft size={18} /> Previous
-                            </button>
-                            <button
-                                onClick={handleNext}
-                                className="flex items-center gap-2 px-6 py-3 bg-indigo-600 text-white rounded-lg font-semibold hover:bg-indigo-700 transition"
-                            >
-                                Next: Add Questions <ArrowRight size={18} />
-                            </button>
-                        </div>
-                    </div>
-                )}
-
-                {/* Step 3: Add Questions */}
-                {step === 3 && (
-                    <div className="space-y-6">
-                        {/* Phase Tabs */}
-                        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-4">
-                            <div className="flex gap-2 overflow-x-auto">
-                                {phases.map((phase, idx) => (
-                                    <button
-                                        key={idx}
-                                        onClick={() => setCurrentPhaseIndex(idx)}
-                                        className={`px-4 py-2 rounded-lg font-semibold whitespace-nowrap transition ${currentPhaseIndex === idx
-                                            ? 'bg-indigo-600 text-white'
-                                            : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                                            }`}
-                                    >
-                                        Phase {idx + 1}: {phase.name} ({phase.questions.length} Q)
-                                    </button>
-                                ))}
-                            </div>
-                        </div>
-
-                        {/* Current Phase Questions */}
-                        <div className="space-y-6">
-                            <div className="flex items-center justify-between">
+                            <div className="flex items-center justify-between mb-6">
                                 <div>
-                                    <h2 className="text-xl font-bold text-gray-900">
-                                        Phase {currentPhaseIndex + 1}: {phases[currentPhaseIndex].name}
-                                    </h2>
-                                    <p className="text-sm text-gray-500">Add questions for this stage</p>
+                                    <h2 className="text-2xl font-bold text-gray-900">Define Question Bank Rules</h2>
+                                    <p className="text-gray-600">Select which categories and difficulties to include in this assessment.</p>
                                 </div>
-                                <div className="flex gap-3">
-                                    <button
-                                        onClick={() => addQuestion("MCQ")}
-                                        className="flex items-center gap-2 px-4 py-2 bg-white border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition shadow-sm text-sm font-medium"
-                                    >
-                                        <CheckCircle size={16} className="text-blue-500" /> MCQ
-                                    </button>
-                                    <button
-                                        onClick={() => addQuestion("subjective" as any)} // Cast for compatibility if needed
-                                        className="flex items-center gap-2 px-4 py-2 bg-white border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition shadow-sm text-sm font-medium"
-                                    >
-                                        <AlignLeft size={16} className="text-orange-500" /> Subjective
-                                    </button>
-                                    <button
-                                        onClick={() => addQuestion("CODING")}
-                                        className="flex items-center gap-2 px-4 py-2 bg-white border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition shadow-sm text-sm font-medium"
-                                    >
-                                        <Code size={16} className="text-purple-500" /> Coding
-                                    </button>
-                                </div>
+                                <button
+                                    onClick={addGroup}
+                                    className="flex items-center gap-2 px-5 py-2.5 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition shadow-sm text-sm font-medium"
+                                >
+                                    <Plus size={16} /> Add Rule Group
+                                </button>
                             </div>
 
-                            {/* Questions List */}
-                            <div className="space-y-4">
-                                {phases[currentPhaseIndex].questions.length === 0 ? (
-                                    <div className="text-center py-16 bg-white rounded-xl border-2 border-dashed border-gray-200">
-                                        <div className="w-16 h-16 bg-gray-50 rounded-full flex items-center justify-center mx-auto mb-4 text-gray-400">
+                            {/* Rules List */}
+                            <div className="space-y-6">
+                                {ruleGroups.length === 0 ? (
+                                    <div className="text-center py-16 bg-gray-50 rounded-xl border-2 border-dashed border-gray-200">
+                                        <div className="w-16 h-16 bg-white rounded-full border border-gray-100 flex items-center justify-center mx-auto mb-4 text-gray-400 shadow-sm">
                                             <Plus size={32} />
                                         </div>
-                                        <h3 className="text-lg font-medium text-gray-900 mb-2">No questions yet</h3>
-                                        <p className="text-gray-500 max-w-sm mx-auto mb-6">Start building your assessment by adding questions from the buttons above.</p>
+                                        <h3 className="text-lg font-medium text-gray-900 mb-2">No rules yet</h3>
+                                        <p className="text-gray-500 max-w-sm mx-auto mb-6">Start building your assessment by defining what questions to fetch.</p>
+                                        <button
+                                            onClick={addGroup}
+                                            className="px-4 py-2 bg-white border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 font-medium transition"
+                                        >
+                                            Add First Rule Group
+                                        </button>
                                     </div>
                                 ) : (
-                                    phases[currentPhaseIndex].questions.map((question, qIdx) => (
-                                        <div key={qIdx} className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden group hover:border-indigo-300 transition-all">
-                                            {/* Question Header */}
-                                            <div className="bg-gray-50 p-4 border-b border-gray-100 flex items-center justify-between">
-                                                <div className="flex items-center gap-3">
-                                                    <div className="cursor-move text-gray-400 hover:text-gray-600">
-                                                        <Target size={18} />
-                                                    </div>
-                                                    <span className="font-semibold text-gray-700 flex items-center gap-2">
-                                                        {getQuestionIcon(question.type)}
-                                                        Question {qIdx + 1}
-                                                    </span>
-                                                    <span className="text-xs px-2 py-1 bg-gray-200 text-gray-600 rounded-full font-medium">
-                                                        {question.type}
-                                                    </span>
-                                                </div>
-                                                <div className="flex items-center gap-2">
-                                                    <div className="flex items-center gap-2 mr-4">
-                                                        <label className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Points</label>
-                                                        <input
-                                                            type="text"
-                                                            value={question.points}
-                                                            onChange={(e) => updateQuestion(qIdx, 'points', e.target.value)}
-                                                            className="w-16 p-1 text-center text-sm font-bold text-gray-900 border border-gray-200 rounded focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 focus:outline-none"
-                                                        />
-                                                    </div>
-                                                    <button
-                                                        onClick={() => removeQuestion(qIdx)}
-                                                        className="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
-                                                        title="Remove Question"
+                                    <div className="space-y-8">
+                                        {ruleGroups.map((group, gIdx) => (
+                                            <div key={gIdx} className="bg-white rounded-2xl shadow-sm border-2 border-gray-100 p-8 flex flex-col gap-6 relative group hover:border-indigo-200 transition-all">
+                                                <button
+                                                    onClick={() => removeGroup(gIdx)}
+                                                    className="absolute top-6 right-6 p-2 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors opacity-0 group-hover:opacity-100"
+                                                    title="Remove Category"
+                                                >
+                                                    <Trash2 size={20} />
+                                                </button>
+
+                                                <div className="max-w-xs">
+                                                    <label className="block text-xs font-bold text-indigo-600 uppercase tracking-widest mb-2">Category</label>
+                                                    <select
+                                                        value={group.category}
+                                                        onChange={(e) => updateGroup(gIdx, 'category', e.target.value)}
+                                                        className="w-full p-3 font-bold text-gray-900 border-2 border-gray-200 rounded-xl focus:border-indigo-500 focus:outline-none bg-gray-50/50"
                                                     >
-                                                        <Trash2 size={18} />
+                                                        <option value="Programming">Programming</option>
+                                                        <option value="Communication">Communication</option>
+                                                        <option value="Aptitude">Aptitude</option>
+                                                    </select>
+                                                </div>
+
+                                                <div className="space-y-4">
+                                                    {group.sub_groups.map((sub, sIdx) => (
+                                                        <div key={sIdx} className="bg-gray-50/50 rounded-2xl p-6 border border-gray-200 relative group/sub">
+                                                            <button 
+                                                                onClick={() => removeSubGroup(gIdx, sIdx)}
+                                                                className="absolute top-4 right-4 text-gray-400 hover:text-red-500 opacity-0 group-hover/sub:opacity-100 transition-opacity"
+                                                            >
+                                                                <Trash2 size={16} />
+                                                            </button>
+
+                                                            <div className="flex items-center gap-4 mb-4">
+                                                                <div className="flex-1 max-w-[200px]">
+                                                                    <label className="block text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-1.5">Sub Category</label>
+                                                                    <select
+                                                                        value={sub.sub_category}
+                                                                        onChange={(e) => updateSubGroup(gIdx, sIdx, e.target.value)}
+                                                                        className="w-full p-2 text-sm font-semibold text-gray-900 border border-gray-300 rounded-lg focus:border-indigo-500 focus:outline-none bg-white"
+                                                                    >
+                                                                        <option value="">Any Sub-Category</option>
+                                                                        {group.category === "Communication" ? (
+                                                                            <>
+                                                                                <option value="Passage">Passage</option>
+                                                                                <option value="Grammar">Grammar</option>
+                                                                                <option value="Listening">Listening</option>
+                                                                            </>
+                                                                        ) : group.category === "Aptitude" ? (
+                                                                            <>
+                                                                                <option value="Logical">Logical</option>
+                                                                                <option value="Numerical">Numerical</option>
+                                                                                <option value="Verbal">Verbal</option>
+                                                                            </>
+                                                                        ) : (
+                                                                            <>
+                                                                                <option value="Frontend">Frontend</option>
+                                                                                <option value="Backend">Backend</option>
+                                                                                <option value="DevOps">DevOps</option>
+                                                                            </>
+                                                                        )}
+                                                                    </select>
+                                                                </div>
+                                                                <div className="h-px bg-gray-200 flex-1 mt-5"></div>
+                                                            </div>
+
+                                                            <div className="space-y-3">
+                                                                {sub.difficulties.map((diff, dIdx) => (
+                                                                    <div key={dIdx} className="flex flex-wrap gap-4 items-end">
+                                                                        <div className="w-32">
+                                                                            <label className="block text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-1.5">Difficulty</label>
+                                                                            <select
+                                                                                value={diff.difficulty}
+                                                                                onChange={(e) => updateDifficulty(gIdx, sIdx, dIdx, 'difficulty', e.target.value)}
+                                                                                className="w-full p-2.5 text-sm font-medium text-gray-900 border border-gray-300 rounded-lg focus:border-indigo-500 focus:outline-none bg-white"
+                                                                            >
+                                                                                <option value="Easy">Easy</option>
+                                                                                <option value="Medium">Medium</option>
+                                                                                <option value="Hard">Hard</option>
+                                                                            </select>
+                                                                        </div>
+
+                                                                        <div className="w-24">
+                                                                            <label className="block text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-1.5">Count</label>
+                                                                            <input
+                                                                                type="text"
+                                                                                value={diff.count}
+                                                                                onChange={(e) => updateDifficulty(gIdx, sIdx, dIdx, 'count', e.target.value)}
+                                                                                className="w-full p-2.5 text-center font-bold text-gray-900 border border-gray-300 rounded-lg focus:border-indigo-500 focus:outline-none bg-white"
+                                                                            />
+                                                                        </div>
+
+                                                                        <div className="w-24">
+                                                                            <label className="block text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-1.5">Pts / Q</label>
+                                                                            <input
+                                                                                type="text"
+                                                                                value={diff.points_per_question}
+                                                                                onChange={(e) => updateDifficulty(gIdx, sIdx, dIdx, 'points_per_question', e.target.value)}
+                                                                                className="w-full p-2.5 text-center font-bold text-gray-900 border border-gray-300 rounded-lg focus:border-indigo-500 focus:outline-none bg-white"
+                                                                            />
+                                                                        </div>
+                                                                        
+                                                                        <button
+                                                                            onClick={() => removeDifficulty(gIdx, sIdx, dIdx)}
+                                                                            className="p-2.5 text-gray-400 hover:text-red-500 transition-colors mb-[2px]"
+                                                                            title="Remove Rule"
+                                                                        >
+                                                                            <Trash2 size={16} />
+                                                                        </button>
+                                                                    </div>
+                                                                ))}
+
+                                                                <button
+                                                                    onClick={() => addDifficulty(gIdx, sIdx)}
+                                                                    className="flex items-center gap-1.5 text-xs text-indigo-600 font-bold hover:text-indigo-800 transition-colors py-1"
+                                                                >
+                                                                    <Plus size={14} /> Add Difficulty Level
+                                                                </button>
+                                                            </div>
+                                                        </div>
+                                                    ))}
+
+                                                    <button
+                                                        onClick={() => addSubGroup(gIdx)}
+                                                        className="mt-2 flex items-center gap-2 text-sm text-gray-500 font-bold hover:text-gray-900 transition-colors bg-white border-2 border-dashed border-gray-200 rounded-xl p-4 w-full justify-center hover:border-gray-300"
+                                                    >
+                                                        <Plus size={18} /> Add Another Sub-Category inside {group.category}
                                                     </button>
                                                 </div>
-                                            </div>
 
-                                            {/* Question Body */}
-                                            <div className="p-6 space-y-6">
-                                                <div>
-                                                    <textarea
-                                                        value={question.text}
-                                                        onChange={(e) => updateQuestion(qIdx, 'text', e.target.value)}
-                                                        className="w-full text-lg font-medium text-gray-900 border-0 border-b-2 border-gray-100 focus:border-indigo-500 focus:ring-0 focus:outline-none placeholder-gray-300 resize-none transition-colors bg-transparent pb-2"
-                                                        rows={1}
-                                                        placeholder="Type your question here..."
-                                                        style={{ minHeight: '3rem' }}
-                                                    />
-                                                </div>
-
-                                                {/* MCQ Options */}
-                                                {question.type === "MCQ" && (
-                                                    <div className="ml-4 space-y-3 border-l-2 border-gray-100 pl-4">
-                                                        <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3">Answer Options <span className="font-normal text-gray-400 normal-case ml-2">(Select the radio button to mark correct answer)</span></label>
-                                                        {question.options.map((option, oIdx) => (
-                                                            <div key={oIdx} className="flex items-center gap-3 group/option">
-                                                                <div className="flex items-center justify-center">
-                                                                    <input
-                                                                        type="radio"
-                                                                        name={`correct-answer-${qIdx}`}
-                                                                        checked={question.correct_answer === option && option !== ""}
-                                                                        onChange={() => updateQuestion(qIdx, 'correct_answer', option)}
-                                                                        className="w-5 h-5 text-indigo-600 border-gray-300 focus:ring-indigo-500 cursor-pointer"
-                                                                    />
-                                                                </div>
-                                                                <div className="flex-1 flex items-center gap-3">
-                                                                    <div className="w-6 h-6 rounded-full border border-gray-200 bg-gray-50 flex items-center justify-center text-gray-500 text-xs font-semibold">
-                                                                        {String.fromCharCode(65 + oIdx)}
-                                                                    </div>
-                                                                    <input
-                                                                        type="text"
-                                                                        value={option}
-                                                                        onChange={(e) => {
-                                                                            updateOption(qIdx, oIdx, e.target.value);
-                                                                            // If this was the correct answer, update it too
-                                                                            if (question.correct_answer === option) {
-                                                                                updateQuestion(qIdx, 'correct_answer', e.target.value);
-                                                                            }
-                                                                        }}
-                                                                        className={`flex-1 p-2 text-gray-900 border rounded-lg transition-all text-sm outline-none ${question.correct_answer === option && option !== ""
-                                                                            ? "bg-green-50 border-green-200 ring-1 ring-green-200"
-                                                                            : "bg-gray-50 border-transparent hover:bg-white hover:border-gray-200 focus:bg-white focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100"
-                                                                            }`}
-                                                                        placeholder={`Option ${oIdx + 1}`}
-                                                                    />
-                                                                </div>
-                                                                {question.options.length > 2 && (
-                                                                    <button
-                                                                        onClick={() => removeOption(qIdx, oIdx)}
-                                                                        className="p-2 text-gray-300 hover:text-red-500 opacity-0 group-hover/option:opacity-100 transition-all font-bold"
-                                                                    >
-                                                                        ×
-                                                                    </button>
-                                                                )}
-                                                            </div>
-                                                        ))}
-                                                        <button
-                                                            onClick={() => addOption(qIdx)}
-                                                            className="flex items-center gap-2 text-sm text-indigo-600 hover:text-indigo-700 font-medium mt-2 px-2 py-1 rounded hover:bg-indigo-50 w-fit transition-colors"
-                                                        >
-                                                            <Plus size={14} /> Add Option
-                                                        </button>
+                                                <div className="bg-indigo-600 rounded-xl p-4 text-white flex justify-between items-center shadow-lg shadow-indigo-100">
+                                                    <div className="flex items-center gap-3">
+                                                        <div className="p-2 bg-indigo-500 rounded-lg">
+                                                            <FileText size={18} />
+                                                        </div>
+                                                        <div>
+                                                            <div className="text-[10px] font-bold uppercase tracking-widest opacity-70">Category Summary</div>
+                                                            <div className="font-bold">{group.category}</div>
+                                                        </div>
                                                     </div>
-                                                )}
-
+                                                    <div className="text-right">
+                                                        <div className="text-2xl font-black">
+                                                            {group.sub_groups.reduce((sum, sg) => sum + sg.difficulties.reduce((s, d) => s + (Number(d.count) * Number(d.points_per_question)), 0), 0)}
+                                                            <span className="text-xs ml-1 opacity-70">pts</span>
+                                                        </div>
+                                                    </div>
+                                                </div>
                                             </div>
-                                        </div>
-                                    ))
-                                )}
-
-                                {/* Add Question Buttons (Bottom) */}
-                                {phases[currentPhaseIndex].questions.length > 0 && (
-                                    <div className="pt-6 mt-6 border-t border-gray-100">
-                                        <p className="text-sm font-semibold text-gray-500 mb-4 text-center uppercase tracking-wider">Add Another Question</p>
-                                        <div className="flex justify-center gap-3">
-                                            <button
-                                                onClick={() => addQuestion("MCQ")}
-                                                className="flex items-center gap-2 px-6 py-3 bg-blue-50 text-blue-700 border border-blue-200 rounded-lg hover:bg-blue-100 hover:border-blue-300 transition shadow-sm font-semibold"
-                                            >
-                                                <CheckCircle size={18} /> Add MCQ
-                                            </button>
-                                            <button
-                                                onClick={() => addQuestion("SUBJECTIVE")}
-                                                className="flex items-center gap-2 px-6 py-3 bg-orange-50 text-orange-700 border border-orange-200 rounded-lg hover:bg-orange-100 hover:border-orange-300 transition shadow-sm font-semibold"
-                                            >
-                                                <AlignLeft size={18} /> Add Subjective
-                                            </button>
-                                            <button
-                                                onClick={() => addQuestion("CODING")}
-                                                className="flex items-center gap-2 px-6 py-3 bg-purple-50 text-purple-700 border border-purple-200 rounded-lg hover:bg-purple-100 hover:border-purple-300 transition shadow-sm font-semibold"
-                                            >
-                                                <Code size={18} /> Add Coding
-                                            </button>
+                                        ))}
+                                        
+                                        <div className={`mt-10 p-6 rounded-2xl flex items-center justify-between border-4 border-dashed transition-all ${currentPointsTotal === Number(totalMarks) ? 'bg-green-50 border-green-200 text-green-900' : 'bg-orange-50 border-orange-200 text-orange-900 animate-pulse-subtle'}`}>
+                                            <div className="flex items-center gap-6">
+                                                <div className={`w-16 h-16 rounded-2xl flex items-center justify-center shadow-sm ${currentPointsTotal === Number(totalMarks) ? 'bg-green-600 text-white' : 'bg-orange-500 text-white'}`}>
+                                                    <Target size={32} />
+                                                </div>
+                                                <div>
+                                                    <div className="text-sm font-bold opacity-60 uppercase tracking-widest mb-1">Configuration Status</div>
+                                                    <div className="flex items-baseline gap-2">
+                                                        <span className="text-4xl font-black">{currentPointsTotal}</span>
+                                                        <span className="text-xl font-bold opacity-40">/ {totalMarks} pts</span>
+                                                    </div>
+                                                    {currentPointsTotal !== Number(totalMarks) ? (
+                                                        <p className="text-sm font-medium mt-1">Configure {Math.abs(Number(totalMarks) - currentPointsTotal)} more pts to proceed</p>
+                                                    ) : (
+                                                        <p className="text-sm font-bold mt-1 flex items-center gap-1"><CheckCircle size={14} /> Ready to Review</p>
+                                                    )}
+                                                </div>
+                                            </div>
+                                            <div className="text-right px-8 border-l border-gray-200/50">
+                                                <div className="text-sm font-bold opacity-60 uppercase tracking-widest mb-1">Total Questions</div>
+                                                <span className="text-4xl font-black">{totalQuestions}</span>
+                                            </div>
                                         </div>
                                     </div>
                                 )}
@@ -614,60 +580,117 @@ export default function CreateAssessmentPage() {
                                 onClick={handleNext}
                                 className="flex items-center gap-2 px-6 py-3 bg-indigo-600 text-white rounded-lg font-semibold hover:bg-indigo-700 transition"
                             >
-                                {currentPhaseIndex < phaseCount - 1 ? `Next: Phase ${currentPhaseIndex + 2}` : 'Review & Submit'} <ArrowRight size={18} />
+                                Review & Submit <ArrowRight size={18} />
                             </button>
                         </div>
                     </div>
                 )}
 
-                {/* Step 4: Review */}
-                {step === 4 && (
+                {/* Step 3: Review */}
+                {step === 3 && (
                     <div className="space-y-6">
                         <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-8">
                             <h2 className="text-2xl font-bold text-gray-900 mb-2">Review Your Assessment</h2>
-                            <p className="text-gray-600 mb-6">Review all phases before submitting</p>
+                            <p className="text-gray-600 mb-6">Review all settings before creating the assessment.</p>
 
                             <div className="space-y-6">
-
-                                <div className="bg-gray-50 rounded-lg p-4 border border-gray-200">
-                                    <h3 className="font-bold text-gray-900 mb-2">{assessmentTitle}</h3>
-                                    <p className="text-sm text-gray-800">{assessmentDescription}</p>
-                                    <div className="mt-4 flex gap-4 text-sm">
-                                        <span className="text-gray-900"><strong>{phaseCount}</strong> Phases</span>
-                                        <span className="text-gray-900"><strong>{totalQuestions}</strong> Total Questions</span>
+                                <div className="bg-gray-50 rounded-lg p-6 border border-gray-200 relative overflow-hidden">
+                                    <div className="absolute top-0 right-0 w-32 h-32 bg-indigo-50 rounded-full -mr-10 -mt-10 pointer-events-none"></div>
+                                    <h3 className="text-xl font-black text-gray-900 mb-2 relative z-10">{title}</h3>
+                                    <p className="text-gray-700 mb-6 relative z-10">{description || "No description provided."}</p>
+                                    
+                                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4 relative z-10">
+                                        <div className="bg-white p-3 rounded-lg border border-gray-100 shadow-sm">
+                                            <span className="block text-xs font-semibold text-gray-400 uppercase tracking-widest mb-1">Questions</span>
+                                            <span className="text-xl font-black text-gray-900">{totalQuestions}</span>
+                                        </div>
+                                        <div className="bg-white p-3 rounded-lg border border-gray-100 shadow-sm">
+                                            <span className="block text-xs font-semibold text-gray-400 uppercase tracking-widest mb-1">Duration</span>
+                                            <span className="text-xl font-black text-gray-900">{duration}m</span>
+                                        </div>
+                                        <div className="bg-white p-3 rounded-lg border border-gray-100 shadow-sm">
+                                            <span className="block text-xs font-semibold text-gray-400 uppercase tracking-widest mb-1">Total Marks</span>
+                                            <span className="text-xl font-black text-indigo-700">{totalMarks}</span>
+                                        </div>
+                                        <div className="bg-white p-3 rounded-lg border border-gray-100 shadow-sm">
+                                            <span className="block text-xs font-semibold text-gray-400 uppercase tracking-widest mb-1">Passing</span>
+                                            <span className="text-xl font-black text-green-600">{passingScore}</span>
+                                        </div>
                                     </div>
                                 </div>
 
-                                {phases.map((phase, idx) => (
-                                    <div key={idx} className="border border-gray-200 rounded-lg p-6">
-                                        <div className="flex items-center justify-between mb-4">
-                                            <h3 className="text-lg font-bold text-gray-900">
-                                                Phase {idx + 1}: {phase.name}
-                                            </h3>
-                                            <span className="px-3 py-1 bg-indigo-100 text-indigo-900 rounded-full text-sm font-bold">
-                                                {phase.questions.length} Questions
-                                            </span>
-                                        </div>
-                                        <div className="grid grid-cols-3 gap-4 text-sm">
-                                            <div>
-                                                <span className="text-gray-700 font-medium">Duration:</span>
-                                                <span className="ml-2 font-bold text-gray-900">{phase.duration} min</span>
-                                            </div>
-                                            <div>
-                                                <span className="text-gray-700 font-medium">Total Marks:</span>
-                                                <span className="ml-2 font-bold text-gray-900">{phase.total_marks}</span>
-                                            </div>
-                                            <div>
-                                                <span className="text-gray-700 font-medium">Passing Score:</span>
-                                                <span className="ml-2 font-bold text-gray-900">{phase.passing_score}</span>
-                                            </div>
-                                        </div>
+                                <div>
+                                    <div className="flex items-center justify-between mb-4 px-2">
+                                        <h4 className="text-lg font-bold text-gray-900">Question Bank Samples</h4>
+                                        <button 
+                                            onClick={fetchPreview}
+                                            disabled={fetchingPreview}
+                                            className="flex items-center gap-2 text-sm text-indigo-600 font-bold hover:text-indigo-800 disabled:opacity-50"
+                                        >
+                                            <RefreshCw size={14} className={fetchingPreview ? "animate-spin" : ""} />
+                                            {fetchingPreview ? "Generating..." : "Refresh Samples"}
+                                        </button>
                                     </div>
-                                ))}
+                                    
+                                    {fetchingPreview ? (
+                                        <div className="py-20 flex flex-col items-center justify-center bg-gray-50 rounded-xl border border-gray-100">
+                                            <div className="w-10 h-10 border-4 border-indigo-600 border-t-transparent rounded-full animate-spin mb-4"></div>
+                                            <p className="text-gray-500 font-medium">Sampling random questions...</p>
+                                        </div>
+                                    ) : previewQuestions.length > 0 ? (
+                                        <div className="space-y-4">
+                                            {previewQuestions.map((q, qIdx) => (
+                                                <div key={qIdx} className="bg-white border border-gray-100 rounded-xl p-6 shadow-sm hover:border-indigo-200 transition-colors">
+                                                    <div className="flex items-start justify-between gap-4 mb-4">
+                                                        <div className="flex items-center gap-2">
+                                                            <span className="p-1.5 bg-gray-50 rounded text-gray-400">
+                                                                <FileText size={14} />
+                                                            </span>
+                                                            <span className="text-xs font-bold uppercase tracking-wider text-gray-400">
+                                                                {q.category} • {q.difficulty}
+                                                            </span>
+                                                        </div>
+                                                        <div className="text-xs font-medium text-indigo-600 bg-indigo-50 px-2 py-1 rounded">
+                                                            MCQ
+                                                        </div>
+                                                    </div>
+                                                    <h5 className="text-gray-900 font-bold mb-4 leading-relaxed whitespace-pre-wrap">
+                                                        {q.text}
+                                                    </h5>
+                                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                                                        {q.options?.map((opt: string, oIdx: number) => {
+                                                            const letter = String.fromCharCode(65 + oIdx);
+                                                            const isCorrect = letter === q.correct_answer;
+                                                            return (
+                                                                <div 
+                                                                    key={oIdx} 
+                                                                    className={`flex items-center gap-3 p-3 rounded-lg border text-sm transition-all ${isCorrect ? 'bg-green-50 border-green-200 text-green-900 ring-1 ring-green-100' : 'bg-gray-50 border-gray-100 text-gray-600'}`}
+                                                                >
+                                                                    <span className={`flex-none w-6 h-6 flex items-center justify-center rounded-full text-xs font-bold ${isCorrect ? 'bg-green-600 text-white' : 'bg-white border border-gray-200 text-gray-400'}`}>
+                                                                        {letter}
+                                                                    </span>
+                                                                    <span className="flex-1">{opt}</span>
+                                                                    {isCorrect && <CheckCircle size={14} className="text-green-600 flex-none" />}
+                                                                </div>
+                                                            );
+                                                        })}
+                                                    </div>
+                                                </div>
+                                            ))}
+                                            <p className="text-center text-xs text-gray-400 py-4">
+                                                Showing {previewQuestions.length} sample questions based on your rules.
+                                            </p>
+                                        </div>
+                                    ) : (
+                                        <div className="text-center py-10 bg-gray-50 rounded-xl border-2 border-dashed border-gray-200">
+                                            <p className="text-gray-500">No questions found matching your criteria.</p>
+                                        </div>
+                                    )}
+                                </div>
                             </div>
                         </div>
 
-                        <div className="flex justify-between">
+                        <div className="flex justify-between pt-6 border-t border-gray-100">
                             <button
                                 onClick={handlePrevious}
                                 className="flex items-center gap-2 px-6 py-3 bg-white border border-gray-300 text-gray-700 rounded-lg font-semibold hover:bg-gray-50 transition"
@@ -681,7 +704,7 @@ export default function CreateAssessmentPage() {
                             >
                                 {submitting ? 'Creating...' : (
                                     <>
-                                        <Save size={18} /> Create All Assessments
+                                        <Save size={18} /> Create Final Assessment
                                     </>
                                 )}
                             </button>
@@ -706,14 +729,13 @@ export default function CreateAssessmentPage() {
                             onClick={handleConfirmSubmit}
                             className="px-4 py-2 text-white bg-green-600 rounded-lg hover:bg-green-700 font-medium"
                         >
-                            Create Assessments
+                            Create Assessment
                         </button>
                     </>
                 }
             >
                 <p className="text-gray-600">
-                    Are you sure you want to create this multi-phase assessment?
-                    This will create <strong>{phaseCount}</strong> linked assessments.
+                    Are you sure you want to create this assessment? Candidates will receive dynamically sampled questions based on your defined rules.
                 </p>
             </Modal>
         </div>

@@ -20,6 +20,14 @@ type Violation struct {
 	Evidence  string    `bson:"evidence,omitempty" json:"evidence,omitempty"` // Optional base64 image or audio snippet
 }
 
+type FaceSnapshots struct {
+	InitialImage             string   `bson:"initial_image" json:"initial_image"`
+	MiddleImage              string   `bson:"middle_image" json:"middle_image"`
+	EndImage                 string   `bson:"end_image" json:"end_image"`
+	InitialVsMiddleDistance *float64 `bson:"initial_vs_middle_distance" json:"initial_vs_middle_distance"`
+	InitialVsEndDistance    *float64 `bson:"initial_vs_end_distance" json:"initial_vs_end_distance"`
+}
+
 type Submission struct {
 	ID           primitive.ObjectID `bson:"_id,omitempty" json:"id"`
 	AssessmentID primitive.ObjectID `bson:"assessment_id" json:"assessment_id"`
@@ -29,6 +37,7 @@ type Submission struct {
 	CandidatePhone string             `bson:"candidate_phone" json:"candidate_phone"`
 	Answers      []Answer           `bson:"answers" json:"answers"`
 	Violations   []Violation        `bson:"violations,omitempty" json:"violations,omitempty"`
+	FaceSnapshots *FaceSnapshots    `bson:"face_snapshots,omitempty" json:"face_snapshots,omitempty"`
 	Score        int                `bson:"score" json:"score"`   // Total score
 	Status       string             `bson:"status" json:"status"` // "in_progress", "submitted", "graded"
 	CreatedBy    primitive.ObjectID `bson:"created_by" json:"created_by"`
@@ -37,6 +46,9 @@ type Submission struct {
 	SubmittedAt  time.Time          `bson:"submitted_at,omitempty" json:"submitted_at,omitempty"`
 	UpdatedAt    time.Time          `bson:"updated_at" json:"updated_at"`
 	DeletedAt    *time.Time         `bson:"deleted_at,omitempty" json:"-"`
+
+	// This stores the unique set of questions generated for this candidate's run
+	GeneratedQuestions []Question `bson:"generated_questions,omitempty" json:"generated_questions,omitempty"`
 
 	// Phase System
 	Passed            bool                `bson:"passed" json:"passed"`

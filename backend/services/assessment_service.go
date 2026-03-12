@@ -18,26 +18,22 @@ type AssessmentService interface {
 	GetAssessmentByID(ctx context.Context, id string, role string) (*models.Assessment, error)
 	UpdateAssessment(ctx context.Context, id string, assessment *models.Assessment) error
 	DeleteAssessment(ctx context.Context, id string) error
+	SampleQuestions(ctx context.Context, rules []models.QuestionRule) ([]models.QuestionBankEntry, error)
 }
 
 type assessmentService struct {
-	repo repositories.AssessmentRepository
+	repo   repositories.AssessmentRepository
+	qbRepo repositories.QuestionBankRepository
 }
 
-func NewAssessmentService(repo repositories.AssessmentRepository) AssessmentService {
-	return &assessmentService{repo: repo}
+func NewAssessmentService(repo repositories.AssessmentRepository, qbRepo repositories.QuestionBankRepository) AssessmentService {
+	return &assessmentService{repo: repo, qbRepo: qbRepo}
 }
 
 func (s *assessmentService) CreateAssessment(ctx context.Context, assessment *models.Assessment) (string, error) {
 	// Sanitization
 	assessment.Title = utils.SanitizeStrict(assessment.Title)
 	assessment.Description = utils.SanitizeStrict(assessment.Description)
-	for i := range assessment.Questions {
-		assessment.Questions[i].Text = utils.SanitizeStrict(assessment.Questions[i].Text)
-		for j := range assessment.Questions[i].Options {
-			assessment.Questions[i].Options[j] = utils.SanitizeStrict(assessment.Questions[i].Options[j])
-		}
-	}
 
 	assessment.CreatedAt = time.Now()
 	assessment.UpdatedAt = time.Now()
@@ -57,7 +53,7 @@ func (s *assessmentService) GetAssessments(ctx context.Context, limit, skip int,
 
 	// Security: If not interviewer, exclude questions from list view
 	if role != "interviewer" {
-		opts.SetProjection(bson.M{"questions": 0})
+		opts.SetProjection(bson.M{"question_rules": 0})
 	}
 
 	filter := bson.M{"deleted_at": nil}
@@ -75,12 +71,6 @@ func (s *assessmentService) GetAssessmentByID(ctx context.Context, idStr string,
 		return nil, err
 	}
 
-	// Security: If candidate, strip correct answers
-	if role != "interviewer" {
-		for i := range assessment.Questions {
-			assessment.Questions[i].CorrectAnswer = "" // Hide correct answer
-		}
-	}
 
 	if assessment.DeletedAt != nil {
 		return nil, errors.New("assessment deleted")
@@ -115,4 +105,26 @@ func (s *assessmentService) DeleteAssessment(ctx context.Context, idStr string) 
 		DeletedAt: &now,
 	}
 	return s.repo.Update(ctx, id, update)
+}
+
+func (s *assessmentService) SampleQuestions(ctx context.Context, rules []models.QuestionRule) ([]models.QuestionBankEntry, error) {
+	var allQuestions []models.QuestionBankEntry
+
+	for _, rule := range rules {
+		filter := bson.M{
+			"category":   rule.Category,
+			"difficulty": rule.Difficulty,
+		}
+		if rule.SubCategory != "" {
+			filter["sub_category"] = rule.SubCategory
+		}
+
+		questions, err := s.qbRepo.Sample(ctx, filter, rule.Count)
+		if err != nil {
+			return nil, err
+		}
+		allQuestions = append(allQuestions, questions...)
+	}
+
+	return allQuestions, nil
 }
