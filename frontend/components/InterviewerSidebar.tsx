@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { BarChart3, FilePlus, Users, Menu, X, FileText } from "lucide-react";
+import { BarChart3, FilePlus, Users, Menu, X, FileText, BookOpen } from "lucide-react";
 
 export default function InterviewerSidebar() {
     const router = useRouter();
@@ -80,6 +80,16 @@ export default function InterviewerSidebar() {
                     >
                         <FileText size={20} />
                         Exam Results
+                    </button>
+                    <button
+                        onClick={() => {
+                            router.push("/interviewer/exam-sheet");
+                            setIsOpen(false);
+                        }}
+                        className="w-full flex items-center gap-3 px-4 py-3 text-sm font-medium text-indigo-200 hover:bg-white/10 hover:text-white rounded-lg focus:bg-white/10 focus:text-white"
+                    >
+                        <BookOpen size={20} />
+                        Exam Sheet
                     </button>
                     <button
                         onClick={() => {

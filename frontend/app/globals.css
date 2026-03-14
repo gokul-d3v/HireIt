@@ -12,15 +12,24 @@
   --font-mono: var(--font-geist-mono);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
-}
-
 body {
   background: var(--background);
   color: var(--foreground);
   font-family: Arial, Helvetica, sans-serif;
+}
+
+/* Put these in @layer base so Tailwind utility classes (text-white, text-gray-900, etc.)
+   in the higher-priority 'utilities' layer can override them when needed. */
+@layer base {
+  input,
+  select,
+  textarea {
+    color: #111827; /* gray-900 — dark text for light backgrounds */
+  }
+
+  input::placeholder,
+  textarea::placeholder {
+    color: #6b7280; /* gray-500 */
+    opacity: 1;
+  }
 }

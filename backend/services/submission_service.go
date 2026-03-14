@@ -296,7 +296,9 @@ func (s *submissionService) GetOrGenerateQuestions(ctx context.Context, assessme
 		return nil, errors.New("assessment not found")
 	}
 
-	// 3. Generate Questions from Rules
+	// 3. Sample Questions based on Rules
+	config, _ := s.qbRepo.GetBankConfig(ctx)
+
 	var generatedQuestions []models.Question
 	for _, rule := range assessment.QuestionRules {
 		filter := bson.M{
@@ -313,6 +315,47 @@ func (s *submissionService) GetOrGenerateQuestions(ctx context.Context, assessme
 		}
 
 		for _, entry := range bankEntries {
+			// Resolve Audio URL: Rule > Bank Config > Question Entry
+			finalAudio := rule.AudioURL
+			if finalAudio == "" && config != nil {
+				for _, c := range config.Categories {
+					if c.Name == rule.Category {
+						if rule.SubCategory == "" {
+							// Check difficulty level in CategoryConfig
+							for _, d := range c.Difficulties {
+								if d.Difficulty == rule.Difficulty {
+									finalAudio = d.AudioURL
+									break
+								}
+							}
+							if finalAudio == "" {
+								finalAudio = c.AudioURL // Fallback to category level
+							}
+						} else {
+							for _, su := range c.SubCategories {
+								if su.Name == rule.SubCategory {
+									// Check difficulty level in SubCategoryConfig
+									for _, d := range su.Difficulties {
+										if d.Difficulty == rule.Difficulty {
+											finalAudio = d.AudioURL
+											break
+										}
+									}
+									if finalAudio == "" {
+										finalAudio = su.AudioURL // Fallback to sub-category level
+									}
+									break
+								}
+							}
+						}
+						break
+					}
+				}
+			}
+			if finalAudio == "" {
+				finalAudio = entry.AudioURL
+			}
+
 			generatedQuestions = append(generatedQuestions, models.Question{
 				ID:            entry.ID,
 				Text:          entry.Text,
@@ -320,6 +363,7 @@ func (s *submissionService) GetOrGenerateQuestions(ctx context.Context, assessme
 				Options:       entry.Options,
 				CorrectAnswer: entry.CorrectAnswer,
 				Points:        rule.PointsPerQuestion,
+				AudioURL:      finalAudio,
 			})
 		}
 	}

@@ -18,7 +18,7 @@ type AssessmentService interface {
 	GetAssessmentByID(ctx context.Context, id string, role string) (*models.Assessment, error)
 	UpdateAssessment(ctx context.Context, id string, assessment *models.Assessment) error
 	DeleteAssessment(ctx context.Context, id string) error
-	SampleQuestions(ctx context.Context, rules []models.QuestionRule) ([]models.QuestionBankEntry, error)
+	SampleQuestions(ctx context.Context, rules []models.QuestionRule) ([]models.Question, error)
 }
 
 type assessmentService struct {
@@ -107,8 +107,11 @@ func (s *assessmentService) DeleteAssessment(ctx context.Context, idStr string) 
 	return s.repo.Update(ctx, id, update)
 }
 
-func (s *assessmentService) SampleQuestions(ctx context.Context, rules []models.QuestionRule) ([]models.QuestionBankEntry, error) {
-	var allQuestions []models.QuestionBankEntry
+func (s *assessmentService) SampleQuestions(ctx context.Context, rules []models.QuestionRule) ([]models.Question, error) {
+	// Fetch Bank Structure for audio fallback
+	config, _ := s.qbRepo.GetBankConfig(ctx)
+
+	var allQuestions []models.Question
 
 	for _, rule := range rules {
 		filter := bson.M{
@@ -119,11 +122,64 @@ func (s *assessmentService) SampleQuestions(ctx context.Context, rules []models.
 			filter["sub_category"] = rule.SubCategory
 		}
 
-		questions, err := s.qbRepo.Sample(ctx, filter, rule.Count)
+		bankEntries, err := s.qbRepo.Sample(ctx, filter, rule.Count)
 		if err != nil {
 			return nil, err
 		}
-		allQuestions = append(allQuestions, questions...)
+		
+		for _, entry := range bankEntries {
+			// Resolve Audio URL: Rule > Bank Config > Question Entry
+			finalAudio := rule.AudioURL
+			if finalAudio == "" && config != nil {
+				for _, c := range config.Categories {
+					if c.Name == rule.Category {
+						if rule.SubCategory == "" {
+							// Check difficulty level in CategoryConfig
+							for _, d := range c.Difficulties {
+								if d.Difficulty == rule.Difficulty {
+									finalAudio = d.AudioURL
+									break
+								}
+							}
+							if finalAudio == "" {
+								finalAudio = c.AudioURL // Fallback to category level
+							}
+						} else {
+							for _, su := range c.SubCategories {
+								if su.Name == rule.SubCategory {
+									// Check difficulty level in SubCategoryConfig
+									for _, d := range su.Difficulties {
+										if d.Difficulty == rule.Difficulty {
+											finalAudio = d.AudioURL
+											break
+										}
+									}
+									if finalAudio == "" {
+										finalAudio = su.AudioURL // Fallback to sub-category level
+									}
+									break
+								}
+							}
+						}
+						break
+					}
+				}
+			}
+			if finalAudio == "" {
+				finalAudio = entry.AudioURL
+			}
+
+			q := models.Question{
+				ID:            entry.ID,
+				Text:          entry.Text,
+				Type:          entry.Type,
+				Options:       entry.Options,
+				CorrectAnswer: entry.CorrectAnswer,
+				Points:        rule.PointsPerQuestion,
+				AudioURL:      finalAudio,
+			}
+			allQuestions = append(allQuestions, q)
+		}
 	}
 
 	return allQuestions, nil

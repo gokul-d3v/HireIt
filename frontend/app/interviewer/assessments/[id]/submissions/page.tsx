@@ -86,7 +86,7 @@ export default function SubmissionsPage() {
             <div className="max-w-6xl mx-auto">
                 <button
                     onClick={() => router.back()}
-                    className="flex items-center text-gray-500 hover:text-gray-900 mb-6"
+                    className="flex items-center text-gray-700 font-bold hover:text-gray-900 mb-6 transition-colors"
                 >
                     <ArrowLeft size={20} className="mr-2" />
                     Back to Assessments
@@ -95,14 +95,14 @@ export default function SubmissionsPage() {
                 <div className="flex justify-between items-center mb-6">
                     <div>
                         <h1 className="text-2xl font-bold text-gray-900">Assessment Submissions</h1>
-                        <p className="text-gray-500">View candidate performance and results.</p>
+                        <p className="text-gray-700 font-medium">View candidate performance and results.</p>
                     </div>
                 </div>
 
                 <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
                     <div className="overflow-x-auto">
                         <table className="w-full text-left">
-                            <thead className="bg-gray-50 text-gray-600 font-medium border-b border-gray-200">
+                            <thead className="bg-gray-50 text-gray-800 font-bold border-b border-gray-200">
                                 <tr>
                                     <th className="p-4">Candidate</th>
                                     <th className="p-4">Status</th>
@@ -127,25 +127,25 @@ export default function SubmissionsPage() {
                                                     className="text-left group/name"
                                                 >
                                                     <div className="font-bold text-gray-900 group-hover/name:text-indigo-600 transition-colors">{sub.candidate_name || "Unknown"}</div>
-                                                    <div className="text-sm text-gray-500">{sub.candidate_email}</div>
+                                                    <div className="text-sm text-gray-600 font-medium">{sub.candidate_email}</div>
                                                 </button>
                                                 {sub.candidate_phone && (
-                                                    <div className="text-xs text-gray-400 flex items-center gap-1 mt-1">
+                                                    <div className="text-xs text-gray-500 font-bold flex items-center gap-1 mt-1">
                                                         <Phone size={12} /> {sub.candidate_phone}
                                                     </div>
                                                 )}
                                             </td>
                                             <td className="p-4">
-                                                <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${sub.status === 'submitted' || sub.status === 'completed' ? 'bg-green-100 text-green-800' : 'bg-yellow-100 text-yellow-800'
+                                                <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-bold ${sub.status === 'submitted' || sub.status === 'completed' ? 'bg-green-100 text-green-800' : 'bg-yellow-100 text-yellow-800'
                                                     }`}>
                                                     {sub.status}
                                                 </span>
                                             </td>
-                                            <td className="p-4 text-gray-900 font-bold">{sub.score}</td>
-                                            <td className="p-4 text-gray-600">
+                                            <td className="p-4 text-gray-900 font-black">{sub.score}</td>
+                                            <td className="p-4 text-gray-800 font-medium">
                                                 {new Date(sub.submitted_at).toLocaleString()}
                                             </td>
-                                             <td className="p-4 text-gray-600 text-right font-medium">
+                                             <td className="p-4 text-gray-800 text-right font-bold">
                                                 {formatDuration(sub.started_at, sub.submitted_at)}
                                              </td>
                                         </tr>

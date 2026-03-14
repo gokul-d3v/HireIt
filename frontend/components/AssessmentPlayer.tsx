@@ -18,6 +18,7 @@ interface Question {
     type: "MCQ" | "SUBJECTIVE" | "CODING";
     options: string[];
     points: number;
+    audio_url?: string; // For Listening questions
 }
 
 interface Assessment {
@@ -68,6 +69,7 @@ export default function AssessmentPlayer({ assessmentId, onComplete }: Assessmen
     const isRecordingRef = useRef(false);
     const lastViolationTimeRef = useRef<Record<string, number>>({});
     const [stream, setStream] = useState<MediaStream | null>(null);
+    const questionAudioRef = useRef<HTMLAudioElement | null>(null);
 
     // Snapshot State
     const [snapshots, setSnapshots] = useState<{
@@ -561,6 +563,14 @@ export default function AssessmentPlayer({ assessmentId, onComplete }: Assessmen
          return () => clearTimeout(timer);
     }, [answers, assessment, loggedViolations]);
 
+    // Pause audio clip when navigating to a different question
+    useEffect(() => {
+        if (questionAudioRef.current) {
+            questionAudioRef.current.pause();
+            questionAudioRef.current.currentTime = 0;
+        }
+    }, [currentQuestionIndex]);
+
     const saveProgress = async (overrideViolations?: any[]) => {
         if (!assessment) return;
         const violationsToSave = overrideViolations || loggedViolations;
@@ -732,7 +742,7 @@ export default function AssessmentPlayer({ assessmentId, onComplete }: Assessmen
             <div className="p-8 flex flex-col items-center justify-center text-center">
                 <AlertTriangle className="text-yellow-500 mb-4" size={48} />
                 <h2 className="text-xl font-bold text-gray-900 mb-2">Question Not Found</h2>
-                <p className="text-gray-500 mb-6">Unable to load question {currentQuestionIndex + 1}.</p>
+                <p className="text-gray-600 mb-6 font-medium">Unable to load question {currentQuestionIndex + 1}.</p>
             </div>
         );
     }
@@ -745,7 +755,7 @@ export default function AssessmentPlayer({ assessmentId, onComplete }: Assessmen
                 <div className="bg-white rounded-xl shadow-lg border border-gray-200 p-8 max-w-lg w-full text-center">
                     <ShieldAlert className="text-indigo-600 mx-auto mb-6" size={56} />
                     <h1 className="text-2xl font-bold text-gray-900 mb-2">{assessment.title}</h1>
-                    <p className="text-gray-600 mb-6 text-sm">
+                    <p className="text-gray-700 mb-6 text-sm font-medium leading-relaxed">
                         This is a secure assessment. Once started, you must remain in <strong>Full-Screen Mode</strong>.
                         Do not exit full-screen, switch tabs, or open other applications.
                     </p>
@@ -820,7 +830,7 @@ export default function AssessmentPlayer({ assessmentId, onComplete }: Assessmen
                                 <div className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse"></div>
                                 Secure Session
                             </span>
-                            <span className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Assessment in Progress</span>
+                            <span className="text-[10px] font-bold text-gray-500 uppercase tracking-widest">Assessment in Progress</span>
                         </div>
                     </div>
                 </div>
@@ -839,7 +849,7 @@ export default function AssessmentPlayer({ assessmentId, onComplete }: Assessmen
 
                 <div className="flex items-center gap-4">
                     <div className="text-right">
-                        <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest leading-none mb-1">Violations</p>
+                        <p className="text-[10px] font-bold text-gray-500 uppercase tracking-widest leading-none mb-1">Violations</p>
                         <p className={`text-lg font-black leading-none ${violations > 0 ? 'text-red-600' : 'text-gray-900'}`}>{violations}/3</p>
                     </div>
                 </div>
@@ -855,6 +865,20 @@ export default function AssessmentPlayer({ assessmentId, onComplete }: Assessmen
                             <span className="inline-block px-2 py-1 text-xs font-semibold bg-indigo-50 text-indigo-700 rounded mb-2">
                                 {currentQuestion.type} &bull; {currentQuestion.points} Points
                             </span>
+
+                            {/* Audio Player for Listening questions */}
+                            {currentQuestion.audio_url && (
+                                <div className="mb-5 p-4 bg-gradient-to-r from-indigo-50 to-purple-50 border border-indigo-100 rounded-xl shadow-sm">
+                                    <div className="flex items-center gap-2 mb-2">
+                                        <Mic size={15} className="text-indigo-500" />
+                                        <span className="text-xs font-bold text-indigo-700 uppercase tracking-wider">Listening Passage — Play before answering</span>
+                                    </div>
+                                    <div className="p-3 bg-indigo-50/50 rounded-xl border border-indigo-100 flex items-center gap-3">
+                                        {currentQuestion.audio_url ? <audio src={currentQuestion.audio_url.startsWith("http") ? currentQuestion.audio_url : `${process.env.NEXT_PUBLIC_API_URL || "http://localhost:8080"}${currentQuestion.audio_url}`} controls className="h-8 flex-1" /> : <span className="text-xs text-gray-600 font-medium">No Audio Configured for this Level</span>}
+                                    </div>
+                                </div>
+                            )}
+
                             <h2 className="text-2xl font-medium text-gray-900">{currentQuestion.text}</h2>
                         </div>
 
@@ -892,7 +916,7 @@ export default function AssessmentPlayer({ assessmentId, onComplete }: Assessmen
                         <button
                             onClick={() => setCurrentQuestionIndex(prev => Math.max(0, prev - 1))}
                             disabled={currentQuestionIndex === 0}
-                            className="flex items-center gap-2 px-4 py-2 text-gray-600 hover:text-gray-900 disabled:opacity-50 disabled:cursor-not-allowed"
+                            className="flex items-center gap-2 px-4 py-2 text-gray-700 hover:text-gray-900 font-bold disabled:opacity-50 disabled:cursor-not-allowed"
                         >
                             <ChevronLeft size={20} /> Previous
                         </button>

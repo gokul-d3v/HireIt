@@ -14,14 +14,24 @@ type QuestionBankRepository interface {
 	Create(ctx context.Context, question *models.QuestionBankEntry) (primitive.ObjectID, error)
 	Find(ctx context.Context, filter bson.M, opts *options.FindOptions) ([]models.QuestionBankEntry, error)
 	Sample(ctx context.Context, filter bson.M, size int) ([]models.QuestionBankEntry, error)
+	DeleteByID(ctx context.Context, id primitive.ObjectID) error
+	Update(ctx context.Context, id primitive.ObjectID, question *models.QuestionBankEntry) error
+	CountByFilter(ctx context.Context, filter bson.M) (int64, error)
+
+	SaveBankConfig(ctx context.Context, config *models.QuestionBankConfig) error
+	GetBankConfig(ctx context.Context) (*models.QuestionBankConfig, error)
 }
 
 type mongoQuestionBankRepo struct {
-	collection *mongo.Collection
+	collection       *mongo.Collection
+	configCollection *mongo.Collection
 }
 
-func NewQuestionBankRepository(collection *mongo.Collection) QuestionBankRepository {
-	return &mongoQuestionBankRepo{collection: collection}
+func NewQuestionBankRepository(collection *mongo.Collection, configCollection *mongo.Collection) QuestionBankRepository {
+	return &mongoQuestionBankRepo{
+		collection:       collection,
+		configCollection: configCollection,
+	}
 }
 
 func (r *mongoQuestionBankRepo) Create(ctx context.Context, question *models.QuestionBankEntry) (primitive.ObjectID, error) {
@@ -64,4 +74,43 @@ func (r *mongoQuestionBankRepo) Sample(ctx context.Context, filter bson.M, size 
 		return nil, err
 	}
 	return questions, nil
+}
+
+func (r *mongoQuestionBankRepo) DeleteByID(ctx context.Context, id primitive.ObjectID) error {
+	_, err := r.collection.DeleteOne(ctx, bson.M{"_id": id})
+	return err
+}
+
+func (r *mongoQuestionBankRepo) Update(ctx context.Context, id primitive.ObjectID, question *models.QuestionBankEntry) error {
+	_, err := r.collection.ReplaceOne(ctx, bson.M{"_id": id}, question)
+	return err
+}
+
+func (r *mongoQuestionBankRepo) CountByFilter(ctx context.Context, filter bson.M) (int64, error) {
+	return r.collection.CountDocuments(ctx, filter)
+}
+
+func (r *mongoQuestionBankRepo) SaveBankConfig(ctx context.Context, config *models.QuestionBankConfig) error {
+	// We only keep one config document. Use a fixed ID or just ReplaceOne with upsert.
+	opts := options.Replace().SetUpsert(true)
+
+	// Ensure we use a consistent ID for the singleton config
+	const configID = "default_bank_config"
+	id, _ := primitive.ObjectIDFromHex("507f1f77bcf86cd799439011") // Arbitrary consistent ID
+	config.ID = id
+
+	_, err := r.configCollection.ReplaceOne(ctx, bson.M{"_id": config.ID}, config, opts)
+	return err
+}
+
+func (r *mongoQuestionBankRepo) GetBankConfig(ctx context.Context) (*models.QuestionBankConfig, error) {
+	var config models.QuestionBankConfig
+	err := r.configCollection.FindOne(ctx, bson.M{}).Decode(&config)
+	if err != nil {
+		if err == mongo.ErrNoDocuments {
+			return nil, nil // Not found is okay
+		}
+		return nil, err
+	}
+	return &config, nil
 }

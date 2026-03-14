@@ -19,6 +19,22 @@ interface RuleGroup {
     difficulties: DifficultyRule[];
 }
 
+interface QuestionBankConfig {
+    categories: {
+        name: string;
+        has_sub_categories: boolean;
+        sub_categories: { name: string; difficulties: { difficulty: string; audio_url?: string }[] }[];
+        difficulties: { difficulty: string; audio_url?: string }[];
+    }[];
+}
+
+interface BankConfig {
+    categories: string[];
+    sub_categories: Record<string, string[]>;
+    difficulties: string[];
+    structure?: QuestionBankConfig;
+}
+
 export default function EditAssessmentPage() {
     const router = useRouter();
     const params = useParams();
@@ -33,6 +49,18 @@ export default function EditAssessmentPage() {
     const [ruleGroups, setRuleGroups] = useState<RuleGroup[]>([]);
     const [loading, setLoading] = useState(true);
     const [submitting, setSubmitting] = useState(false);
+    const [bankConfig, setBankConfig] = useState<BankConfig>({ categories: [], sub_categories: {}, difficulties: [] });
+
+    useEffect(() => {
+        // Fetch dynamic bank config
+        const token = localStorage.getItem("token");
+        const headers: Record<string, string> = token ? { Authorization: `Bearer ${token}` } : {};
+        const base = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8080";
+        fetch(`${base}/api/admin/questions/config`, { headers })
+            .then(r => r.json())
+            .then(d => setBankConfig(d))
+            .catch(() => { /* non-fatal */ });
+    }, []);
 
     useEffect(() => {
         if (!isLoading && (!isAuthenticated || user?.role !== "interviewer")) {
@@ -85,20 +113,54 @@ export default function EditAssessmentPage() {
         }
     };
 
+    // Derive category options from bankConfig
+    const categoryOptions = Array.from(new Set([
+        ...(bankConfig.structure?.categories?.map(c => c.name) || []),
+        ...(bankConfig.categories || []),
+    ]));
+
+    // Get config for a given category
+    const getCatCfg = (catName: string) =>
+        bankConfig.structure?.categories.find(c => c.name === catName);
+
+    // Get difficulty options for a given category + sub_category
+    const getDifficultyOptions = (catName: string, subCatName: string): string[] => {
+        const catCfg = getCatCfg(catName);
+        if (!catCfg) return ["Easy", "Medium", "Hard"];
+        if (catCfg.has_sub_categories) {
+            const subCfg = catCfg.sub_categories.find(s => s.name === subCatName);
+            return (subCfg?.difficulties || []).map(d => typeof d === "string" ? d : d.difficulty);
+        }
+        return catCfg.difficulties.map(d => typeof d === "string" ? d : d.difficulty);
+    };
+
     const addGroup = () => {
+        const catName = categoryOptions[0] || "Programming";
+        const catCfg = getCatCfg(catName);
+        const defaultSub = catCfg?.has_sub_categories ? (catCfg.sub_categories[0]?.name || "") : undefined;
+        const diffs = getDifficultyOptions(catName, defaultSub || "");
         setRuleGroups([
             ...ruleGroups,
             {
-                category: "Programming",
-                difficulties: [{ difficulty: "Easy", count: 1, points_per_question: 10 }]
+                category: catName,
+                sub_category: defaultSub,
+                difficulties: [{ difficulty: diffs[0] || "Easy", count: 1, points_per_question: 10 }]
             }
         ]);
     };
 
     const updateGroup = (gIndex: number, field: keyof RuleGroup, value: string) => {
         const newGroups = [...ruleGroups];
-        if (field === 'category' && value !== 'Communication') {
-             newGroups[gIndex] = { ...newGroups[gIndex], category: value, sub_category: undefined };
+        if (field === 'category') {
+            const catCfg = getCatCfg(value);
+            const defaultSub = catCfg?.has_sub_categories ? (catCfg.sub_categories[0]?.name || "") : undefined;
+            const diffs = getDifficultyOptions(value, defaultSub || "");
+            newGroups[gIndex] = {
+                ...newGroups[gIndex],
+                category: value,
+                sub_category: defaultSub,
+                difficulties: [{ difficulty: diffs[0] || "Easy", count: 1, points_per_question: 10 }]
+            };
         } else {
             newGroups[gIndex] = { ...newGroups[gIndex], [field]: value };
         }
@@ -112,8 +174,10 @@ export default function EditAssessmentPage() {
     };
 
     const addDifficulty = (gIndex: number) => {
+        const group = ruleGroups[gIndex];
+        const diffs = getDifficultyOptions(group.category, group.sub_category || "");
         const newGroups = [...ruleGroups];
-        newGroups[gIndex].difficulties.push({ difficulty: "Medium", count: 1, points_per_question: 10 });
+        newGroups[gIndex].difficulties.push({ difficulty: diffs[0] || "Medium", count: 1, points_per_question: 10 });
         setRuleGroups(newGroups);
     };
 
@@ -189,7 +253,7 @@ export default function EditAssessmentPage() {
             <div className="max-w-4xl mx-auto">
                 <button
                     onClick={() => router.back()}
-                    className="flex items-center text-gray-500 hover:text-gray-900 mb-6 transition-colors"
+                    className="flex items-center text-gray-700 font-bold hover:text-gray-900 mb-6 transition-colors"
                 >
                     <ArrowLeft size={20} className="mr-2" />
                     Back to Assessments
@@ -199,10 +263,10 @@ export default function EditAssessmentPage() {
                     <div className="p-6 border-b border-gray-200 bg-gray-50 flex justify-between items-center">
                         <div>
                             <h1 className="text-2xl font-bold text-gray-900">Edit Assessment</h1>
-                            <p className="text-gray-500">Update configuration and question sampling rules.</p>
+                            <p className="text-gray-700 font-medium">Update configuration and question sampling rules.</p>
                         </div>
                         <div className="text-right">
-                             <div className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-1">Status</div>
+                             <div className="text-xs font-bold text-gray-600 uppercase tracking-widest mb-1">Status</div>
                              <span className="px-3 py-1 bg-indigo-100 text-indigo-700 rounded-full text-xs font-bold tracking-wide">DRAFT</span>
                         </div>
                     </div>
@@ -223,7 +287,7 @@ export default function EditAssessmentPage() {
                             <textarea
                                 value={description}
                                 onChange={(e) => setDescription(e.target.value)}
-                                className="w-full p-3 text-gray-700 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-100 focus:border-indigo-600 focus:outline-none transition-all resize-none"
+                                className="w-full p-3 text-gray-900 font-medium border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-100 focus:border-indigo-600 focus:outline-none transition-all resize-none placeholder:text-gray-400"
                                 rows={3}
                             />
                         </div>
@@ -270,7 +334,7 @@ export default function EditAssessmentPage() {
                     <div className="flex justify-between items-center mb-6">
                         <div>
                             <h2 className="text-2xl font-bold text-gray-900">Question Sampling Rules</h2>
-                            <p className="text-gray-500">Define how questions are picked for each candidate.</p>
+                            <p className="text-gray-700 font-medium">Define how questions are picked for each candidate.</p>
                         </div>
                         <button
                             onClick={addGroup}
@@ -283,118 +347,134 @@ export default function EditAssessmentPage() {
                     <div className="space-y-6">
                         {ruleGroups.length === 0 ? (
                             <div className="text-center py-12 bg-gray-50 rounded-xl border-2 border-dashed border-gray-200">
-                                 <Plus size={32} className="mx-auto text-gray-300 mb-2" />
-                                 <p className="text-gray-500">No sampling rules defined yet.</p>
+                                 <Plus size={32} className="mx-auto text-gray-400 mb-2" />
+                                 <p className="text-gray-700 font-bold">No sampling rules defined yet.</p>
                             </div>
                         ) : (
-                            ruleGroups.map((group, gIdx) => (
-                                <div key={gIdx} className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 flex flex-col gap-4 relative group hover:border-indigo-300 transition-all">
-                                    <button
-                                        onClick={() => removeGroup(gIdx)}
-                                        className="absolute top-4 right-4 p-2 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors opacity-0 group-hover:opacity-100"
-                                        title="Remove Rule Group"
-                                    >
-                                        <Trash2 size={18} />
-                                    </button>
+                            ruleGroups.map((group, gIdx) => {
+                                const catCfg = getCatCfg(group.category);
+                                const hasSubCats = catCfg?.has_sub_categories ?? false;
+                                const subCatOptions = catCfg?.sub_categories || [];
+                                const diffOptions = getDifficultyOptions(group.category, group.sub_category || "");
 
-                                    <div className="flex flex-wrap gap-4 items-end pr-10">
-                                        <div className="flex-1 min-w-[200px]">
-                                            <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">Category</label>
-                                            <select
-                                                value={group.category}
-                                                onChange={(e) => updateGroup(gIdx, 'category', e.target.value)}
-                                                className="w-full p-2.5 text-gray-900 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-100 focus:border-indigo-500 focus:outline-none bg-white transition-all"
-                                            >
-                                                <option value="Programming">Programming</option>
-                                                <option value="Communication">Communication</option>
-                                                <option value="Aptitude">Aptitude</option>
-                                            </select>
-                                        </div>
+                                return (
+                                    <div key={gIdx} className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 flex flex-col gap-4 relative group hover:border-indigo-300 transition-all">
+                                        <button
+                                            onClick={() => removeGroup(gIdx)}
+                                            className="absolute top-4 right-4 p-2 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors opacity-0 group-hover:opacity-100"
+                                            title="Remove Rule Group"
+                                        >
+                                            <Trash2 size={18} />
+                                        </button>
 
-                                        {group.category === "Communication" && (
-                                            <div className="flex-1 min-w-[150px]">
-                                                <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">Sub Category</label>
+                                        <div className="flex flex-wrap gap-4 items-end pr-10">
+                                            {/* Category */}
+                                            <div className="flex-1 min-w-[200px]">
+                                                <label className="block text-xs font-bold text-gray-600 uppercase tracking-wider mb-2">Category</label>
                                                 <select
-                                                    value={group.sub_category || ""}
-                                                    onChange={(e) => updateGroup(gIdx, 'sub_category', e.target.value)}
-                                                    className="w-full p-2.5 text-gray-900 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-100 focus:border-indigo-500 focus:outline-none bg-white transition-all"
+                                                    value={group.category}
+                                                    onChange={(e) => updateGroup(gIdx, 'category', e.target.value)}
+                                                    className="w-full p-2.5 font-bold text-gray-900 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-100 focus:border-indigo-500 focus:outline-none bg-white transition-all"
                                                 >
-                                                    <option value="">Any</option>
-                                                    <option value="Passage">Passage</option>
-                                                    <option value="Grammar">Grammar</option>
-                                                    <option value="Listening">Listening</option>
+                                                    {categoryOptions.map(c => (
+                                                        <option key={c} value={c}>{c}</option>
+                                                    ))}
                                                 </select>
                                             </div>
-                                        )}
-                                    </div>
 
-                                    <div className="mt-4 bg-gray-50 rounded-lg p-4 border border-gray-100">
-                                        <div className="flex justify-between items-center mb-4">
-                                            <h4 className="text-sm font-semibold text-gray-700">Difficulties & Questions</h4>
-                                        </div>
-                                        <div className="space-y-3">
-                                            {group.difficulties.map((diff, dIdx) => (
-                                                <div key={dIdx} className="flex flex-wrap gap-4 items-end">
-                                                    <div className="w-32">
-                                                        <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">Difficulty</label>
-                                                        <select
-                                                            value={diff.difficulty}
-                                                            onChange={(e) => updateDifficulty(gIdx, dIdx, 'difficulty', e.target.value)}
-                                                            className="w-full p-2.5 text-gray-900 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-100 focus:border-indigo-500 focus:outline-none bg-white transition-all"
-                                                        >
-                                                            <option value="Easy">Easy</option>
-                                                            <option value="Medium">Medium</option>
-                                                            <option value="Hard">Hard</option>
-                                                        </select>
-                                                    </div>
-
-                                                    <div className="w-24">
-                                                        <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">Count</label>
-                                                        <input
-                                                            type="text"
-                                                            value={diff.count}
-                                                            onChange={(e) => updateDifficulty(gIdx, dIdx, 'count', e.target.value)}
-                                                            className="w-full p-2.5 text-center font-bold text-gray-900 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-100 focus:border-indigo-500 focus:outline-none bg-white transition-all"
-                                                        />
-                                                    </div>
-
-                                                    <div className="w-32">
-                                                        <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">Pts / Q</label>
-                                                        <input
-                                                            type="text"
-                                                            value={diff.points_per_question}
-                                                            onChange={(e) => updateDifficulty(gIdx, dIdx, 'points_per_question', e.target.value)}
-                                                            className="w-full p-2.5 text-center font-bold text-gray-900 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-100 focus:border-indigo-500 focus:outline-none bg-white transition-all"
-                                                        />
-                                                    </div>
-                                                    
-                                                    <button
-                                                        onClick={() => removeDifficulty(gIdx, dIdx)}
-                                                        className="p-2.5 text-red-400 hover:text-red-600 hover:bg-white rounded-lg transition-all mb-[1px]"
-                                                        title="Remove Difficulty"
+                                            {/* Sub-category — only shown if category has sub-categories */}
+                                            {hasSubCats && (
+                                                <div className="flex-1 min-w-[150px]">
+                                                    <label className="block text-xs font-bold text-gray-600 uppercase tracking-wider mb-2">Sub Category</label>
+                                                    <select
+                                                        value={group.sub_category || ""}
+                                                        onChange={(e) => updateGroup(gIdx, 'sub_category', e.target.value)}
+                                                        className="w-full p-2.5 font-bold text-gray-900 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-100 focus:border-indigo-500 focus:outline-none bg-white transition-all"
                                                     >
-                                                        <Trash2 size={18} />
-                                                    </button>
+                                                        {subCatOptions.map(s => (
+                                                            <option key={s.name} value={s.name}>{s.name}</option>
+                                                        ))}
+                                                    </select>
                                                 </div>
-                                            ))}
+                                            )}
                                         </div>
-                                        
-                                        <button
-                                            onClick={() => addDifficulty(gIdx)}
-                                            className="mt-4 flex items-center gap-2 text-sm text-indigo-600 font-semibold hover:text-indigo-800 transition-colors"
-                                        >
-                                            <Plus size={16} /> Add Difficulty Level
-                                        </button>
-                                    </div>
 
-                                    <div className="flex-none w-full bg-indigo-50 rounded-lg p-3 border border-indigo-100 text-sm text-indigo-900 flex justify-between items-center mt-2">
-                                        <span>Total for {group.category} {group.sub_category ? ` - ${group.sub_category}` : ''}</span>
-                                        <span className="font-bold text-indigo-700">
-                                            Pts: {group.difficulties.reduce((sum, d) => sum + (Number(d.count) * Number(d.points_per_question)), 0)} 
-                                        </span>
+                                        <div className="mt-2 bg-gray-50 rounded-lg p-4 border border-gray-100">
+                                            <div className="flex justify-between items-center mb-4">
+                                                <h4 className="text-sm font-semibold text-gray-700">Difficulties &amp; Questions</h4>
+                                            </div>
+                                            <div className="space-y-3">
+                                                {group.difficulties.map((diff, dIdx) => (
+                                                    <div key={dIdx} className="flex flex-wrap gap-4 items-end">
+                                                        <div className="w-36">
+                                                            <label className="block text-xs font-bold text-gray-600 uppercase tracking-wider mb-2">Difficulty</label>
+                                                            <select
+                                                                value={diff.difficulty}
+                                                                onChange={(e) => updateDifficulty(gIdx, dIdx, 'difficulty', e.target.value)}
+                                                                className="w-full p-2.5 font-bold text-gray-900 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-100 focus:border-indigo-500 focus:outline-none bg-white transition-all"
+                                                            >
+                                                                {diffOptions.length > 0 ? (
+                                                                    diffOptions.map(d => (
+                                                                        <option key={d} value={d}>{d}</option>
+                                                                    ))
+                                                                ) : (
+                                                                    <>
+                                                                        <option value="Easy">Easy</option>
+                                                                        <option value="Medium">Medium</option>
+                                                                        <option value="Hard">Hard</option>
+                                                                    </>
+                                                                )}
+                                                            </select>
+                                                        </div>
+
+                                                        <div className="w-24">
+                                                            <label className="block text-xs font-bold text-gray-600 uppercase tracking-wider mb-2">Count</label>
+                                                            <input
+                                                                type="text"
+                                                                value={diff.count}
+                                                                onChange={(e) => updateDifficulty(gIdx, dIdx, 'count', e.target.value)}
+                                                                className="w-full p-2.5 text-center font-bold text-gray-900 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-100 focus:border-indigo-500 focus:outline-none bg-white transition-all"
+                                                            />
+                                                        </div>
+
+                                                        <div className="w-32">
+                                                            <label className="block text-xs font-bold text-gray-600 uppercase tracking-wider mb-2">Pts / Q</label>
+                                                            <input
+                                                                type="text"
+                                                                value={diff.points_per_question}
+                                                                onChange={(e) => updateDifficulty(gIdx, dIdx, 'points_per_question', e.target.value)}
+                                                                className="w-full p-2.5 text-center font-bold text-gray-900 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-100 focus:border-indigo-500 focus:outline-none bg-white transition-all"
+                                                            />
+                                                        </div>
+                                                        
+                                                        <button
+                                                            onClick={() => removeDifficulty(gIdx, dIdx)}
+                                                            className="p-2.5 text-red-400 hover:text-red-600 hover:bg-white rounded-lg transition-all mb-[1px]"
+                                                            title="Remove Difficulty"
+                                                        >
+                                                            <Trash2 size={18} />
+                                                        </button>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                            
+                                            <button
+                                                onClick={() => addDifficulty(gIdx)}
+                                                className="mt-4 flex items-center gap-2 text-sm text-indigo-600 font-semibold hover:text-indigo-800 transition-colors"
+                                            >
+                                                <Plus size={16} /> Add Difficulty Level
+                                            </button>
+                                        </div>
+
+                                        <div className="flex-none w-full bg-indigo-50 rounded-lg p-3 border border-indigo-100 text-sm text-indigo-900 flex justify-between items-center mt-2">
+                                            <span>Total for {group.category} {group.sub_category ? ` → ${group.sub_category}` : ''}</span>
+                                            <span className="font-bold text-indigo-700">
+                                                Pts: {group.difficulties.reduce((sum, d) => sum + (Number(d.count) * Number(d.points_per_question)), 0)} 
+                                            </span>
+                                        </div>
                                     </div>
-                                </div>
-                            ))
+                                );
+                            })
                         )}
 
                         <div className={`mt-6 p-6 rounded-xl flex items-center justify-between border-2 border-dashed ${currentPointsTotal === Number(totalMarks) ? 'bg-green-50 border-green-200 text-green-800' : 'bg-orange-50 border-orange-200 text-orange-800'} transition-all`}>
@@ -421,7 +501,7 @@ export default function EditAssessmentPage() {
                         disabled={submitting}
                         className="flex items-center gap-2 px-8 py-4 bg-indigo-600 text-white rounded-xl font-bold hover:bg-indigo-700 shadow-xl shadow-indigo-200 transition-all active:scale-95 disabled:opacity-70"
                     >
-                        {submitting ? "Saving Greatness..." : (
+                        {submitting ? "Saving..." : (
                             <>
                                 <Save size={20} /> Update Assessment
                             </>

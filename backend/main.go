@@ -34,6 +34,14 @@ func main() {
 		logger.Warn("No .env file found (expected in production)")
 	}
 
+	cwd, _ := os.Getwd()
+	logger.Infof("Server CWD: %s", cwd)
+
+	// Ensure static directories exist
+	if err := os.MkdirAll("./public/audio", 0755); err != nil {
+		logger.Errorf("Failed to create public/audio directory: %v", err)
+	}
+
 	// Set Gin mode
 	gin.SetMode(gin.ReleaseMode)
 
@@ -85,6 +93,7 @@ func main() {
 	submissionCollection := client.Database("broassess").Collection("submissions")
 	interviewCollection := client.Database("broassess").Collection("interviews")
 	questionBankCollection := client.Database("broassess").Collection("question_bank")
+	questionBankConfigCollection := client.Database("broassess").Collection("question_bank_config")
 
 	// Create Indexes
 	_, _ = submissionCollection.Indexes().CreateOne(ctx, mongo.IndexModel{
@@ -97,7 +106,7 @@ func main() {
 	assessRepo := repositories.NewAssessmentRepository(assessmentCollection)
 	subRepo := repositories.NewSubmissionRepository(submissionCollection)
 	interviewRepo := repositories.NewInterviewRepository(interviewCollection)
-	qbRepo := repositories.NewQuestionBankRepository(questionBankCollection)
+	qbRepo := repositories.NewQuestionBankRepository(questionBankCollection, questionBankConfigCollection)
 
 	// Initialize Services
 	authService := services.NewAuthService(userRepo)
@@ -133,8 +142,19 @@ func main() {
 	// Setup Routes
 	routes.SetupRoutes(router, authCtrl, googleCtrl, youtubeCtrl, publicCtrl, assessCtrl, interviewCtrl)
 
-	// Admin Question Import
+	// Admin Question Bank routes
 	router.POST("/api/admin/questions/import", questionBankController.ImportQuestions)
+	router.POST("/api/admin/questions/structure", questionBankController.SaveStructure)
+	router.GET("/api/admin/questions/config", questionBankController.GetConfig)
+	router.GET("/api/admin/questions", questionBankController.ListQuestions)
+	router.GET("/api/admin/questions/count", questionBankController.CountQuestions)
+	router.POST("/api/admin/questions/upload-csv", questionBankController.UploadCSV)
+	router.PUT("/api/admin/questions/:id", questionBankController.UpdateQuestion)
+	router.DELETE("/api/admin/questions/:id", questionBankController.DeleteQuestion)
+	// Audio upload for Listening questions
+	router.POST("/api/admin/audio-upload", questionBankController.UploadAudio)
+	// Serve uploaded audio files
+	router.Static("/audio", "./public/audio")
 
 	router.GET("/api/telegram/image/:fileId", teleProxyCtrl.GetTelegramImage)
 

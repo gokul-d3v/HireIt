@@ -32,11 +32,11 @@ export default function AssessmentSidebar({
             {videoRef && (
                 <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
                     <div className="bg-gray-50 px-4 py-2 border-b border-gray-100 flex justify-between items-center">
-                        <span className="text-[10px] font-bold text-gray-500 uppercase tracking-widest flex items-center gap-1.5">
+                        <span className="text-[10px] font-bold text-gray-700 uppercase tracking-widest flex items-center gap-1.5">
                             <div className="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse"></div>
                             Live Proctoring
                         </span>
-                        <Mic size={12} className="text-gray-400" />
+                        <Mic size={12} className="text-gray-500" />
                     </div>
                     <div className="relative aspect-video bg-black">
                         <video
@@ -84,7 +84,7 @@ export default function AssessmentSidebar({
                                     ? "bg-red-600 text-white ring-4 ring-red-100 scale-110 z-10" 
                                     : isAnswered 
                                     ? "bg-green-500 text-white hover:bg-green-600" 
-                                    : "bg-gray-100 text-gray-500 hover:bg-gray-200"
+                                    : "bg-gray-200 text-gray-700 hover:bg-gray-300 font-bold"
                                 }`}
                             >
                                 {idx + 1}
@@ -109,10 +109,10 @@ export default function AssessmentSidebar({
                         </span>
                     </div>
                     <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg border border-gray-100">
-                        <div className="flex items-center gap-2 text-gray-600 font-semibold text-sm">
+                        <div className="flex items-center gap-2 text-gray-700 font-bold text-sm">
                             <HelpCircle size={16} /> Not Attempted
                         </div>
-                        <span className="bg-gray-400 text-white px-3 py-0.5 rounded-full text-xs font-black">
+                        <span className="bg-gray-600 text-white px-3 py-0.5 rounded-full text-xs font-black">
                             {unansweredCount}
                         </span>
                     </div>

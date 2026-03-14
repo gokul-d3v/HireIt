@@ -104,7 +104,7 @@ export default function InterviewerAssessmentsPage() {
                 <div className="flex justify-between items-center mb-8">
                     <div>
                         <h1 className="text-2xl font-bold text-gray-900">My Assessments</h1>
-                        <p className="text-gray-500">Manage your technical assessments and view submissions.</p>
+                        <p className="text-gray-700 font-medium">Manage your technical assessments and view submissions.</p>
                     </div>
                     <button
                         onClick={() => router.push("/interviewer/assessments/create")}
@@ -117,20 +117,20 @@ export default function InterviewerAssessmentsPage() {
                 <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden mb-6">
                     <div className="p-4 border-b border-gray-200 flex gap-4">
                         <div className="relative flex-1">
-                            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={20} />
+                            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-600" size={20} />
                             <input
                                 type="text"
                                 placeholder="Search assessments..."
                                 value={searchTerm}
                                 onChange={(e) => setSearchTerm(e.target.value)}
-                                className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+                                className="w-full pl-10 pr-4 py-2 border border-gray-400 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 text-gray-900 font-bold placeholder:text-gray-400"
                             />
                         </div>
                     </div>
 
                     <div className="overflow-x-auto">
                         <table className="w-full text-left">
-                            <thead className="bg-gray-50 text-gray-600 font-medium border-b border-gray-200">
+                            <thead className="bg-gray-50 text-gray-800 font-bold border-b border-gray-200">
                                 <tr>
                                     <th className="p-4">Title</th>
                                     <th className="p-4">Questions</th>
@@ -142,7 +142,7 @@ export default function InterviewerAssessmentsPage() {
                             <tbody className="divide-y divide-gray-100">
                                 {filteredAssessments.length === 0 ? (
                                     <tr>
-                                        <td colSpan={5} className="p-8 text-center text-gray-500">
+                                        <td colSpan={5} className="p-12 text-center text-gray-600 font-bold">
                                             No assessments found. Create your first one!
                                         </td>
                                     </tr>
@@ -159,13 +159,13 @@ export default function InterviewerAssessmentsPage() {
                                                         </span>
                                                     )}
                                                 </td>
-                                                <td className="p-4 text-gray-600">
+                                                <td className="p-4 text-gray-800 font-medium font-medium">
                                                     {assessment.question_rules?.reduce((sum, r) => sum + (Number(r.count) || 0), 0) || 0} questions
                                                 </td>
-                                                <td className="p-4 text-gray-600 flex items-center gap-1">
+                                                <td className="p-4 text-gray-800 font-medium flex items-center gap-1">
                                                     <Clock size={16} /> {assessment.duration} mins
                                                 </td>
-                                                <td className="p-4 text-gray-600">
+                                                <td className="p-4 text-gray-800 font-medium">
                                                     {new Date(assessment.created_at).toLocaleDateString()}
                                                 </td>
                                                 <td className="p-4 text-right">

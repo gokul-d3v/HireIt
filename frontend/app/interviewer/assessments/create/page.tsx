@@ -1,10 +1,11 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useRef, useEffect } from "react";
+
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/context/AuthContext";
 import { apiRequest } from "@/lib/api";
-import { Plus, Trash2, Save, ArrowLeft, ArrowRight, Clock, Award, Target, RefreshCw, FileText, CheckCircle } from "lucide-react";
+import { Plus, Trash2, Save, ArrowLeft, ArrowRight, Clock, Award, Target, RefreshCw, FileText, CheckCircle, Music, Upload, X, AlertTriangle } from "lucide-react";
 import { useToast } from "@/components/ui/Toast";
 import { Modal } from "@/components/ui/Modal";
 
@@ -17,6 +18,9 @@ interface DifficultyRule {
 interface SubGroup {
     sub_category: string;
     difficulties: DifficultyRule[];
+    audio_url?: string;
+    audio_uploading?: boolean;
+    show_audio_upload?: boolean; // New UI state
 }
 
 interface RuleGroup {
@@ -24,18 +28,40 @@ interface RuleGroup {
     sub_groups: SubGroup[];
 }
 
-interface QuestionRule {
-    category: string;
-    sub_category?: string;
-    difficulty: string;
-    count: number;
-    points_per_question: number;
+interface QuestionBankConfig {
+    categories: {
+        name: string;
+        has_sub_categories: boolean;
+        sub_categories: { name: string; difficulties: { difficulty: string; audio_url?: string }[] }[];
+        difficulties: { difficulty: string; audio_url?: string }[];
+    }[];
+}
+
+interface BankConfig {
+    categories: string[];
+    sub_categories: Record<string, string[]>;
+    difficulties: string[];
+    structure?: QuestionBankConfig;
 }
 
 export default function CreateAssessmentPage() {
     const router = useRouter();
     const { user, isAuthenticated, isLoading } = useAuth();
     const { showToast } = useToast();
+    const audioInputRefs = useRef<Record<string, HTMLInputElement | null>>({});
+    const [bankConfig, setBankConfig] = useState<BankConfig>({ categories: [], sub_categories: {}, difficulties: [] });
+
+    useEffect(() => {
+        // Fetch dynamic config from question bank
+        const token = localStorage.getItem("token");
+        const headers: Record<string, string> = token ? { Authorization: `Bearer ${token}` } : {};
+
+        const base = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8080";
+        fetch(`${base}/api/admin/questions/config`, { headers })
+            .then(r => r.json())
+            .then(d => setBankConfig(d))
+            .catch(() => { /* non-fatal */ });
+    }, []);
 
     // Wizard state
     const [step, setStep] = useState(1);
@@ -54,6 +80,9 @@ export default function CreateAssessmentPage() {
     // Preview questions state
     const [previewQuestions, setPreviewQuestions] = useState<any[]>([]);
     const [fetchingPreview, setFetchingPreview] = useState(false);
+    // Bank count warnings per slot (key: "category|||sub|||difficulty")
+    const [bankCounts, setBankCounts] = useState<Record<string, number>>({});
+    const [fetchingCounts, setFetchingCounts] = useState(false);
 
     // Auth protection
     if (isLoading) return <div className="min-h-screen flex items-center justify-center bg-gray-50 text-gray-600">Loading...</div>;
@@ -62,15 +91,32 @@ export default function CreateAssessmentPage() {
         return null;
     }
 
+    const categoryOptions = Array.from(new Set([
+        ...(bankConfig.structure?.categories?.map(c => c.name) || []),
+        ...(bankConfig.categories || []),
+        "Programming", "Communication", "Aptitude"
+    ]));
+
     const addGroup = () => {
+        const catName = categoryOptions[0] || "Programming";
+        const catCfg = bankConfig.structure?.categories.find(c => c.name === catName);
+        
+        const defaultSub = catCfg?.has_sub_categories ? (catCfg.sub_categories[0]?.name || "") : "";
+        const firstSubDiff = catCfg?.sub_categories[0]?.difficulties[0];
+        const firstCatDiff = catCfg?.difficulties[0];
+        
+        const defaultDiff = catCfg?.has_sub_categories 
+            ? (typeof firstSubDiff === "string" ? firstSubDiff : firstSubDiff?.difficulty || "Easy")
+            : (typeof firstCatDiff === "string" ? firstCatDiff : firstCatDiff?.difficulty || "Easy");
+
         setRuleGroups([
             ...ruleGroups,
             {
-                category: "Programming",
+                category: catName,
                 sub_groups: [
                     {
-                        sub_category: "",
-                        difficulties: [{ difficulty: "Easy", count: 1, points_per_question: 10 }]
+                        sub_category: defaultSub,
+                        difficulties: [{ difficulty: defaultDiff, count: 1, points_per_question: 10 }]
                     }
                 ]
             }
@@ -80,6 +126,18 @@ export default function CreateAssessmentPage() {
     const updateGroup = (gIndex: number, field: keyof RuleGroup, value: string) => {
         const newGroups = [...ruleGroups];
         newGroups[gIndex] = { ...newGroups[gIndex], [field]: value };
+        
+        // If category changed, check if it has sub-categories
+        if (field === 'category') {
+            const catCfg = bankConfig.structure?.categories.find(c => c.name === value);
+            if (catCfg && !catCfg.has_sub_categories) {
+                // Force sub_category to empty string for all sub_groups if non-sub-category selected
+                newGroups[gIndex].sub_groups = newGroups[gIndex].sub_groups.map(sg => ({
+                    ...sg,
+                    sub_category: ""
+                }));
+            }
+        }
         setRuleGroups(newGroups);
     };
 
@@ -90,10 +148,20 @@ export default function CreateAssessmentPage() {
     };
 
     const addSubGroup = (gIndex: number) => {
+        const catName = ruleGroups[gIndex].category;
+        const catCfg = bankConfig.structure?.categories.find(c => c.name === catName);
+        const defaultSub = catCfg?.sub_categories[0]?.name || "";
+        const firstSubDiff = catCfg?.sub_categories[0]?.difficulties[0];
+        const firstCatDiff = catCfg?.difficulties[0];
+
+        const defaultDiff = catCfg?.has_sub_categories 
+            ? (typeof firstSubDiff === "string" ? firstSubDiff : firstSubDiff?.difficulty || "Easy")
+            : (typeof firstCatDiff === "string" ? firstCatDiff : firstCatDiff?.difficulty || "Easy");
+
         const newGroups = [...ruleGroups];
         newGroups[gIndex].sub_groups.push({
-            sub_category: "",
-            difficulties: [{ difficulty: "Easy", count: 1, points_per_question: 10 }]
+            sub_category: defaultSub,
+            difficulties: [{ difficulty: defaultDiff, count: 1, points_per_question: 10 }]
         });
         setRuleGroups(newGroups);
     };
@@ -101,6 +169,39 @@ export default function CreateAssessmentPage() {
     const updateSubGroup = (gIndex: number, sIndex: number, value: string) => {
         const newGroups = [...ruleGroups];
         newGroups[gIndex].sub_groups[sIndex].sub_category = value;
+        setRuleGroups(newGroups);
+    };
+
+    const uploadSubGroupAudio = async (gIndex: number, sIndex: number, file: File) => {
+        const newGroups = [...ruleGroups];
+        newGroups[gIndex].sub_groups[sIndex].audio_uploading = true;
+        setRuleGroups([...newGroups]);
+
+        try {
+            const formData = new FormData();
+            formData.append("audio", file);
+            const token = localStorage.getItem("token");
+            const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || "http://localhost:8080"}/api/admin/audio-upload`, {
+                method: "POST",
+                headers: token ? { "Authorization": `Bearer ${token}` } : {},
+                body: formData,
+            });
+            if (!res.ok) throw new Error("Upload failed");
+            const data = await res.json();
+            newGroups[gIndex].sub_groups[sIndex].audio_url = data.url;
+            showToast("Audio uploaded successfully!", "success");
+        } catch {
+            showToast("Failed to upload audio file", "error");
+        } finally {
+            newGroups[gIndex].sub_groups[sIndex].audio_uploading = false;
+            setRuleGroups([...newGroups]);
+        }
+    };
+
+
+    const toggleAudio = (gIdx: number, sIdx: number) => {
+        const newGroups = [...ruleGroups];
+        newGroups[gIdx].sub_groups[sIdx].show_audio_upload = !newGroups[gIdx].sub_groups[sIdx].show_audio_upload;
         setRuleGroups(newGroups);
     };
 
@@ -114,8 +215,24 @@ export default function CreateAssessmentPage() {
     };
 
     const addDifficulty = (gIndex: number, sIndex: number) => {
+        const catName = ruleGroups[gIndex].category;
+        const subName = ruleGroups[gIndex].sub_groups[sIndex].sub_category;
+        const catCfg = bankConfig.structure?.categories.find(c => c.name === catName);
+        let defaultDiff = "Medium";
+
+        if (catCfg) {
+            if (catCfg.has_sub_categories) {
+                const subCfg = catCfg.sub_categories.find(s => s.name === subName);
+                const firstDiff = subCfg?.difficulties[0];
+                defaultDiff = typeof firstDiff === "string" ? firstDiff : firstDiff?.difficulty || "Medium";
+            } else {
+                const firstDiff = catCfg.difficulties[0];
+                defaultDiff = typeof firstDiff === "string" ? firstDiff : firstDiff?.difficulty || "Medium";
+            }
+        }
+
         const newGroups = [...ruleGroups];
-        newGroups[gIndex].sub_groups[sIndex].difficulties.push({ difficulty: "Medium", count: 1, points_per_question: 10 });
+        newGroups[gIndex].sub_groups[sIndex].difficulties.push({ difficulty: defaultDiff, count: 1, points_per_question: 10 });
         setRuleGroups(newGroups);
     };
 
@@ -153,16 +270,17 @@ export default function CreateAssessmentPage() {
                 sub_category: sg.sub_category,
                 difficulty: d.difficulty,
                 count: Number(d.count),
-                points_per_question: Number(d.points_per_question)
+                points_per_question: Number(d.points_per_question),
+                audio_url: sg.audio_url
             }))
         )
     );
 
-    const totalQuestions = flattenedRules.reduce((sum, r) => sum + r.count, 0);
-    const currentPointsTotal = flattenedRules.reduce((sum, r) => sum + (r.count * r.points_per_question), 0);
+    const totalQuestions = flattenedRules.reduce((sum: number, r) => sum + r.count, 0);
+    const currentPointsTotal = flattenedRules.reduce((sum: number, r) => sum + (r.count * r.points_per_question), 0);
 
 
-    const handleNext = () => {
+    const handleNext = async () => {
         if (step === 1) {
             if (!title) {
                 showToast("Please enter an assessment title", "error");
@@ -172,13 +290,40 @@ export default function CreateAssessmentPage() {
                 showToast("Please fill out duration, total marks, and passing score", "error");
                 return;
             }
-            setStep(2);
-        } else if (step === 2) {
-            if (currentPointsTotal !== Number(totalMarks || 0)) {
-                showToast(`Configured Question Points (${currentPointsTotal}) must exactly match Total Marks (${totalMarks})`, "error");
+            if (Number(passingScore) > Number(totalMarks)) {
+                showToast("Passing score cannot exceed Total Marks", "error");
                 return;
             }
-            setStep(3); // Review step
+            setStep(2);
+        } else if (step === 2) {
+            if (ruleGroups.length === 0) {
+                showToast("Please add at least one rule group", "error");
+                return;
+            }
+            if (currentPointsTotal !== Number(totalMarks || 0)) {
+                showToast(`Configured points (${currentPointsTotal}) must exactly match Total Marks (${totalMarks})`, "error");
+                return;
+            }
+            // Fetch bank counts for warnings before moving to review
+            setFetchingCounts(true);
+            try {
+                const token = localStorage.getItem("token");
+                const headers: Record<string, string> = token ? { Authorization: `Bearer ${token}` } : {};
+                const apiBase = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8080";
+                const counts: Record<string, number> = {};
+                await Promise.all(flattenedRules.map(async rule => {
+                    const params = new URLSearchParams({ category: rule.category, difficulty: rule.difficulty });
+                    if (rule.sub_category) params.set("sub_category", rule.sub_category);
+                    const res = await fetch(`${apiBase}/api/admin/questions/count?${params}`, { headers });
+                    const data = await res.json();
+                    const key = `${rule.category}|||${rule.sub_category || ""}|||${rule.difficulty}`;
+                    counts[key] = data.count || 0;
+                }));
+                setBankCounts(counts);
+            } catch { /* non-fatal */ } finally {
+                setFetchingCounts(false);
+            }
+            setStep(3);
             fetchPreview();
         }
     };
@@ -249,7 +394,7 @@ export default function CreateAssessmentPage() {
                         </button>
                         <div>
                             <h1 className="text-xl font-bold text-gray-900">Create Assessment</h1>
-                            <p className="text-xs text-gray-500">Step {step} of 3</p>
+                            <p className="text-xs text-gray-600 font-medium">Step {step} of 3</p>
                         </div>
                     </div>
                 </div>
@@ -287,7 +432,7 @@ export default function CreateAssessmentPage() {
                                 type="text"
                                 value={title}
                                 onChange={(e) => setTitle(e.target.value)}
-                                className="w-full text-xl font-bold text-gray-900 p-3 border-2 border-gray-200 rounded-lg focus:border-indigo-600 focus:ring-0 focus:outline-none"
+                                className="w-full text-xl font-bold text-gray-900 p-3 border-2 border-gray-200 rounded-lg focus:border-indigo-600 focus:ring-0 focus:outline-none placeholder:text-gray-500"
                                 placeholder="e.g., Senior Frontend Developer Test"
                             />
                         </div>
@@ -297,7 +442,7 @@ export default function CreateAssessmentPage() {
                             <textarea
                                 value={description}
                                 onChange={(e) => setDescription(e.target.value)}
-                                className="w-full p-3 text-gray-900 border-2 border-gray-200 rounded-lg focus:border-indigo-600 focus:outline-none resize-none"
+                                className="w-full p-3 text-gray-900 border-2 border-gray-200 rounded-lg focus:border-indigo-600 focus:outline-none resize-none placeholder:text-gray-500 font-medium"
                                 rows={4}
                                 placeholder="Add instructions, context, or notes for candidates..."
                             />
@@ -332,13 +477,13 @@ export default function CreateAssessmentPage() {
                             </div>
                             <div>
                                 <label className="block text-sm font-medium text-gray-700 mb-2">
-                                    <Target size={16} className="inline mr-1 text-gray-400" /> Passing Score *
+                                    <Target size={16} className="inline mr-1 text-gray-500" /> Passing Score *
                                 </label>
                                 <input
                                     type="number"
                                     value={passingScore}
                                     onChange={(e) => setPassingScore(e.target.value)}
-                                    className="w-full p-3 font-medium text-gray-900 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-100 focus:border-indigo-600 focus:outline-none"
+                                    className="w-full p-3 font-medium text-gray-900 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-100 focus:border-indigo-600 focus:outline-none placeholder:text-gray-500"
                                     placeholder="e.g. 50"
                                     min={1}
                                 />
@@ -381,10 +526,10 @@ export default function CreateAssessmentPage() {
                                             <Plus size={32} />
                                         </div>
                                         <h3 className="text-lg font-medium text-gray-900 mb-2">No rules yet</h3>
-                                        <p className="text-gray-500 max-w-sm mx-auto mb-6">Start building your assessment by defining what questions to fetch.</p>
+                                        <p className="text-gray-600 max-w-sm mx-auto mb-6 font-medium">Start building your assessment by defining what questions to fetch.</p>
                                         <button
                                             onClick={addGroup}
-                                            className="px-4 py-2 bg-white border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 font-medium transition"
+                                            className="px-4 py-2 bg-white border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 font-bold transition"
                                         >
                                             Add First Rule Group
                                         </button>
@@ -401,16 +546,14 @@ export default function CreateAssessmentPage() {
                                                     <Trash2 size={20} />
                                                 </button>
 
-                                                <div className="max-w-xs">
+                                                <div className="max-w-sm">
                                                     <label className="block text-xs font-bold text-indigo-600 uppercase tracking-widest mb-2">Category</label>
                                                     <select
                                                         value={group.category}
                                                         onChange={(e) => updateGroup(gIdx, 'category', e.target.value)}
-                                                        className="w-full p-3 font-bold text-gray-900 border-2 border-gray-200 rounded-xl focus:border-indigo-500 focus:outline-none bg-gray-50/50"
+                                                        className="w-full p-3 font-bold text-gray-900 border-2 border-gray-200 rounded-xl focus:border-indigo-500 focus:outline-none bg-gray-50/50 appearance-none cursor-pointer"
                                                     >
-                                                        <option value="Programming">Programming</option>
-                                                        <option value="Communication">Communication</option>
-                                                        <option value="Aptitude">Aptitude</option>
+                                                        {categoryOptions.map(c => <option key={c} value={c}>{c}</option>)}
                                                     </select>
                                                 </div>
 
@@ -424,57 +567,68 @@ export default function CreateAssessmentPage() {
                                                                 <Trash2 size={16} />
                                                             </button>
 
-                                                            <div className="flex items-center gap-4 mb-4">
-                                                                <div className="flex-1 max-w-[200px]">
-                                                                    <label className="block text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-1.5">Sub Category</label>
-                                                                    <select
-                                                                        value={sub.sub_category}
-                                                                        onChange={(e) => updateSubGroup(gIdx, sIdx, e.target.value)}
-                                                                        className="w-full p-2 text-sm font-semibold text-gray-900 border border-gray-300 rounded-lg focus:border-indigo-500 focus:outline-none bg-white"
-                                                                    >
-                                                                        <option value="">Any Sub-Category</option>
-                                                                        {group.category === "Communication" ? (
-                                                                            <>
-                                                                                <option value="Passage">Passage</option>
-                                                                                <option value="Grammar">Grammar</option>
-                                                                                <option value="Listening">Listening</option>
-                                                                            </>
-                                                                        ) : group.category === "Aptitude" ? (
-                                                                            <>
-                                                                                <option value="Logical">Logical</option>
-                                                                                <option value="Numerical">Numerical</option>
-                                                                                <option value="Verbal">Verbal</option>
-                                                                            </>
-                                                                        ) : (
-                                                                            <>
-                                                                                <option value="Frontend">Frontend</option>
-                                                                                <option value="Backend">Backend</option>
-                                                                                <option value="DevOps">DevOps</option>
-                                                                            </>
-                                                                        )}
-                                                                    </select>
-                                                                </div>
-                                                                <div className="h-px bg-gray-200 flex-1 mt-5"></div>
-                                                            </div>
+                                                            {(() => {
+                                                                const catCfg = bankConfig.structure?.categories.find(c => c.name === group.category);
+                                                                if (catCfg?.has_sub_categories) {
+                                                                    return (
+                                                                        <div className="flex items-center gap-4 mb-4">
+                                                                            <div className="flex-1 max-w-[200px]">
+                                                                                <label className="block text-[10px] font-bold text-gray-600 uppercase tracking-wider mb-1.5">Sub Category</label>
+                                                                                <div className="flex items-center gap-2">
+                                                                                    <input
+                                                                                        type="text"
+                                                                                        list={`sub-list-${gIdx}-${sIdx}`}
+                                                                                        value={sub.sub_category}
+                                                                                        onChange={(e) => updateSubGroup(gIdx, sIdx, e.target.value)}
+                                                                                        className="w-full p-2 text-sm font-semibold text-gray-900 border border-gray-300 rounded-lg focus:border-indigo-500 focus:outline-none bg-white"
+                                                                                        placeholder="Select sub-category…"
+                                                                                    />
+                                                                                </div>
+                                                                                <datalist id={`sub-list-${gIdx}-${sIdx}`}>
+                                                                                    {catCfg.sub_categories.map(s => <option key={s.name} value={s.name} />)}
+                                                                                </datalist>
+                                                                            </div>
+                                                                            <div className="h-px bg-gray-200 flex-1 mt-5"></div>
+                                                                        </div>
+                                                                    );
+                                                                }
+                                                                return null;
+                                                            })()}
 
                                                             <div className="space-y-3">
                                                                 {sub.difficulties.map((diff, dIdx) => (
                                                                     <div key={dIdx} className="flex flex-wrap gap-4 items-end">
                                                                         <div className="w-32">
-                                                                            <label className="block text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-1.5">Difficulty</label>
+                                                                            <label className="block text-[10px] font-bold text-gray-600 uppercase tracking-wider mb-1.5">Difficulty</label>
                                                                             <select
                                                                                 value={diff.difficulty}
                                                                                 onChange={(e) => updateDifficulty(gIdx, sIdx, dIdx, 'difficulty', e.target.value)}
                                                                                 className="w-full p-2.5 text-sm font-medium text-gray-900 border border-gray-300 rounded-lg focus:border-indigo-500 focus:outline-none bg-white"
                                                                             >
-                                                                                <option value="Easy">Easy</option>
-                                                                                <option value="Medium">Medium</option>
-                                                                                <option value="Hard">Hard</option>
+                                                                                {(() => {
+                                                                                    const catCfg = bankConfig.structure?.categories.find(c => c.name === group.category);
+                                                                                    if (!catCfg) return [
+                                                                                        <option key="Easy" value="Easy">Easy</option>,
+                                                                                        <option key="Medium" value="Medium">Medium</option>,
+                                                                                        <option key="Hard" value="Hard">Hard</option>
+                                                                                    ];
+                                                                                    if (catCfg.has_sub_categories) {
+                                                                                        const subCfg = catCfg.sub_categories.find(s => s.name === sub.sub_category);
+                                                                                        return (subCfg?.difficulties || []).map(d => {
+                                                                                            const val = typeof d === "string" ? d : d.difficulty;
+                                                                                            return <option key={val} value={val}>{val}</option>;
+                                                                                        });
+                                                                                    }
+                                                                                    return catCfg.difficulties.map(d => {
+                                                                                        const val = typeof d === "string" ? d : d.difficulty;
+                                                                                        return <option key={val} value={val}>{val}</option>;
+                                                                                    });
+                                                                                })()}
                                                                             </select>
                                                                         </div>
 
                                                                         <div className="w-24">
-                                                                            <label className="block text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-1.5">Count</label>
+                                                                            <label className="block text-[10px] font-bold text-gray-600 uppercase tracking-wider mb-1.5">Count</label>
                                                                             <input
                                                                                 type="text"
                                                                                 value={diff.count}
@@ -513,12 +667,20 @@ export default function CreateAssessmentPage() {
                                                         </div>
                                                     ))}
 
-                                                    <button
-                                                        onClick={() => addSubGroup(gIdx)}
-                                                        className="mt-2 flex items-center gap-2 text-sm text-gray-500 font-bold hover:text-gray-900 transition-colors bg-white border-2 border-dashed border-gray-200 rounded-xl p-4 w-full justify-center hover:border-gray-300"
-                                                    >
-                                                        <Plus size={18} /> Add Another Sub-Category inside {group.category}
-                                                    </button>
+                                                    {(() => {
+                                                        const catCfg = bankConfig.structure?.categories.find(c => c.name === group.category);
+                                                        if (catCfg?.has_sub_categories) {
+                                                            return (
+                                                                <button
+                                                                    onClick={() => addSubGroup(gIdx)}
+                                                                    className="mt-2 flex items-center gap-2 text-sm text-gray-500 font-bold hover:text-gray-900 transition-colors bg-white border-2 border-dashed border-gray-200 rounded-xl p-4 w-full justify-center hover:border-gray-300"
+                                                                >
+                                                                    <Plus size={18} /> Add Another Sub-Category inside {group.category}
+                                                                </button>
+                                                            );
+                                                        }
+                                                        return null;
+                                                    })()}
                                                 </div>
 
                                                 <div className="bg-indigo-600 rounded-xl p-4 text-white flex justify-between items-center shadow-lg shadow-indigo-100">
@@ -618,6 +780,42 @@ export default function CreateAssessmentPage() {
                                         </div>
                                     </div>
                                 </div>
+
+                                {/* Bank count warnings */}
+                                {Object.keys(bankCounts).length > 0 && (() => {
+                                    const warnings = flattenedRules.filter(r => {
+                                        const key = `${r.category}|||${r.sub_category || ""}|||${r.difficulty}`;
+                                        return (bankCounts[key] ?? Infinity) < r.count;
+                                    });
+                                    if (warnings.length === 0) return null;
+                                    return (
+                                        <div className="bg-amber-50 border border-amber-200 rounded-xl p-5">
+                                            <div className="flex items-center gap-2 mb-3">
+                                                <AlertTriangle size={16} className="text-amber-600" />
+                                                <span className="text-sm font-bold text-amber-800">Question Bank Shortage Warning</span>
+                                            </div>
+                                            <div className="space-y-2">
+                                                {warnings.map((r, i) => {
+                                                    const key = `${r.category}|||${r.sub_category || ""}|||${r.difficulty}`;
+                                                    const available = bankCounts[key] ?? 0;
+                                                    return (
+                                                        <div key={i} className="flex items-center justify-between bg-white rounded-lg px-4 py-2 border border-amber-100 text-sm">
+                                                            <span className="font-medium text-gray-800">
+                                                                {r.category}{r.sub_category ? ` / ${r.sub_category}` : ""} — {r.difficulty}
+                                                            </span>
+                                                            <span className="text-amber-700 font-bold">
+                                                                {available} available / {r.count} needed
+                                                            </span>
+                                                        </div>
+                                                    );
+                                                })}
+                                            </div>
+                                            <p className="text-xs text-amber-600 mt-3">
+                                                Go to <button onClick={() => router.push("/interviewer/exam-sheet")} className="underline font-bold">Exam Sheet</button> to add more questions.
+                                            </p>
+                                        </div>
+                                    );
+                                })()}
 
                                 <div>
                                     <div className="flex items-center justify-between mb-4 px-2">
