@@ -1,30 +1,30 @@
 "use client";
 
 import Navbar from "@/components/Navbar";
-import { CheckCircle2, Lock, Monitor, Users, Video } from "lucide-react";
+import { CheckCircle2, ShieldAlert, MonitorUp, Send, FileSpreadsheet, Lock } from "lucide-react";
 import Link from "next/link";
 import { motion } from "framer-motion";
 
 const features = [
   {
-    name: "AI Proctoring",
-    description: "Advanced browser-locking technology to ensure test integrity. Detects tab switching and background apps.",
-    icon: Lock,
+    name: "AI Proctoring & Secure Cloud Storage",
+    description: "Real-time face tracking, posture analysis, and audio noise detection. Video evidence is automatically uploaded to encrypted cloud storage.",
+    icon: ShieldAlert,
   },
   {
-    name: "Meeting Integration",
-    description: "Seamless Google Meet integration for scheduling and conducting live interviews.",
-    icon: Video,
+    name: "Instant Proctoring Alerts",
+    description: "Recruiters and proctors receive instant mobile and desktop ping notifications the moment a fatal violation or exam completion occurs.",
+    icon: Send,
   },
   {
-    name: "Coding Environment",
-    description: "Built-in code editor for technical assessments.",
-    icon: Monitor,
+    name: "Universal Upload Hub",
+    description: "Ingest thousands of questions instantly via CSV mapping, raw JSON dump, or manual entry through the Question Bank Upload Hub.",
+    icon: FileSpreadsheet,
   },
   {
-    name: "Role Management",
-    description: "Distinct portals for Candidates, Interviewers, and Admins.",
-    icon: Users,
+    name: "AI Resume Smart Parsing",
+    description: "Upload candidate resumes to instantly generate matched question banks and technical evaluations tailored to their exact skill set.",
+    icon: MonitorUp,
   },
 ];
 
@@ -46,7 +46,7 @@ export default function Home() {
               Evaluation <span className="text-indigo-600">Reimagined</span>
             </h1>
             <p className="mt-4 text-xl md:text-2xl text-gray-600 max-w-3xl mx-auto leading-relaxed">
-              The all-in-one platform for secure assessments, live coding interviews, and automated scheduling.
+              The end-to-end autonomous hiring platform featuring AI proctoring, smart resume parsing, and instant mobile violation alerts.
             </p>
             <div className="mt-10 flex justify-center gap-4">
               <Link
@@ -70,12 +70,12 @@ export default function Home() {
       <section id="features" className="py-24 bg-gray-50">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="text-center mb-16">
-            <h2 className="text-base font-semibold text-indigo-600 tracking-wide uppercase">Features</h2>
+            <h2 className="text-base font-semibold text-indigo-600 tracking-wide uppercase">Core Platform</h2>
             <p className="mt-2 text-3xl font-extrabold text-gray-900 sm:text-4xl">
-              Everything you need to hire the best
+              Engineered for integrity and scale
             </p>
             <p className="mt-4 max-w-2xl text-xl text-gray-500 mx-auto">
-              A comprehensive suite of tools designed to streamline your hiring process.
+              We ditched generic tools for a custom-built, highly secure assessment pipeline.
             </p>
           </div>
 
@@ -106,20 +106,21 @@ export default function Home() {
           <div className="lg:grid lg:grid-cols-2 lg:gap-16 items-center">
             <div>
               <h2 className="text-3xl font-extrabold text-gray-900 sm:text-4xl mb-6">
-                Connect with Google Meet
+                Bulletproof Security Architecture
               </h2>
               <p className="text-lg text-gray-500 mb-8 leading-relaxed">
-                Schedule interviews effortlessly. Our platform integrates directly with Google Calendar and Meet to generate unique meeting links for every session automatically.
+                HireIt enforces strict viewport tracking and continuous sensory monitoring. All violations are logged backed by irrefutable video evidence uploaded securely to encrypted cloud storage.
               </p>
               <ul className="space-y-4">
                 {[
-                  "Automatic link generation",
-                  "Calendar sync",
-                  "Secure meeting rooms",
-                  "In-browser video experience"
+                  "Browser lock & tab-switching detection",
+                  "Continuous BlazeFace tracking to ensure presence",
+                  "Head rotation tracking (looking away from screen)",
+                  "Automatic violation video evidence clipping",
+                  "Audio spike algorithms for background noise"
                 ].map((item) => (
                   <li key={item} className="flex items-center">
-                    <CheckCircle2 className="h-5 w-5 text-green-500 mr-3" />
+                    <CheckCircle2 className="h-5 w-5 text-indigo-500 mr-3 shrink-0" />
                     <span className="text-gray-700 font-medium">{item}</span>
                   </li>
                 ))}
@@ -128,21 +129,29 @@ export default function Home() {
             <div className="mt-12 lg:mt-0 relative">
               <div className="absolute inset-0 bg-indigo-200 rounded-3xl transform rotate-3 scale-105 opacity-20"></div>
               <div className="relative bg-gray-900 rounded-2xl shadow-2xl p-8 border border-gray-800">
-                {/* Mock UI for Meeting Scheduler */}
+                {/* Mock UI for Alert Notification */}
                 <div className="flex items-center justify-between mb-6 border-b border-gray-800 pb-4">
-                  <div className="flex gap-2">
-                    <div className="w-3 h-3 rounded-full bg-red-500"></div>
-                    <div className="w-3 h-3 rounded-full bg-yellow-500"></div>
-                    <div className="w-3 h-3 rounded-full bg-green-500"></div>
+                  <div className="flex items-center gap-3">
+                    <Lock className="text-indigo-400 h-5 w-5" />
+                    <span className="text-gray-200 font-semibold tracking-wide">Live Proctoring Alerts</span>
                   </div>
-                  <div className="text-gray-400 text-sm font-mono">meeting-scheduler.exe</div>
+                  <div className="text-gray-500 text-xs font-mono border border-gray-800 px-2 py-1 rounded">LIVE</div>
                 </div>
-                <div className="space-y-4">
-                  <div className="h-8 bg-gray-800 rounded w-3/4"></div>
-                  <div className="h-8 bg-gray-800 rounded w-1/2"></div>
-                  <div className="h-32 bg-gray-800 rounded w-full mt-4"></div>
-                  <div className="flex justify-end mt-4">
-                    <div className="h-10 bg-indigo-600 rounded w-32"></div>
+                <div className="space-y-4 font-mono text-sm">
+                  <div className="flex gap-4">
+                    <span className="text-gray-500">[14:32:01]</span>
+                    <span className="text-red-400">ALERT: Multiple faces detected</span>
+                  </div>
+                  <div className="flex gap-4">
+                    <span className="text-gray-500">[14:32:02]</span>
+                    <span className="text-gray-300">Candidate: John Doe (Assessment: P1 QA)</span>
+                  </div>
+                  <div className="flex gap-4">
+                    <span className="text-gray-500">[14:32:05]</span>
+                    <span className="text-indigo-400">Evidence generated & uploaded to cloud storage.</span>
+                  </div>
+                  <div className="flex gap-4 mt-6 p-3 bg-gray-800/50 rounded-lg border border-gray-800">
+                    <span className="text-emerald-400">View Evidence Video → url.hireit.com/vid_x9a</span>
                   </div>
                 </div>
               </div>
@@ -159,18 +168,7 @@ export default function Home() {
             <p className="text-gray-500 text-sm mt-1">© 2026 HireIt Inc. All rights reserved.</p>
           </div>
           <div className="flex space-x-6">
-            <a href="#" className="text-gray-400 hover:text-gray-500">
-              <span className="sr-only">Twitter</span>
-              <svg className="h-6 w-6" fill="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-                <path d="M8.29 20.251c7.547 0 11.675-6.253 11.675-11.675 0-.178 0-.355-.012-.53A8.348 8.348 0 0022 5.92a8.19 8.19 0 01-2.357.646 4.118 4.118 0 001.804-2.27 8.224 8.224 0 01-2.605.996 4.107 4.107 0 00-6.993 3.743 4.107 4.107 0 00-6.993 3.743 11.65 11.65 0 01-8.457-4.287 4.106 4.106 0 001.27 5.477A4.072 4.072 0 012.8 9.713v.052a4.105 4.105 0 003.292 4.022 4.095 4.095 0 01-1.853.07 4.108 4.108 0 003.834 2.85A8.233 8.233 0 012 18.407a11.616 11.616 0 006.29 1.84" />
-              </svg>
-            </a>
-            <a href="#" className="text-gray-400 hover:text-gray-500">
-              <span className="sr-only">GitHub</span>
-              <svg className="h-6 w-6" fill="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-                <path fillRule="evenodd" d="M12 2C6.477 2 2 6.484 2 12.017c0 4.425 2.865 8.18 6.839 9.504.5.092.682-.217.682-.483 0-.237-.008-.868-.013-1.703-2.782.605-3.369-1.343-3.369-1.343-.454-1.158-1.11-1.466-1.11-1.466-.908-.62.069-.608.069-.608 1.003.07 1.531 1.032 1.531 1.032.892 1.53 2.341 1.088 2.91.832.092-.647.35-1.088.636-1.338-2.22-.253-4.555-1.113-4.555-4.951 0-1.093.39-1.988 1.029-2.688-.103-.253-.446-1.272.098-2.65 0 0 .84-.27 2.75 1.026A9.564 9.564 0 0112 6.844c.85.004 1.705.115 2.504.337 1.909-1.296 2.747-1.027 2.747-1.027.546 1.379.202 2.398.1 2.651.64.7 1.028 1.595 1.028 2.688 0 3.848-2.339 4.695-4.566 4.943.359.309.678.92.678 1.855 0 1.338-.012 2.419-.012 2.747 0 .268.18.58.688.482A10.019 10.019 0 0022 12.017C22 6.484 17.522 2 12 2z" clipRule="evenodd" />
-              </svg>
-            </a>
+            <span className="text-gray-400 text-sm">Engineered for integrity.</span>
           </div>
         </div>
       </footer>

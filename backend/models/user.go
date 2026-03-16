@@ -16,4 +16,5 @@ type User struct {
 	CreatedAt time.Time          `bson:"created_at" json:"created_at"`
 	UpdatedAt time.Time          `bson:"updated_at" json:"updated_at"`
 	DeletedAt *time.Time         `bson:"deleted_at,omitempty" json:"-"`
+	IsDemo    bool               `bson:"is_demo" json:"is_demo"`
 }

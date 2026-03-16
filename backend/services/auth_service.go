@@ -20,6 +20,7 @@ type AuthService interface {
 	SetPassword(ctx context.Context, userID string, newPassword string) error
 	GoogleLogin(ctx context.Context, email, name, role string) (string, string, bool, error)
 	StartPublicAssessment(ctx context.Context, name, email, phone string) (string, *models.User, error)
+	StartDemoAssessment(ctx context.Context) (string, *models.User, error)
 }
 
 type authService struct {
@@ -159,6 +160,36 @@ func (s *authService) StartPublicAssessment(ctx context.Context, name, email, ph
 	}
 
 	return tokenString, user, nil
+}
+
+func (s *authService) StartDemoAssessment(ctx context.Context) (string, *models.User, error) {
+	// Create a unique dummy email for this demo session
+	demoEmail := "demo_" + utils.GenerateRandomString(8) + "@demo.local"
+	hashedPassword, _ := bcrypt.GenerateFromPassword([]byte("demo123"), 10)
+	
+	demoUser := models.User{
+		Name:      "Demo User",
+		Email:     demoEmail,
+		Phone:     "",
+		Password:  string(hashedPassword),
+		Role:      "candidate",
+		IsDemo:    true,
+		CreatedAt: time.Now(),
+		UpdatedAt: time.Now(),
+	}
+	
+	id, err := s.userRepo.Create(ctx, &demoUser)
+	if err != nil {
+		return "", nil, err
+	}
+	demoUser.ID = id
+
+	tokenString, err := s.generateJWT(&demoUser)
+	if err != nil {
+		return "", nil, err
+	}
+
+	return tokenString, &demoUser, nil
 }
 
 func (s *authService) generateJWT(user *models.User) (string, error) {

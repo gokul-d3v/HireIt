@@ -15,6 +15,7 @@ import {
     CheckCircle2, 
     XCircle,
     ChevronRight,
+    ChevronLeft,
     Search,
     Filter,
     ArrowLeft,
@@ -38,6 +39,8 @@ interface Submission {
     submitted_at: string;
     answers?: any[];
     violations?: any[];
+    generated_questions?: any[]; // Questions actually served to this candidate
+    shuffled_options?: Record<string, string[]>;
     face_snapshots?: {
         initial_image: string;
         middle_image: string;
@@ -109,6 +112,10 @@ export default function ExamResultsPage() {
     const [previewImage, setPreviewImage] = useState<string | null>(null);
     const [reportLoading, setReportLoading] = useState(false);
     
+    // Quiz Answers Pagination
+    const QUIZ_PAGE_SIZE = 5;
+    const [quizPage, setQuizPage] = useState(0);
+
     // Search & Filter State
     const [searchTerm, setSearchTerm] = useState("");
     const [showFilters, setShowFilters] = useState(false);
@@ -164,6 +171,7 @@ export default function ExamResultsPage() {
     const fetchDetailedReport = async (sub: Submission) => {
         setReportLoading(true);
         setSelectedSubmission(sub);
+        setQuizPage(0); // Reset to first page on new submission
         try {
             const assessData = await apiRequest(`/api/assessments/${sub.assessment_id}`, "GET");
             setSelectedAssessment(assessData);
@@ -561,72 +569,188 @@ export default function ExamResultsPage() {
                         </div>
                     </div>
 
-                    {/* Candidate Quiz Answers - Shifted to Second (Below Timeline) */}
-                    {selectedAssessment?.questions && (
-                        <div className="bg-white border border-gray-200 rounded-2xl overflow-hidden shadow-sm mt-8">
-                            <div className="p-6 border-b border-gray-100 bg-white">
-                                <h4 className="text-xl font-bold text-gray-900 tracking-tight">Candidate Quiz Answers</h4>
-                                <p className="text-sm text-gray-500">Detailed review of individual question responses and scoring.</p>
+                    {/* Questions Answered Summary Card */}
+                    {selectedSubmission.answers && selectedSubmission.answers.length > 0 && (() => {
+                        const total = (selectedSubmission.generated_questions || []).length || selectedSubmission.answers.length;
+                        const answered = selectedSubmission.answers.length;
+                        const correct = selectedSubmission.answers.filter((a: any) => a.is_correct).length;
+                        const wrong = answered - correct;
+                        const skipped = Math.max(0, total - answered);
+                        return (
+                            <div className="bg-white border border-gray-200 rounded-2xl p-6 shadow-sm mt-6">
+                                <h4 className="text-sm font-bold text-gray-500 uppercase tracking-widest mb-4">Questions Summary</h4>
+                                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                                    <div className="bg-indigo-50 rounded-xl p-4 text-center border border-indigo-100">
+                                        <p className="text-3xl font-black text-indigo-600">{answered}</p>
+                                        <p className="text-xs font-bold text-indigo-400 uppercase tracking-widest mt-1">Answered</p>
+                                    </div>
+                                    <div className="bg-green-50 rounded-xl p-4 text-center border border-green-100">
+                                        <p className="text-3xl font-black text-green-600">{correct}</p>
+                                        <p className="text-xs font-bold text-green-400 uppercase tracking-widest mt-1">Correct</p>
+                                    </div>
+                                    <div className="bg-red-50 rounded-xl p-4 text-center border border-red-100">
+                                        <p className="text-3xl font-black text-red-500">{wrong}</p>
+                                        <p className="text-xs font-bold text-red-400 uppercase tracking-widest mt-1">Wrong</p>
+                                    </div>
+                                    <div className="bg-gray-50 rounded-xl p-4 text-center border border-gray-100">
+                                        <p className="text-3xl font-black text-gray-400">{skipped}</p>
+                                        <p className="text-xs font-bold text-gray-400 uppercase tracking-widest mt-1">Skipped</p>
+                                    </div>
+                                </div>
+                                {/* Accuracy bar */}
+                                <div className="mt-4">
+                                    <div className="flex justify-between text-xs font-bold text-gray-500 mb-1">
+                                        <span>Accuracy</span>
+                                        <span>{answered > 0 ? Math.round((correct / answered) * 100) : 0}%</span>
+                                    </div>
+                                    <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
+                                        <div
+                                            className="h-full bg-gradient-to-r from-green-400 to-emerald-500 rounded-full transition-all"
+                                            style={{ width: `${answered > 0 ? Math.round((correct / answered) * 100) : 0}%` }}
+                                        />
+                                    </div>
+                                </div>
                             </div>
-                            <div className="p-6 bg-gray-50/50 space-y-6">
-                                {selectedAssessment.questions.map((q: any, idx: number) => {
-                                    const answer = selectedSubmission.answers?.find((a: any) => {
-                                        const aid = typeof a.question_id === 'string' ? a.question_id : (a.question_id?.$oid || a.question_id?.toString());
-                                        const qid = typeof q.id === 'string' ? q.id : (q.id?.$oid || q.id?.toString());
-                                        return aid === qid;
-                                    });
-                                    
-                                    if (idx === 0) {
-                                        console.log("DEBUG: Matching first question", { 
-                                            qid: q.id, 
-                                            aid: answer?.question_id, 
-                                            found: !!answer,
-                                            val: answer?.value 
+                        );
+                    })()}
+
+                    {/* Candidate Quiz Answers - paginated, uses generated_questions or fallback */}
+                    {(() => {
+                        const genQs = selectedSubmission.generated_questions;
+                        const fallbackQs = selectedAssessment?.questions;
+                        const sourceQs: any[] = (genQs && genQs.length > 0) ? genQs : (fallbackQs || []);
+                        if (sourceQs.length === 0) return null;
+                        const totalPages = Math.ceil(sourceQs.length / QUIZ_PAGE_SIZE);
+                        const pageQs = sourceQs.slice(quizPage * QUIZ_PAGE_SIZE, (quizPage + 1) * QUIZ_PAGE_SIZE);
+                        return (
+                            <div className="bg-white border border-gray-200 rounded-2xl overflow-hidden shadow-sm mt-8">
+                                <div className="p-6 border-b border-gray-100 bg-white flex items-center justify-between">
+                                    <div>
+                                        <h4 className="text-xl font-bold text-gray-900 tracking-tight">Candidate Quiz Answers</h4>
+                                        <p className="text-sm text-gray-500">Detailed review of individual question responses and scoring.</p>
+                                    </div>
+                                    <span className="text-xs font-bold text-gray-400 uppercase tracking-widest">{sourceQs.length} Questions</span>
+                                </div>
+                                <div className="p-6 bg-gray-50/50 space-y-6">
+                                    {pageQs.map((q: any, pageIdx: number) => {
+                                        const idx = quizPage * QUIZ_PAGE_SIZE + pageIdx;
+                                        const qid = typeof q.id === 'string' ? q.id : (q.id?.$oid || q._id?.$oid || q._id?.toString() || '');
+                                        const answer = (selectedSubmission.answers || []).find((a: any) => {
+                                            const aid = typeof a.question_id === 'string' ? a.question_id : (a.question_id?.$oid || a.question_id?.toString());
+                                            return aid === qid;
                                         });
-                                    }
-
-                                    const isCorrect = answer?.is_correct;
-                                    const isMCQ = q.type === "MCQ";
-
-                                    return (
-                                        <div key={idx} className="bg-white rounded-xl border border-gray-200 p-6 shadow-sm">
-                                            <div className="flex justify-between items-start mb-4">
-                                                <div>
-                                                    <span className="text-[10px] font-black uppercase tracking-widest text-indigo-500 bg-indigo-50 px-2 py-0.5 rounded mb-2 inline-block">
-                                                        Question {idx + 1} • {q.type}
-                                                    </span>
-                                                    <h5 className="text-lg font-bold text-gray-900 leading-snug">{q.text}</h5>
-                                                </div>
-                                                <div className="text-right">
-                                                    <span className="text-sm font-bold text-gray-400 uppercase tracking-widest">{q.points} PTS</span>
-                                                </div>
-                                            </div>
-
-                                            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-4 pt-4 border-t border-gray-50">
-                                                <div>
-                                                    <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-2">Candidate's Response</p>
-                                                    <div className={`p-4 rounded-xl font-mono text-sm border ${
-                                                        isMCQ ? (isCorrect ? 'bg-green-50 border-green-100 text-green-700' : 'bg-red-50 border-red-100 text-red-700')
-                                                        : 'bg-gray-50 border-gray-100 text-gray-700'
-                                                    }`}>
-                                                        {answer?.value || <span className="italic opacity-50">No response provided</span>}
+                                        const isCorrect = answer?.is_correct;
+                                        const isAnswered = !!answer?.value;
+                                        const isMCQ = q.type === "MCQ" || q.type === "multiple_choice";
+                                        const opts = selectedSubmission.shuffled_options?.[qid] || q.options || [];
+                                        return (
+                                            <div key={idx} className={`bg-white rounded-xl border p-6 shadow-sm ${
+                                                !isAnswered ? 'border-gray-200' :
+                                                isCorrect ? 'border-green-200' : 'border-red-200'
+                                            }`}>
+                                                <div className="flex justify-between items-start mb-3">
+                                                    <div className="flex-1">
+                                                        <span className="text-[10px] font-black uppercase tracking-widest text-indigo-500 bg-indigo-50 px-2 py-0.5 rounded mb-2 inline-block">
+                                                            Q{idx + 1} &bull; {q.category || q.type}
+                                                            {q.difficulty && <span className="ml-1 opacity-60">• {q.difficulty}</span>}
+                                                        </span>
+                                                        <p className="text-base font-bold text-gray-900 leading-snug">{q.text || q.question}</p>
+                                                    </div>
+                                                    <div className="flex flex-col items-end gap-1 ml-4 shrink-0">
+                                                        <span className="text-xs font-bold text-gray-400 uppercase">{q.points || 0} pts</span>
+                                                        {!isAnswered ? (
+                                                            <span className="px-2 py-0.5 rounded-full text-[10px] font-black bg-gray-100 text-gray-500 uppercase tracking-wide">Skipped</span>
+                                                        ) : isCorrect ? (
+                                                            <span className="px-2 py-0.5 rounded-full text-[10px] font-black bg-green-100 text-green-700 uppercase tracking-wide">✓ Correct</span>
+                                                        ) : (
+                                                            <span className="px-2 py-0.5 rounded-full text-[10px] font-black bg-red-100 text-red-700 uppercase tracking-wide">✗ Wrong</span>
+                                                        )}
                                                     </div>
                                                 </div>
-                                                {isMCQ && !isCorrect && (
-                                                    <div>
-                                                        <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-2">Correct Reference</p>
-                                                        <div className="p-4 rounded-xl font-mono text-sm bg-green-50 border border-green-100 text-green-700">
-                                                            {q.correct_answer}
+                                                {isMCQ && opts.length > 0 && (
+                                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-2 mt-3">
+                                                        {opts.map((opt: string, oi: number) => {
+                                                            const isSelected = answer?.value === opt;
+                                                            const isRightAnswer = q.correct_answer === opt;
+                                                            let cls = 'border border-gray-100 bg-gray-50 text-gray-700';
+                                                            if (isSelected && isCorrect) cls = 'border-green-300 bg-green-50 text-green-800 font-bold';
+                                                            else if (isSelected && !isCorrect) cls = 'border-red-300 bg-red-50 text-red-800 font-bold';
+                                                            else if (!isSelected && isRightAnswer) cls = 'border-green-200 bg-green-50 text-green-700 font-semibold';
+                                                            return (
+                                                                <div key={oi} className={`p-3 rounded-lg text-sm flex items-center gap-2 ${cls}`}>
+                                                                    <span className="w-5 h-5 rounded-full border flex items-center justify-center text-[10px] font-black shrink-0"
+                                                                        style={{ borderColor: 'currentColor' }}>
+                                                                        {String.fromCharCode(65 + oi)}
+                                                                    </span>
+                                                                    <span>{opt}</span>
+                                                                    {isSelected && <span className="ml-auto text-xs">{isCorrect ? '✓' : '✗'}</span>}
+                                                                    {!isSelected && isRightAnswer && <span className="ml-auto text-xs text-green-600">✓ Correct</span>}
+                                                                </div>
+                                                            );
+                                                        })}
+                                                    </div>
+                                                )}
+                                                {!isMCQ && (
+                                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-3">
+                                                        <div>
+                                                            <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Candidate's Answer</p>
+                                                            <div className="p-3 rounded-xl font-mono text-sm bg-gray-50 border border-gray-100 text-gray-700">
+                                                                {answer?.value || <span className="italic opacity-40">No response</span>}
+                                                            </div>
                                                         </div>
+                                                        {q.correct_answer && (
+                                                            <div>
+                                                                <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Correct Answer</p>
+                                                                <div className="p-3 rounded-xl font-mono text-sm bg-green-50 border border-green-100 text-green-700">
+                                                                    {q.correct_answer}
+                                                                </div>
+                                                            </div>
+                                                        )}
                                                     </div>
                                                 )}
                                             </div>
+                                        );
+                                    })}
+                                </div>
+                                {totalPages > 1 && (
+                                    <div className="px-6 py-4 border-t border-gray-100 bg-white flex items-center justify-between">
+                                        <p className="text-xs font-bold text-gray-500">
+                                            Showing Q{quizPage * QUIZ_PAGE_SIZE + 1}–{Math.min((quizPage + 1) * QUIZ_PAGE_SIZE, sourceQs.length)} of {sourceQs.length}
+                                        </p>
+                                        <div className="flex items-center gap-2">
+                                            <button
+                                                onClick={() => setQuizPage(p => Math.max(0, p - 1))}
+                                                disabled={quizPage === 0}
+                                                className="p-2 rounded-lg border border-gray-200 text-gray-500 hover:bg-indigo-50 hover:text-indigo-600 hover:border-indigo-200 disabled:opacity-30 disabled:cursor-not-allowed transition-all"
+                                            >
+                                                <ChevronLeft size={16} />
+                                            </button>
+                                            {Array.from({ length: totalPages }, (_, i) => (
+                                                <button
+                                                    key={i}
+                                                    onClick={() => setQuizPage(i)}
+                                                    className={`w-8 h-8 rounded-lg text-xs font-bold transition-all border ${
+                                                        i === quizPage
+                                                            ? 'bg-indigo-600 text-white border-indigo-600 shadow-sm'
+                                                            : 'bg-white text-gray-500 border-gray-200 hover:border-indigo-300 hover:text-indigo-600'
+                                                    }`}
+                                                >
+                                                    {i + 1}
+                                                </button>
+                                            ))}
+                                            <button
+                                                onClick={() => setQuizPage(p => Math.min(totalPages - 1, p + 1))}
+                                                disabled={quizPage === totalPages - 1}
+                                                className="p-2 rounded-lg border border-gray-200 text-gray-500 hover:bg-indigo-50 hover:text-indigo-600 hover:border-indigo-200 disabled:opacity-30 disabled:cursor-not-allowed transition-all"
+                                            >
+                                                <ChevronRight size={16} />
+                                            </button>
                                         </div>
-                                    );
-                                })}
+                                    </div>
+                                )}
                             </div>
-                        </div>
-                    )}
+                        );
+                    })()}
                 </div>
                 </>
                 )}

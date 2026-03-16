@@ -172,7 +172,6 @@ func main() {
 		WriteTimeout: 15 * time.Second,
 		IdleTimeout:  60 * time.Second,
 	}
-
 	// Initialize Worker Pool (5 workers, queue size of 100)
 	pool := utils.InitWorkerPool(5, 100)
 	defer pool.Shutdown()

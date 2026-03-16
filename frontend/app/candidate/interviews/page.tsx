@@ -6,7 +6,7 @@ import { useAuth } from "@/context/AuthContext";
 import { apiRequest } from "@/lib/api";
 import { useToast } from "@/components/ui/Toast";
 import { Modal } from "@/components/ui/Modal";
-import { Calendar, Clock, Tag, Users, CheckCircle, XCircle } from "lucide-react";
+import { Calendar, Clock, Tag, Users, CheckCircle, XCircle, Hourglass } from "lucide-react";
 
 interface Interview {
     id: string;
@@ -115,8 +115,16 @@ export default function CandidateInterviewsPage() {
     if (loading) return <div className="min-h-screen flex items-center justify-center bg-gray-50"><div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600"></div></div>;
 
     return (
-        <div className="min-h-screen bg-gray-50 py-8">
-            <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        <div className="min-h-screen bg-gray-50 py-8 relative">
+            {/* Coming Soon Overlay */}
+            <div className="absolute inset-0 z-50 flex items-center justify-center bg-gray-50/40 backdrop-blur-sm">
+                <div className="flex items-center gap-2 px-6 py-3.5 bg-[#161b22]/80 backdrop-blur-md text-blue-400 rounded-xl shadow-2xl border border-gray-700/50">
+                    <Hourglass size={18} />
+                    <span className="font-medium tracking-wide text-sm">Coming Soon...</span>
+                </div>
+            </div>
+
+            <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 opacity-50 pointer-events-none select-none">
                 {/* Header */}
                 <div className="mb-8">
                     <h1 className="text-3xl font-bold text-gray-900">Interviews</h1>

@@ -39,6 +39,18 @@ export default function AssessmentPlayer({ assessmentId, onComplete }: Assessmen
     const { showToast } = useToast();
     const [showSubmitModal, setShowSubmitModal] = useState(false);
 
+    const isDemoUser = useRef(false);
+
+    useEffect(() => {
+        const storedUser = localStorage.getItem("user");
+        if (storedUser) {
+            try {
+                const user = JSON.parse(storedUser);
+                isDemoUser.current = !!user.is_demo;
+            } catch (e) {}
+        }
+    }, []);
+
     // State for assessment data and progress
     const [assessment, setAssessment] = useState<Assessment | null>(null);
     const [loading, setLoading] = useState(true);
@@ -96,6 +108,10 @@ export default function AssessmentPlayer({ assessmentId, onComplete }: Assessmen
     }, []);
 
     const captureSnapshot = async (type: 'initial' | 'middle' | 'end', retries = 5) => {
+        if (isDemoUser.current) {
+            return { image: "", descriptor: undefined };
+        }
+
         const video = videoRef.current;
         if (!video) {
             if (retries > 0) {
@@ -208,7 +224,8 @@ export default function AssessmentPlayer({ assessmentId, onComplete }: Assessmen
 
         const ctx = canvas.getContext('2d');
         let evidenceBase64 = "";
-        if (ctx) {
+        // Bypass image capture if demo user
+        if (ctx && !isDemoUser.current) {
             ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
             evidenceBase64 = canvas.toDataURL('image/jpeg');
         }

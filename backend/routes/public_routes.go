@@ -10,5 +10,6 @@ func SetupPublicRoutes(router *gin.Engine, publicCtrl *controllers.PublicControl
 	public := router.Group("/api/public")
 	{
 		public.POST("/start", publicCtrl.StartPublicAssessment)
+		public.POST("/demo", publicCtrl.StartDemoAssessment)
 	}
 }

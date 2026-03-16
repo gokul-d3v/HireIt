@@ -51,3 +51,26 @@ func (ctrl *PublicController) StartPublicAssessment(c *gin.Context) {
 		},
 	})
 }
+
+// StartDemoAssessment handles starting a demo session without registration
+func (ctrl *PublicController) StartDemoAssessment(c *gin.Context) {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	token, user, err := ctrl.authService.StartDemoAssessment(ctx)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to initiate demo session"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"token": token,
+		"user": gin.H{
+			"id":      user.ID,
+			"name":    user.Name,
+			"email":   user.Email,
+			"role":    user.Role,
+			"is_demo": user.IsDemo,
+		},
+	})
+}
