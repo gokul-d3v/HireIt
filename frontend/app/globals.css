@@ -2,7 +2,7 @@
 
 :root {
   --background: #ffffff;
-  --foreground: #171717;
+  --foreground: #0f172a;
 }
 
 @theme inline {
@@ -24,12 +24,13 @@ body {
   input,
   select,
   textarea {
-    color: #111827; /* gray-900 — dark text for light backgrounds */
+    color: var(--foreground);
+    background: transparent;
   }
 
   input::placeholder,
   textarea::placeholder {
-    color: #6b7280; /* gray-500 */
+    color: #475569; /* slate-500 */
     opacity: 1;
   }
 }

@@ -99,13 +99,14 @@ const calculateMalpracticeRisk = (sub: Submission) => {
 interface Assessment {
     id: string;
     title: string;
+    total_marks?: number;
 }
 
 export default function ExamResultsPage() {
     const router = useRouter();
     const { user, isAuthenticated, isLoading } = useAuth();
     const [submissions, setSubmissions] = useState<Submission[]>([]);
-    const [assessmentsMap, setAssessmentsMap] = useState<Record<string, string>>({});
+    const [assessmentsMap, setAssessmentsMap] = useState<Record<string, Assessment>>({});
     const [loading, setLoading] = useState(true);
     const [selectedSubmission, setSelectedSubmission] = useState<Submission | null>(null);
     const [selectedAssessment, setSelectedAssessment] = useState<any>(null);
@@ -145,10 +146,10 @@ export default function ExamResultsPage() {
                 apiRequest(`/api/assessments/my`, "GET")
             ]);
             
-            const aMap: Record<string, string> = {};
+            const aMap: Record<string, Assessment> = {};
             if (assessData) {
                 assessData.forEach((a: Assessment) => {
-                    aMap[a.id] = a.title;
+                    aMap[a.id] = a;
                 });
             }
 
@@ -200,7 +201,7 @@ export default function ExamResultsPage() {
         const matchesSearch = 
             sub.candidate_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
             sub.candidate_email.toLowerCase().includes(searchTerm.toLowerCase()) ||
-            (assessmentsMap[sub.assessment_id] || "").toLowerCase().includes(searchTerm.toLowerCase());
+            (assessmentsMap[sub.assessment_id]?.title || "").toLowerCase().includes(searchTerm.toLowerCase());
         
         if (!matchesSearch) return false;
 
@@ -383,7 +384,10 @@ export default function ExamResultsPage() {
                                         <div className="w-8 h-8 rounded-full bg-blue-50 text-blue-600 flex items-center justify-center"><Clock size={16} /></div>
                                         <div>
                                             <p className="text-xs uppercase tracking-wider text-gray-400 font-bold">Score</p>
-                                            <p className="text-2xl font-black text-indigo-600">{selectedSubmission.score}%</p>
+                                            <p className="text-2xl font-black text-indigo-600">
+                                                {selectedSubmission.score}
+                                                <span className="text-sm text-gray-400 ml-1 font-bold">/ {selectedAssessment?.total_marks || '--'}</span>
+                                            </p>
                                         </div>
                                     </div>
                                     <div className="flex items-center gap-3 text-gray-600">
@@ -396,7 +400,7 @@ export default function ExamResultsPage() {
                                     <div className="pt-4 border-t border-gray-100 space-y-3">
                                         <div>
                                             <p className="text-xs text-gray-400 font-bold uppercase mb-1">Assessment</p>
-                                            <p className="text-sm font-semibold text-gray-900">{assessmentsMap[selectedSubmission.assessment_id] || "Unknown Exam"}</p>
+                                            <p className="text-sm font-semibold text-gray-900">{assessmentsMap[selectedSubmission.assessment_id]?.title || "Unknown Exam"}</p>
                                         </div>
                                         <div>
                                             <p className="text-xs text-gray-400 font-bold uppercase mb-1">Email</p>
@@ -776,14 +780,14 @@ export default function ExamResultsPage() {
                             <input 
                                 type="text"
                                 placeholder="Search candidate name or email..."
-                                className="w-full pl-12 pr-4 py-3.5 bg-white border border-gray-200 rounded-2xl shadow-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition-all font-medium text-gray-900 placeholder:text-gray-500"
+                                className="w-full pl-12 pr-4 py-3.5 bg-white border border-gray-200 rounded-full shadow-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition-all font-medium text-gray-900 placeholder:text-gray-500"
                                 value={searchTerm}
                                 onChange={(e) => setSearchTerm(e.target.value)}
                             />
                         </div>
                         <button 
                             onClick={() => setShowFilters(!showFilters)}
-                            className={`flex items-center gap-2 px-6 py-3.5 rounded-2xl border font-bold transition-all shadow-sm ${showFilters ? 'bg-indigo-600 border-indigo-600 text-white' : 'bg-white border-gray-200 text-gray-700 hover:border-indigo-600 hover:text-indigo-600'}`}
+                            className={`flex items-center gap-2 px-8 py-3.5 rounded-full border font-bold transition-all shadow-sm ${showFilters ? 'bg-indigo-600 border-indigo-600 text-white' : 'bg-white border-gray-200 text-gray-700 hover:border-indigo-600 hover:text-indigo-600'}`}
                         >
                             <Filter size={20} />
                             {showFilters ? 'Hide Filters' : 'Advanced Filters'}
@@ -801,8 +805,8 @@ export default function ExamResultsPage() {
                                         onChange={(e) => setFilters({...filters, assessmentId: e.target.value})}
                                     >
                                         <option value="all">All Assessments</option>
-                                        {Object.entries(assessmentsMap).map(([id, title]) => (
-                                            <option key={id} value={id}>{title}</option>
+                                        {Object.entries(assessmentsMap).map(([id, a]) => (
+                                            <option key={id} value={id}>{a.title}</option>
                                         ))}
                                     </select>
                                 </div>
@@ -943,7 +947,7 @@ export default function ExamResultsPage() {
                                                 <td className="p-6">
                                                     <div className="flex items-center gap-2">
                                                         <FileText size={14} className="text-gray-300" />
-                                                        <p className="text-sm font-semibold text-gray-700">{assessmentsMap[sub.assessment_id] || "Unknown"}</p>
+                                                        <p className="text-sm font-semibold text-gray-700">{assessmentsMap[sub.assessment_id]?.title || "Unknown"}</p>
                                                     </div>
                                                 </td>
                                                 <td className="p-6">
@@ -953,8 +957,11 @@ export default function ExamResultsPage() {
                                                 </td>
                                                 <td className="p-6">
                                                     <div className="flex flex-col">
-                                                        <span className="text-lg font-black text-gray-900 leading-tight">{sub.score}%</span>
-                                                        <span className="text-[10px] font-bold text-gray-500 uppercase tracking-tighter">Overall Result</span>
+                                                        <span className="text-lg font-black text-gray-900 leading-tight">
+                                                            {sub.score}
+                                                            <span className="text-[10px] text-gray-400 ml-0.5">/ {assessmentsMap[sub.assessment_id]?.total_marks || '--'}</span>
+                                                        </span>
+                                                        <span className="text-[10px] font-bold text-gray-500 uppercase tracking-tighter">Overall Marks</span>
                                                     </div>
                                                 </td>
                                                 <td className="p-6">

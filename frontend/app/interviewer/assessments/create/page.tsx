@@ -61,6 +61,23 @@ export default function CreateAssessmentPage() {
             .then(r => r.json())
             .then(d => setBankConfig(d))
             .catch(() => { /* non-fatal */ });
+
+        // Load draft from localStorage if available
+        const draft = localStorage.getItem("assessmentDraft");
+        if (draft) {
+            try {
+                const parsed = JSON.parse(draft);
+                if (parsed.step) setStep(parsed.step);
+                if (parsed.title) setTitle(parsed.title);
+                if (parsed.description !== undefined) setDescription(parsed.description);
+                if (parsed.duration) setDuration(parsed.duration);
+                if (parsed.totalMarks) setTotalMarks(parsed.totalMarks);
+                if (parsed.passingScore) setPassingScore(parsed.passingScore);
+                if (parsed.ruleGroups) setRuleGroups(parsed.ruleGroups);
+            } catch (e) {
+                console.error("Failed to parse assessment draft", e);
+            }
+        }
     }, []);
 
     // Wizard state
@@ -69,9 +86,9 @@ export default function CreateAssessmentPage() {
     // Assessment configuration state
     const [title, setTitle] = useState("");
     const [description, setDescription] = useState("");
-    const [duration, setDuration] = useState<number | string>(60);
-    const [totalMarks, setTotalMarks] = useState<number | string>(100);
-    const [passingScore, setPassingScore] = useState<number | string>(50);
+    const [duration, setDuration] = useState<number | string>("");
+    const [totalMarks, setTotalMarks] = useState<number | string>("");
+    const [passingScore, setPassingScore] = useState<number | string>("");
     const [ruleGroups, setRuleGroups] = useState<RuleGroup[]>([]);
     
     const [submitting, setSubmitting] = useState(false);
@@ -84,6 +101,20 @@ export default function CreateAssessmentPage() {
     const [bankCounts, setBankCounts] = useState<Record<string, number>>({});
     const [fetchingCounts, setFetchingCounts] = useState(false);
 
+    // Save draft to localStorage whenever fields change
+    useEffect(() => {
+        const draft = {
+            step,
+            title,
+            description,
+            duration,
+            totalMarks,
+            passingScore,
+            ruleGroups
+        };
+        localStorage.setItem("assessmentDraft", JSON.stringify(draft));
+    }, [step, title, description, duration, totalMarks, passingScore, ruleGroups]);
+
     // Auth protection
     if (isLoading) return <div className="min-h-screen flex items-center justify-center bg-gray-50 text-gray-600">Loading...</div>;
     if (!isAuthenticated || user?.role !== "interviewer") {
@@ -91,14 +122,19 @@ export default function CreateAssessmentPage() {
         return null;
     }
 
+    // Derive categories only from the actual question bank data
     const categoryOptions = Array.from(new Set([
         ...(bankConfig.structure?.categories?.map(c => c.name) || []),
-        ...(bankConfig.categories || []),
-        "Programming", "Communication", "Aptitude"
+        ...(bankConfig.categories || [])
     ]));
 
     const addGroup = () => {
-        const catName = categoryOptions[0] || "Programming";
+        if (categoryOptions.length === 0) {
+            showToast("No question categories available in the bank. Please upload questions first.", "error");
+            return;
+        }
+
+        const catName = categoryOptions[0];
         const catCfg = bankConfig.structure?.categories.find(c => c.name === catName);
         
         const defaultSub = catCfg?.has_sub_categories ? (catCfg.sub_categories[0]?.name || "") : "";
@@ -371,6 +407,9 @@ export default function CreateAssessmentPage() {
 
             await apiRequest("/api/assessments", "POST", payload);
 
+            // Clear the draft after successful submission
+            localStorage.removeItem("assessmentDraft");
+            
             showToast(`Successfully created assessment!`, "success");
             router.push("/interviewer/assessments");
         } catch (err: any) {
@@ -416,8 +455,9 @@ export default function CreateAssessmentPage() {
                     </div>
                 </div>
             </div>
-
-            <main className="max-w-4xl mx-auto px-4 py-8">
+ 
+            <main className={`max-w-6xl mx-auto px-4 py-8 ${step > 1 ? 'flex flex-col lg:flex-row gap-8' : ''}`}>
+                <div className={step > 1 ? 'flex-1' : 'max-w-4xl mx-auto w-full'}>
                 {/* Step 1: Basic Info & Configuration */}
                 {step === 1 && (
                     <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-8 space-y-6">
@@ -703,29 +743,6 @@ export default function CreateAssessmentPage() {
                                             </div>
                                         ))}
                                         
-                                        <div className={`mt-10 p-6 rounded-2xl flex items-center justify-between border-4 border-dashed transition-all ${currentPointsTotal === Number(totalMarks) ? 'bg-green-50 border-green-200 text-green-900' : 'bg-orange-50 border-orange-200 text-orange-900 animate-pulse-subtle'}`}>
-                                            <div className="flex items-center gap-6">
-                                                <div className={`w-16 h-16 rounded-2xl flex items-center justify-center shadow-sm ${currentPointsTotal === Number(totalMarks) ? 'bg-green-600 text-white' : 'bg-orange-500 text-white'}`}>
-                                                    <Target size={32} />
-                                                </div>
-                                                <div>
-                                                    <div className="text-sm font-bold opacity-60 uppercase tracking-widest mb-1">Configuration Status</div>
-                                                    <div className="flex items-baseline gap-2">
-                                                        <span className="text-4xl font-black">{currentPointsTotal}</span>
-                                                        <span className="text-xl font-bold opacity-40">/ {totalMarks} pts</span>
-                                                    </div>
-                                                    {currentPointsTotal !== Number(totalMarks) ? (
-                                                        <p className="text-sm font-medium mt-1">Configure {Math.abs(Number(totalMarks) - currentPointsTotal)} more pts to proceed</p>
-                                                    ) : (
-                                                        <p className="text-sm font-bold mt-1 flex items-center gap-1"><CheckCircle size={14} /> Ready to Review</p>
-                                                    )}
-                                                </div>
-                                            </div>
-                                            <div className="text-right px-8 border-l border-gray-200/50">
-                                                <div className="text-sm font-bold opacity-60 uppercase tracking-widest mb-1">Total Questions</div>
-                                                <span className="text-4xl font-black">{totalQuestions}</span>
-                                            </div>
-                                        </div>
                                     </div>
                                 )}
                             </div>
@@ -816,78 +833,9 @@ export default function CreateAssessmentPage() {
                                         </div>
                                     );
                                 })()}
-
-                                <div>
-                                    <div className="flex items-center justify-between mb-4 px-2">
-                                        <h4 className="text-lg font-bold text-gray-900">Question Bank Samples</h4>
-                                        <button 
-                                            onClick={fetchPreview}
-                                            disabled={fetchingPreview}
-                                            className="flex items-center gap-2 text-sm text-indigo-600 font-bold hover:text-indigo-800 disabled:opacity-50"
-                                        >
-                                            <RefreshCw size={14} className={fetchingPreview ? "animate-spin" : ""} />
-                                            {fetchingPreview ? "Generating..." : "Refresh Samples"}
-                                        </button>
-                                    </div>
-                                    
-                                    {fetchingPreview ? (
-                                        <div className="py-20 flex flex-col items-center justify-center bg-gray-50 rounded-xl border border-gray-100">
-                                            <div className="w-10 h-10 border-4 border-indigo-600 border-t-transparent rounded-full animate-spin mb-4"></div>
-                                            <p className="text-gray-500 font-medium">Sampling random questions...</p>
-                                        </div>
-                                    ) : previewQuestions.length > 0 ? (
-                                        <div className="space-y-4">
-                                            {previewQuestions.map((q, qIdx) => (
-                                                <div key={qIdx} className="bg-white border border-gray-100 rounded-xl p-6 shadow-sm hover:border-indigo-200 transition-colors">
-                                                    <div className="flex items-start justify-between gap-4 mb-4">
-                                                        <div className="flex items-center gap-2">
-                                                            <span className="p-1.5 bg-gray-50 rounded text-gray-400">
-                                                                <FileText size={14} />
-                                                            </span>
-                                                            <span className="text-xs font-bold uppercase tracking-wider text-gray-400">
-                                                                {q.category} • {q.difficulty}
-                                                            </span>
-                                                        </div>
-                                                        <div className="text-xs font-medium text-indigo-600 bg-indigo-50 px-2 py-1 rounded">
-                                                            MCQ
-                                                        </div>
-                                                    </div>
-                                                    <h5 className="text-gray-900 font-bold mb-4 leading-relaxed whitespace-pre-wrap">
-                                                        {q.text}
-                                                    </h5>
-                                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                                                        {q.options?.map((opt: string, oIdx: number) => {
-                                                            const letter = String.fromCharCode(65 + oIdx);
-                                                            const isCorrect = letter === q.correct_answer;
-                                                            return (
-                                                                <div 
-                                                                    key={oIdx} 
-                                                                    className={`flex items-center gap-3 p-3 rounded-lg border text-sm transition-all ${isCorrect ? 'bg-green-50 border-green-200 text-green-900 ring-1 ring-green-100' : 'bg-gray-50 border-gray-100 text-gray-600'}`}
-                                                                >
-                                                                    <span className={`flex-none w-6 h-6 flex items-center justify-center rounded-full text-xs font-bold ${isCorrect ? 'bg-green-600 text-white' : 'bg-white border border-gray-200 text-gray-400'}`}>
-                                                                        {letter}
-                                                                    </span>
-                                                                    <span className="flex-1">{opt}</span>
-                                                                    {isCorrect && <CheckCircle size={14} className="text-green-600 flex-none" />}
-                                                                </div>
-                                                            );
-                                                        })}
-                                                    </div>
-                                                </div>
-                                            ))}
-                                            <p className="text-center text-xs text-gray-400 py-4">
-                                                Showing {previewQuestions.length} sample questions based on your rules.
-                                            </p>
-                                        </div>
-                                    ) : (
-                                        <div className="text-center py-10 bg-gray-50 rounded-xl border-2 border-dashed border-gray-200">
-                                            <p className="text-gray-500">No questions found matching your criteria.</p>
-                                        </div>
-                                    )}
-                                </div>
                             </div>
                         </div>
-
+ 
                         <div className="flex justify-between pt-6 border-t border-gray-100">
                             <button
                                 onClick={handlePrevious}
@@ -908,6 +856,57 @@ export default function CreateAssessmentPage() {
                             </button>
                         </div>
                     </div>
+                )}
+                </div>
+
+                {/* Sticky Sidebar for Steps 2 & 3 */}
+                {step > 1 && (
+                    <aside className="w-full lg:w-80 space-y-6">
+                        <div className="lg:sticky lg:top-24 space-y-6">
+                            <div className={`p-6 rounded-2xl border-4 border-dashed transition-all ${currentPointsTotal === Number(totalMarks) ? 'bg-green-50 border-green-200 text-green-900' : 'bg-orange-50 border-orange-200 text-orange-900'}`}>
+                                <div className="space-y-6">
+                                    <div className="flex items-center gap-4">
+                                        <div className={`w-12 h-12 rounded-xl flex items-center justify-center shadow-sm shrink-0 ${currentPointsTotal === Number(totalMarks) ? 'bg-green-600 text-white' : 'bg-orange-500 text-white'}`}>
+                                            <Target size={24} />
+                                        </div>
+                                        <div>
+                                            <div className="text-[10px] font-bold opacity-60 uppercase tracking-widest leading-none mb-1">Status</div>
+                                            <div className="flex items-baseline gap-1">
+                                                <span className="text-2xl font-black">{currentPointsTotal}</span>
+                                                <span className="text-sm font-bold opacity-40">/ {totalMarks}</span>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <div className="pt-4 border-t border-gray-200/50 space-y-4">
+                                        <div className="flex justify-between items-center">
+                                            <div className="text-[10px] font-bold opacity-60 uppercase tracking-widest">Total Questions</div>
+                                            <span className="text-xl font-black">{totalQuestions}</span>
+                                        </div>
+                                        
+                                        {currentPointsTotal !== Number(totalMarks) ? (
+                                            <div className="text-xs font-bold py-2 px-3 bg-orange-100 text-orange-700 rounded-lg animate-pulse">
+                                                Needs {Math.abs(Number(totalMarks) - currentPointsTotal)} more pts
+                                            </div>
+                                        ) : (
+                                            <div className="text-xs font-bold py-2 px-3 bg-green-100 text-green-700 rounded-lg flex items-center gap-1.5">
+                                                <CheckCircle size={14} /> Ready to proceed
+                                            </div>
+                                        )}
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            {step === 2 && ruleGroups.length > 0 && (
+                                <div className="bg-indigo-50 border border-indigo-100 rounded-2xl p-4 text-xs text-indigo-700">
+                                    <h4 className="font-bold mb-2 uppercase tracking-tighter flex items-center gap-1">
+                                        <FileText size={14} /> Structure Tips
+                                    </h4>
+                                    <p>Rules will dynamically sample questions for each candidate session.</p>
+                                </div>
+                            )}
+                        </div>
+                    </aside>
                 )}
             </main>
 

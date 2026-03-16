@@ -8,7 +8,8 @@ import {
     Plus, Trash2, BookOpen, ChevronRight, ChevronDown,
     Upload, Music, X, RefreshCw, AlertTriangle,
     CheckCircle, Filter, Download, Search, LayoutList,
-    FileSpreadsheet, Terminal, Info, Layout, Layers, Tag, Edit2, ShieldAlert
+    FileSpreadsheet, Terminal, Info, Layout, Layers, Tag, Edit2, ShieldAlert,
+    Play, AlertCircle
 } from "lucide-react";
 import { useSelector, useDispatch } from "react-redux";
 import { RootState } from "@/lib/redux/store";
@@ -90,7 +91,7 @@ export default function ExamSheetPage() {
     const [importing, setImporting] = useState(false);
     const [formQ, setFormQ] = useState<ImportQuestion>({ text: "", type: "MCQ", options: ["", "", "", ""], correct_answer: "A" });
     const [audioUploading, setAudioUploading] = useState(false);
-    const audioRef = useRef<HTMLInputElement | null>(null);
+    const csvInputRef = useRef<HTMLInputElement | null>(null);
     const [isDragging, setIsDragging] = useState(false);
     const [editingQ, setEditingQ] = useState<Question | null>(null);
     const [showDeleteQuestionModal, setShowDeleteQuestionModal] = useState(false);
@@ -468,24 +469,26 @@ export default function ExamSheetPage() {
     if (!isAuthenticated || user?.role !== "interviewer") { router.push("/login"); return null; }
 
     return (
-        <div className="h-screen bg-gray-50 flex flex-col overflow-hidden">
+        <div className="h-screen bg-white text-slate-900 flex flex-col overflow-hidden font-sans selection:bg-indigo-500/30">
             {/* Header */}
-            <div className="bg-white border-b border-gray-200 px-8 py-5 flex items-center justify-between">
-                <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 bg-indigo-600 rounded-xl flex items-center justify-center"><BookOpen size={20} className="text-white" /></div>
+            <div className="bg-white border-b border-slate-100 px-8 py-5 flex items-center justify-between sticky top-0 z-50">
+                <div className="flex items-center gap-4">
+                    <div className="w-12 h-12 bg-indigo-600 rounded-2xl flex items-center justify-center shadow-lg shadow-indigo-600/20">
+                        <BookOpen size={24} className="text-white" />
+                    </div>
                     <div>
-                        <h1 className="text-xl font-black text-gray-900">Exam Sheet</h1>
-                        <p className="text-xs text-gray-500">Build your question bank — category → sub-category → difficulty</p>
+                        <h1 className="text-xl font-black text-slate-900 tracking-tight">Exam Sheet</h1>
+                        <p className="text-xs text-slate-500 font-bold uppercase tracking-widest">Master Repository</p>
                     </div>
                 </div>
-                <button onClick={() => { load(); }} className="flex items-center gap-2 text-sm text-indigo-600 font-semibold hover:text-indigo-800">
+                <button onClick={() => { load(); }} className="flex items-center gap-2 text-sm text-indigo-400 font-bold hover:text-indigo-300 transition-colors">
                     <RefreshCw size={15} className={loading ? "animate-spin" : ""} /> Refresh
                 </button>
             </div>
 
             <div className="flex flex-1 overflow-hidden">
-                {/* ───── LEFT: Tree ───── */}
-                <div className="w-80 border-r border-gray-200 bg-white flex flex-col overflow-hidden">
+                {/* ───── LEFT: Selection Stack ───── */}
+                <div className="w-80 border-r border-slate-200  bg-white  backdrop-blur-sm flex flex-col overflow-hidden relative z-10">
                     <div className="flex-1 overflow-y-auto p-4 space-y-3">
                         {loading && <div className="flex justify-center py-10"><div className="animate-spin h-8 w-8 rounded-full border-b-2 border-indigo-600" /></div>}
 
@@ -505,15 +508,15 @@ export default function ExamSheetPage() {
                             />
                         ))}
 
-                        <div className="mt-4 p-4 bg-indigo-50 border border-dashed border-indigo-200 rounded-xl">
-                            <p className="text-[10px] font-bold text-indigo-600 uppercase tracking-wider mb-2">Add Category</p>
-                            <div className="flex gap-2">
+                        <div className="mt-8 p-6 bg-slate-50 border border-slate-100 rounded-3xl relative">
+                            <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-4 ml-4">New Category</p>
+                            <div className="relative flex items-center bg-white border border-slate-100 rounded-2xl p-1 shadow-sm focus-within:ring-2 focus-within:ring-indigo-500/10 transition-all overflow-hidden">
                                 <input type="text" value={addCatName} onChange={e => setAddCatName(e.target.value)}
                                     onKeyDown={e => e.key === "Enter" && addCategory()}
-                                    className="flex-1 p-2 text-sm text-gray-900 border border-indigo-200 rounded-lg focus:border-indigo-500 focus:outline-none"
+                                    className="flex-1 min-w-0 px-4 py-2.5 text-sm bg-transparent border-none placeholder:text-slate-300 font-bold text-slate-900 outline-none"
                                     placeholder="e.g. Programming" />
-                                <button onClick={addCategory} className="p-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700">
-                                    <Plus size={16} />
+                                <button onClick={addCategory} className="shrink-0 w-10 h-10 bg-indigo-600 text-white rounded-xl hover:bg-indigo-500 transition-all active:scale-95 flex items-center justify-center">
+                                    <Plus size={20} />
                                 </button>
                             </div>
                         </div>
@@ -521,151 +524,186 @@ export default function ExamSheetPage() {
                 </div>
 
                 {/* ───── RIGHT: Workspace ───── */}
-                <div ref={workspaceRef} className="flex-1 overflow-y-auto bg-gray-50/50">
+                <div ref={workspaceRef} className="flex-1 overflow-y-auto bg-white">
                     {!active ? (
                         <div className="flex flex-col items-center justify-center h-full text-center p-8">
-                            <div className="w-20 h-20 bg-indigo-50 rounded-2xl flex items-center justify-center mb-4"><BookOpen size={36} className="text-indigo-300" /></div>
-                            <h2 className="text-xl font-bold text-gray-700 mb-2">Build Your Bank</h2>
-                            <p className="text-gray-400 max-w-xs">Select a category on the left to start uploading data or viewing questions.</p>
+                            <div className="w-24 h-24 bg-white  rounded-[32px] border border-slate-200 flex items-center justify-center mb-8 shadow-sm">
+                                <BookOpen size={48} className="text-slate-800" />
+                            </div>
+                            <h2 className="text-2xl font-bold text-foreground mb-3">Begin Your Collection</h2>
+                            <p className="text-slate-600  font-medium">
+                                Select a category or difficulty level from the sidebar to start adding and managing your assessment questions.
+                            </p>
                         </div>
                     ) : (
-                        <div className="p-8 max-w-5xl mx-auto space-y-8">
-                            <div className="flex items-center justify-between flex-wrap gap-4">
-                                <div>
-                                    <nav className="flex items-center gap-2 mb-1">
-                                        <span className="text-sm font-bold text-gray-400 uppercase tracking-widest">{active.category}</span>
-                                        {active.sub_category && <><ChevronRight size={14} className="text-gray-300" /><span className="text-sm font-bold text-gray-400 uppercase tracking-widest">{active.sub_category}</span></>}
-                                    </nav>
+                        <div className="min-h-full px-12 py-12">
+                            {/* Workspace Header */}
+                            <div className="flex items-center justify-between mb-16 px-2">
+                                <div className="space-y-3">
                                     <div className="flex items-center gap-3">
-                                        <h1 className="text-3xl font-black text-gray-900 tracking-tight">{active.difficulty} Questions</h1>
-                                        <span className="px-3 py-1 text-xs font-black rounded-full bg-indigo-100 text-indigo-700 uppercase">{totalCount} Total</span>
+                                        <div className="px-3 py-1 bg-indigo-500/10 text-indigo-400 border border-indigo-500/20 rounded-full text-[10px] font-black tracking-widest uppercase">
+                                            {active.category}
+                                        </div>
+                                        {active.sub_category && (
+                                            <>
+                                                <ChevronRight size={14} className="text-slate-800" />
+                                                <div className="px-3 py-1 bg-white  text-slate-500  border border-slate-200 rounded-full text-[10px] font-black tracking-widest uppercase">
+                                                    {active.sub_category}
+                                                </div>
+                                            </>
+                                        )}
+                                    </div>
+                                    <div className="flex items-center gap-6">
+                                        <h2 className="text-5xl font-black text-foreground tracking-tighter">
+                                            {active.difficulty ? `${active.difficulty} Questions` : "General Bank"}
+                                        </h2>
+                                        {totalCount > 0 && (
+                                            <div className="px-4 py-1.5 bg-white  text-slate-500  rounded-full text-xs font-black tracking-widest uppercase mt-2 border border-slate-200">
+                                                {totalCount} Total
+                                            </div>
+                                        )}
                                     </div>
                                 </div>
 
-                                <div className="flex bg-white p-1 rounded-xl shadow-sm border border-gray-100">
-                                    <button onClick={() => setViewMode("upload")}
-                                        className={`px-4 py-2 rounded-lg text-sm font-bold transition flex items-center gap-2 ${viewMode === "upload" ? "bg-indigo-600 text-white shadow-md" : "text-gray-500 hover:text-gray-700"}`}>
+                                <div className="flex bg-white  p-1.5 rounded-2xl border border-slate-200 shadow-sm">
+                                    <button 
+                                        onClick={() => setViewMode("upload")}
+                                        className={`px-6 py-3 rounded-xl text-xs font-black transition-all flex items-center gap-3 ${viewMode === "upload" ? "bg-indigo-600 text-white shadow-lg" : "text-slate-400 hover:text-slate-200"}`}
+                                    >
                                         <Upload size={16} /> Upload Hub
                                     </button>
-                                    <button onClick={() => setViewMode("list")}
-                                        className={`px-4 py-2 rounded-lg text-sm font-bold transition flex items-center gap-2 ${viewMode === "list" ? "bg-indigo-600 text-white shadow-md" : "text-gray-500 hover:text-gray-700"}`}>
+                                    <button 
+                                        onClick={() => setViewMode("list")}
+                                        className={`px-6 py-3 rounded-xl text-xs font-black transition-all flex items-center gap-3 ${viewMode === "list" ? "bg-indigo-600 text-white shadow-lg" : "text-slate-400 hover:text-slate-200"}`}
+                                    >
                                         <LayoutList size={16} /> List View
                                     </button>
                                 </div>
                             </div>
 
                             {viewMode === "upload" ? (
-                                <div className="space-y-6">
-                                    <AudioConfiguration 
-                                        cat={tree.find(c => c.name === active.category)}
-                                        onSaveAudio={(url) => {
-                                            const ci = tree.findIndex(c => c.name === active.category);
-                                            const si = active.sub_category ? tree[ci].subGroups.findIndex(s => s.name === active.sub_category) : undefined;
-                                            const sub = si !== undefined && si !== -1 ? tree[ci].subGroups[si] : (si === -1 ? undefined : tree[ci].subGroups[0]);
-                                            const di = sub?.difficulties.findIndex(d => d.difficulty === active.difficulty);
-                                            
-                                            dispatch(setAudioAction({ 
-                                                catIdx: ci, 
-                                                subIdx: si === -1 ? undefined : si, 
-                                                diffIdx: di === -1 ? undefined : di,
-                                                url 
-                                            }));
-                                        }}
-                                    />
-
-                                    <div className="bg-indigo-50 border border-indigo-100 rounded-3xl p-6 flex items-start gap-4">
-                                        <div className="w-10 h-10 bg-white rounded-xl flex items-center justify-center text-indigo-600 shadow-sm shrink-0">
-                                            <ShieldAlert size={20} />
+                                <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+                                    {/* CSV Upload Card */}
+                                    <div className="group bg-white  border border-slate-200 rounded-[40px] p-10 hover:border-indigo-500/50 transition-all hover:shadow-2xl hover:shadow-indigo-500/10 cursor-pointer relative overflow-hidden" onClick={() => csvInputRef.current?.click()}>
+                                        <div className="absolute top-0 right-0 w-32 h-32 bg-indigo-500/5 blur-3xl -mr-16 -mt-16 group-hover:bg-indigo-500/10 transition-colors" />
+                                        <div className="w-16 h-16 bg-white  rounded-2xl flex items-center justify-center text-indigo-400 mb-8 border border-slate-200  group-hover:scale-110 transition-transform">
+                                            <FileSpreadsheet size={32} />
                                         </div>
-                                        <div>
-                                            <h4 className="text-sm font-bold text-indigo-900 mb-1">Question Inheritance Active</h4>
-                                            <p className="text-xs text-indigo-700/70 leading-relaxed font-medium">
-                                                Any questions uploaded or added below will automatically inherit the audio configured for 
-                                                <span className="text-indigo-900 font-black px-1.5 py-0.5 bg-indigo-100/50 rounded ml-1">
-                                                    {active.category} {active.sub_category ? `→ ${active.sub_category}` : ""} → {active.difficulty}
-                                                </span>.
-                                            </p>
+                                        <h3 className="text-xl font-bold text-foreground mb-4 tracking-tight">CSV Batch Upload</h3>
+                                        <p className="text-slate-600  font-medium mb-8">
+                                            Swiftly import hundreds of questions using our optimized CSV template.
+                                        </p>
+                                        <div className="flex items-center gap-2 text-indigo-400 font-bold text-xs uppercase tracking-widest">
+                                            Start Upload <ChevronRight size={14} className="group-hover:translate-x-1 transition-transform" />
                                         </div>
                                     </div>
-                                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                                        {/* CSV Card */}
-                                        <div onDragOver={handleDragOver} onDragLeave={handleDragLeave} onDrop={handleDrop}
-                                            className={`bg-white rounded-3xl p-8 border ${isDragging ? "border-indigo-400 bg-indigo-50 scale-[1.02]" : "border-gray-100"} shadow-sm hover:shadow-xl transition-all`}>
-                                            <div className="w-14 h-14 bg-indigo-600 text-white rounded-2xl flex items-center justify-center mb-6 shadow-lg shadow-indigo-200">
-                                                <FileSpreadsheet size={28} />
-                                            </div>
-                                            <h3 className="text-xl font-bold text-gray-900 mb-2">CSV Upload</h3>
-                                            <p className="text-sm text-gray-500 mb-8 leading-relaxed">Import questions instantly. Columns: category, type, text, optionA-D, correctanswer.</p>
-                                            <label className="cursor-pointer">
-                                                <input type="file" accept=".csv" className="hidden" onChange={e => e.target.files?.[0] && handleCSVUpload(e.target.files[0])} disabled={importing} />
-                                                <div className="w-full py-4 bg-indigo-50 border-2 border-dashed border-indigo-200 rounded-2xl text-center text-sm font-black text-indigo-600 uppercase">
-                                                    {importing ? "Processing…" : "Choose CSV File"}
-                                                </div>
-                                            </label>
-                                        </div>
 
-                                        {/* JSON Card */}
-                                        <div className="bg-white rounded-3xl p-8 border border-gray-100 shadow-sm hover:shadow-xl transition-all">
-                                            <div className="w-14 h-14 bg-indigo-600 text-white rounded-2xl flex items-center justify-center mb-6 shadow-lg shadow-indigo-200">
-                                                <Terminal size={28} />
-                                            </div>
-                                            <h3 className="text-xl font-bold text-gray-900 mb-2">JSON Import</h3>
-                                            <p className="text-sm text-gray-500 mb-8 leading-relaxed">Paste raw question objects here for lightning-fast bulk data ingestion.</p>
-                                            <button onClick={() => { setImportMode("json"); setShowImport(true); }}
-                                                className="w-full py-4 bg-indigo-600 text-white rounded-2xl text-sm font-black uppercase shadow-md hover:bg-indigo-700">
-                                                Open JSON Editor
-                                            </button>
+                                    {/* JSON Upload Card */}
+                                    <div className="group bg-white  border border-slate-200 rounded-[40px] p-10 hover:border-purple-500/50 transition-all hover:shadow-2xl hover:shadow-purple-500/10 cursor-pointer relative overflow-hidden" onClick={() => { setImportMode("json"); setShowImport(true); }}>
+                                        <div className="absolute top-0 right-0 w-32 h-32 bg-purple-500/5 blur-3xl -mr-16 -mt-16 group-hover:bg-purple-500/10 transition-colors" />
+                                        <div className="w-16 h-16 bg-white  rounded-2xl flex items-center justify-center text-purple-400 mb-8 border border-slate-200  group-hover:scale-110 transition-transform">
+                                            <Terminal size={32} />
                                         </div>
+                                        <h3 className="text-xl font-bold text-foreground mb-4 tracking-tight">JSON Structure</h3>
+                                        <p className="text-slate-600  font-medium mb-8">
+                                            Import complex question structures using high-fidelity JSON data.
+                                        </p>
+                                        <div className="flex items-center gap-2 text-purple-400 font-bold text-xs uppercase tracking-widest">
+                                            Open Editor <ChevronRight size={14} className="group-hover:translate-x-1 transition-transform" />
+                                        </div>
+                                    </div>
 
-                                        {/* Form Card */}
-                                        <div className="bg-white rounded-3xl p-8 border border-gray-100 shadow-sm hover:shadow-xl transition-all">
-                                            <div className="w-14 h-14 bg-indigo-600 text-white rounded-2xl flex items-center justify-center mb-6 shadow-lg shadow-indigo-200">
-                                                <Plus size={28} />
-                                            </div>
-                                            <h3 className="text-xl font-bold text-gray-900 mb-2">Add Manually</h3>
-                                            <p className="text-sm text-gray-500 mb-8 leading-relaxed">Quickly add a single question via form with options and correct answer.</p>
-                                            <button onClick={() => { setImportMode("form"); setShowImport(true); }}
-                                                className="w-full py-4 bg-indigo-600 text-white rounded-2xl text-sm font-black uppercase shadow-md hover:bg-indigo-700">
-                                                Fill Out Form
-                                            </button>
+                                    {/* Manual Form Card */}
+                                    <div className="group bg-white  border border-slate-200 rounded-[40px] p-10 hover:border-emerald-500/50 transition-all hover:shadow-2xl hover:shadow-emerald-500/10 cursor-pointer relative overflow-hidden" onClick={() => { setImportMode("form"); setShowImport(true); }}>
+                                        <div className="absolute top-0 right-0 w-32 h-32 bg-emerald-500/5 blur-3xl -mr-16 -mt-16 group-hover:bg-emerald-500/10 transition-colors" />
+                                        <div className="w-16 h-16 bg-white  rounded-2xl flex items-center justify-center text-emerald-400 mb-8 border border-slate-200  group-hover:scale-110 transition-transform">
+                                            <Edit2 size={32} />
+                                        </div>
+                                        <h3 className="text-xl font-bold text-foreground mb-4 tracking-tight">Manual Entry</h3>
+                                        <p className="text-slate-600  font-medium mb-8">
+                                            Craft individual questions with precision using our interactive form.
+                                        </p>
+                                        <div className="flex items-center gap-2 text-emerald-400 font-bold text-xs uppercase tracking-widest">
+                                            Create Now <ChevronRight size={14} className="group-hover:translate-x-1 transition-transform" />
                                         </div>
                                     </div>
                                 </div>
                             ) : (
-                                <div className="space-y-6">
-                                    <div className="relative">
-                                        <Search size={18} className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-600" />
-                                        <input type="text" value={search} onChange={e => setSearch(e.target.value)} placeholder="Search questions..."
-                                            className="w-full pl-12 pr-4 py-3 text-sm font-bold border border-gray-300 rounded-2xl focus:outline-none focus:border-indigo-500 text-gray-900 placeholder:text-gray-400" />
+                                <div className="space-y-12">
+                                    <div className="relative group">
+                                        <Search size={20} className="absolute left-6 top-1/2 -translate-y-1/2 text-slate-600 group-focus-within:text-indigo-400 transition-colors" />
+                                        <input 
+                                            type="text" 
+                                            value={search} 
+                                            onChange={e => setSearch(e.target.value)} 
+                                            placeholder="Explore questions in this bank..."
+                                            className="w-full pl-16 pr-8 py-5 text-lg font-bold bg-white border border-slate-100 rounded-[32px] focus:outline-none focus:border-indigo-500/50 transition-all text-slate-900 placeholder:text-slate-400 shadow-sm" 
+                                        />
                                     </div>
-                                    <div className="space-y-4">
-                                        {filtered.map((q, i) => (
-                                            <div key={q.id} className="bg-white border rounded-3xl p-6 group hover:border-indigo-200 transition-all shadow-sm">
-                                                <div className="flex items-start gap-4">
-                                                    <div className="w-10 h-10 bg-indigo-50 text-indigo-600 rounded-xl flex items-center justify-center font-black">{i + 1}</div>
-                                                    <div className="flex-1">
-                                                        <div className="flex gap-2 mb-2">
-                                                            <span className="text-[10px] font-black uppercase bg-indigo-50 text-indigo-700 px-2 py-0.5 rounded-lg">{q.type}</span>
-                                                        </div>
-                                                        <p className="text-base font-semibold text-gray-900 whitespace-pre-wrap">{q.text}</p>
-                                                        {q.options && (
-                                                            <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-2">
-                                                                {q.options.map((opt, oi) => (
-                                                                    <div key={oi} className={`px-4 py-2.5 rounded-xl text-sm border ${String.fromCharCode(64 + oi + 1) === q.correct_answer ? "bg-emerald-50 border-emerald-100 text-emerald-900 font-bold" : "bg-gray-50 border-gray-100 text-gray-600"}`}>
-                                                                        {opt}
-                                                                    </div>
-                                                                ))}
+                                    <div className="space-y-6">
+                                        {/* Audio Config */}
+                                        <AudioConfiguration 
+                                            cat={tree.find(c => c.name === active.category)}
+                                            onSaveAudio={(url) => {
+                                                const ci = tree.findIndex(c => c.name === active.category);
+                                                const si = active.sub_category ? tree[ci].subGroups.findIndex(s => s.name === active.sub_category) : undefined;
+                                                const sub = si !== undefined && si !== -1 ? tree[ci].subGroups[si] : (si === -1 ? undefined : tree[ci].subGroups[0]);
+                                                const di = sub?.difficulties.findIndex(d => d.difficulty === active.difficulty);
+                                                
+                                                dispatch(setAudioAction({ 
+                                                    catIdx: ci, 
+                                                    subIdx: si === -1 ? undefined : si, 
+                                                    diffIdx: di === -1 ? undefined : di,
+                                                    url 
+                                                }));
+                                            }}
+                                        />
+
+                                        {/* Question List Header */}
+                                        <div className="flex items-center justify-between px-2 pb-2 border-b border-slate-900">
+                                            <div className="flex items-center gap-3">
+                                                <Filter size={16} className="text-slate-600" />
+                                                <span className="text-[10px] font-black uppercase text-slate-600 tracking-widest">Filter Results</span>
+                                            </div>
+                                            <button className="text-[10px] font-black uppercase text-indigo-400 hover:text-indigo-300 transition-colors tracking-widest">
+                                                Refresh Data
+                                            </button>
+                                        </div>
+
+                                        <div className="space-y-4">
+                                            {filtered.map((q, idx) => (
+                                                <div key={q.id} className="group bg-white  border border-slate-200 rounded-[32px] p-8 hover:border-indigo-500/30 transition-all shadow-sm">
+                                                    <div className="flex justify-between items-start gap-10">
+                                                        <div className="space-y-4 flex-1">
+                                                            <div className="flex items-center gap-3">
+                                                                <div className="px-3 py-1 bg-indigo-500/10 text-indigo-400 border border-indigo-500/20 rounded-full text-[10px] font-bold uppercase tracking-widest leading-none">
+                                                                    {q.type}
+                                                                </div>
+                                                                <span className="text-xs font-bold text-slate-600">ID: {q.id.slice(-8)}</span>
                                                             </div>
-                                                        )}
-                                                    </div>
-                                                    <div className="flex flex-col gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                                                        <button onClick={() => setEditingQ(q)} className="p-2 text-gray-400 hover:text-indigo-600"><Edit2 size={18} /></button>
-                                                        <button onClick={() => deleteQuestion(q.id)} className="p-2 text-gray-400 hover:text-red-600"><Trash2 size={18} /></button>
+                                                            <p className="text-xl font-bold text-foreground leading-snug">{q.text}</p>
+                                                            {q.options && q.options.length > 0 && (
+                                                                <div className="grid grid-cols-2 gap-3 mt-4">
+                                                                    {q.options.map((opt, i) => (
+                                                                        <div key={i} className={`p-4 rounded-xl border text-sm font-bold flex items-center gap-3 ${String.fromCharCode(64 + i + 1) === q.correct_answer ? "bg-emerald-500/5 border-emerald-500/20 text-emerald-400" : "bg-white  border-slate-200  text-slate-500"}`}>
+                                                                            <div className={`w-6 h-6 rounded-lg flex items-center justify-center text-[10px] ${String.fromCharCode(64 + i + 1) === q.correct_answer ? "bg-emerald-500 text-white" : "bg-slate-50  text-slate-600"}`}>
+                                                                                {optionLetters[i]}
+                                                                            </div>
+                                                                            {opt}
+                                                                        </div>
+                                                                    ))}
+                                                                </div>
+                                                            )}
+                                                        </div>
+                                                        <div className="flex flex-col gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                                                            <button onClick={() => setEditingQ(q)} className="p-3 bg-white  text-slate-400 hover:text-white hover:bg-slate-800 border border-slate-200  rounded-xl transition-all"><Edit2 size={16} /></button>
+                                                            <button onClick={() => { setQuestionToDelete(q.id); setShowDeleteQuestionModal(true); }} className="p-3 bg-white  text-slate-400 hover:text-red-400 hover:bg-red-500/10 border border-slate-200  rounded-xl transition-all"><Trash2 size={16} /></button>
+                                                        </div>
                                                     </div>
                                                 </div>
-                                            </div>
-                                        ))}
-                                        {hasMore && <div ref={observerTarget} className="py-10 text-center"><RefreshCw className="animate-spin mx-auto text-indigo-600" /></div>}
+                                            ))}
+                                            {hasMore && <div ref={observerTarget} className="py-10 text-center"><RefreshCw className="animate-spin mx-auto text-indigo-600" /></div>}
+                                        </div>
                                     </div>
                                 </div>
                             )}
@@ -676,40 +714,62 @@ export default function ExamSheetPage() {
 
             {/* Modals for Import and Edit */}
             {showImport && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-gray-900/60 backdrop-blur-sm">
-                    <div className="bg-white rounded-3xl shadow-2xl w-full max-w-2xl overflow-hidden border">
-                         <div className="flex items-center justify-between p-6 border-b">
-                            <h2 className="text-lg font-black">{importMode === "form" ? "Manual Entry" : "Bulk JSON Import"}</h2>
-                            <button onClick={() => setShowImport(false)} className="p-2 hover:bg-gray-100 rounded-full"><X size={20} /></button>
+                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/10 backdrop-blur-md">
+                    <div className="bg-white rounded-[40px] shadow-2xl w-full max-w-2xl overflow-hidden border border-slate-100">
+                         <div className="flex items-center justify-between bg-white border-slate-100 shadow-sm p-8 border-b border-slate-100">
+                            <h2 className="text-xl font-black text-slate-900">{importMode === "form" ? "Manual Question Entry" : "Bulk JSON Import"}</h2>
+                            <button onClick={() => setShowImport(false)} className="p-3 hover:bg-slate-50 rounded-2xl text-slate-400 transition-colors"><X size={24} /></button>
                         </div>
-                        <div className="p-8 max-h-[80vh] overflow-y-auto">
+                        <div className="p-10 max-h-[80vh] overflow-y-auto">
                             {importMode === "form" ? (
-                                <div className="space-y-6">
-                                    <select value={formQ.type} onChange={e => setFormQ(p => ({ ...p, type: e.target.value }))} className="w-full p-3 border rounded-xl font-bold text-gray-900">
-                                        <option value="MCQ">MCQ</option>
-                                        <option value="SUBJECTIVE">Subjective</option>
-                                    </select>
-                                    <textarea value={formQ.text} onChange={e => setFormQ(p => ({ ...p, text: e.target.value }))} rows={4} className="w-full p-4 border rounded-2xl font-bold text-gray-900 placeholder:text-gray-400" placeholder="Type question text here…" />
+                                <div className="space-y-8">
+                                    <div className="space-y-2">
+                                        <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1">Question Type</label>
+                                        <select value={formQ.type} onChange={e => setFormQ(p => ({ ...p, type: e.target.value }))} className="w-full p-4 bg-white  border border-slate-200  rounded-2xl font-bold text-foreground focus:ring-4 focus:ring-indigo-500/10 transition-all outline-none appearance-none">
+                                            <option value="MCQ">Multiple Choice (MCQ)</option>
+                                            <option value="SUBJECTIVE">Subjective / Coding</option>
+                                        </select>
+                                    </div>
+                                    <div className="space-y-2">
+                                        <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1">Question Content</label>
+                                        <textarea value={formQ.text} onChange={e => setFormQ(p => ({ ...p, text: e.target.value }))} rows={4} className="w-full p-5 bg-white  border border-slate-200  rounded-3xl font-bold text-foreground placeholder:text-slate-700 focus:ring-4 focus:ring-indigo-500/10 transition-all outline-none" placeholder="Enter the technical question here…" />
+                                    </div>
                                     {formQ.type === "MCQ" && (
-                                        <div className="space-y-3">
-                                            {formQ.options.map((opt, oi) => (
-                                                <input key={oi} type="text" value={opt} onChange={e => { const o = [...formQ.options]; o[oi] = e.target.value; setFormQ(p => ({ ...p, options: o })); }} className="w-full p-3 border rounded-xl text-gray-900 font-bold placeholder:text-gray-400" placeholder={`Option ${optionLetters[oi]}`} />
-                                            ))}
-                                            <div className="flex gap-2">
-                                                {optionLetters.map(l => (
-                                                    <button key={l} onClick={() => setFormQ(p => ({ ...p, correct_answer: l }))} className={`w-10 h-10 rounded-xl font-black ${formQ.correct_answer === l ? "bg-indigo-600 text-white" : "bg-gray-100 text-gray-400"}`}>{l}</button>
+                                        <div className="space-y-4">
+                                            <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1">Options & Answer</label>
+                                            <div className="grid grid-cols-1 gap-3">
+                                                {formQ.options.map((opt, oi) => (
+                                                    <div key={oi} className="relative group">
+                                                        <div className="absolute left-4 top-1/2 -translate-y-1/2 w-8 h-8 bg-slate-50  rounded-lg flex items-center justify-center text-xs font-black text-slate-500 border border-slate-200  group-focus-within:border-indigo-500/50 group-focus-within:text-indigo-400 transition-all">
+                                                            {optionLetters[oi]}
+                                                        </div>
+                                                        <input type="text" value={opt} onChange={e => { const o = [...formQ.options]; o[oi] = e.target.value; setFormQ(p => ({ ...p, options: o })); }} className="w-full pl-16 pr-4 py-4 bg-white  border border-slate-200  rounded-2xl text-foreground font-bold placeholder:text-slate-700 outline-none focus:border-indigo-500/30 transition-all" placeholder={`Alternative ${optionLetters[oi]}…`} />
+                                                    </div>
                                                 ))}
+                                            </div>
+                                            <div className="flex justify-between items-center bg-white  p-2 rounded-2xl border border-slate-200 ">
+                                                <span className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-4">Correct Key:</span>
+                                                <div className="flex gap-2">
+                                                    {optionLetters.map(l => (
+                                                        <button key={l} onClick={() => setFormQ(p => ({ ...p, correct_answer: l }))} className={`w-12 h-12 rounded-xl font-black transition-all ${formQ.correct_answer === l ? "bg-indigo-600 text-white shadow-lg shadow-indigo-600/20" : "text-slate-600 hover:text-slate-400"}`}>{l}</button>
+                                                    ))}
+                                                </div>
                                             </div>
                                         </div>
                                     )}
-                                    <button onClick={handleImportForm} disabled={importing} className="w-full py-4 bg-indigo-600 text-white rounded-2xl font-black shadow-lg">
-                                        {importing ? "Adding…" : "Add to Bank"}
+                                    <button onClick={handleImportForm} disabled={importing} className="w-full py-5 bg-indigo-600 text-white rounded-[32px] font-black shadow-2xl shadow-indigo-600/30 hover:bg-indigo-500 transition-all active:scale-95 disabled:opacity-50 mt-4">
+                                        {importing ? "Processing…" : "Add to Repository"}
                                     </button>
                                 </div>
                             ) : (
                                 <div className="space-y-6">
-                                    <textarea value={jsonText} onChange={e => setJsonText(e.target.value)} rows={12} className="w-full p-4 bg-gray-900 text-indigo-300 font-mono rounded-2xl" placeholder="JSON Array…" />
-                                    <button onClick={handleImportJSON} disabled={importing} className="w-full py-4 bg-indigo-600 text-white rounded-2xl font-black">{importing ? "Importing…" : "Import JSON"}</button>
+                                    <div className="p-4 bg-indigo-500/5 border border-indigo-500/10 rounded-2xl">
+                                        <p className="text-xs text-indigo-400 leading-relaxed font-medium">
+                                            Paste a JSON array of question objects. Ensure each object follows the schema: <code>{"{ text, type, options?, correct_answer? }"}</code>
+                                        </p>
+                                    </div>
+                                    <textarea value={jsonText} onChange={e => setJsonText(e.target.value)} rows={12} className="w-full p-6 bg-white  text-indigo-400 font-mono text-sm rounded-3xl border border-slate-200  focus:border-indigo-500/50 outline-none transition-all" placeholder="[ { 'text': '...' }, ... ]" />
+                                    <button onClick={handleImportJSON} disabled={importing} className="w-full py-5 bg-indigo-600 text-white rounded-[32px] font-black shadow-2xl shadow-indigo-600/30 hover:bg-indigo-500 transition-all">{importing ? "Importing…" : "Commit JSON Batch"}</button>
                                 </div>
                             )}
                         </div>
@@ -718,13 +778,26 @@ export default function ExamSheetPage() {
             )}
 
             {editingQ && (
-                <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-gray-900/60 backdrop-blur-sm">
-                    <div className="bg-white rounded-[32px] w-full max-w-2xl p-8 border">
-                        <h2 className="text-2xl font-black mb-6">Edit Question</h2>
-                        <textarea value={editingQ.text} onChange={e => setEditingQ({ ...editingQ, text: e.target.value })} rows={4} className="w-full p-4 border rounded-2xl font-bold mb-6 text-gray-900" />
-                        <div className="flex gap-4">
-                            <button onClick={() => setEditingQ(null)} className="flex-1 py-4 bg-gray-50 text-gray-500 rounded-2xl font-black">Cancel</button>
-                            <button onClick={handleEditSave} disabled={importing} className="flex-1 py-4 bg-indigo-600 text-white rounded-2xl font-black">{importing ? "Saving…" : "Save"}</button>
+                <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/10 backdrop-blur-md">
+                    <div className="bg-white rounded-[40px] shadow-sm w-full max-w-2xl overflow-hidden border border-slate-100">
+                         <div className="flex items-center justify-between p-8 border-b border-slate-100 bg-white">
+                            <h2 className="text-xl font-black text-slate-900">Refine Question</h2>
+                            <button onClick={() => setEditingQ(null)} className="p-3 hover:bg-slate-50 rounded-2xl text-slate-400 transition-colors"><X size={24} /></button>
+                        </div>
+                        <div className="p-10 space-y-8">
+                            <div className="space-y-2">
+                                <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1">Question content</label>
+                                <textarea 
+                                    value={editingQ.text} 
+                                    onChange={e => setEditingQ({ ...editingQ, text: e.target.value })} 
+                                    rows={6} 
+                                    className="w-full p-6 bg-white  border border-slate-200  rounded-3xl font-bold text-foreground placeholder:text-slate-700 focus:ring-4 focus:ring-indigo-500/10 transition-all outline-none" 
+                                />
+                            </div>
+                            <div className="flex gap-4">
+                                <button onClick={() => setEditingQ(null)} className="flex-1 py-5 bg-white  text-slate-400 border border-slate-200  rounded-[32px] font-black uppercase tracking-widest text-[10px] hover:bg-slate-800 transition-colors">Abort Changes</button>
+                                <button onClick={handleEditSave} disabled={importing} className="flex-1 py-5 bg-indigo-600 text-white rounded-[32px] font-black shadow-2xl shadow-indigo-600/30 hover:bg-indigo-500 transition-all active:scale-95">{importing ? "Syncing..." : "Apply Updates"}</button>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -736,32 +809,46 @@ export default function ExamSheetPage() {
                 onClose={() => setShowDeleteQuestionModal(false)}
                 title="Delete Question"
                 footer={
-                    <>
+                    <div className="flex gap-4 w-full">
                         <button
                             onClick={() => setShowDeleteQuestionModal(false)}
-                            className="px-4 py-2 text-gray-700 hover:text-gray-900 font-medium"
+                            className="flex-1 py-4 bg-white  text-slate-400 border border-slate-200  rounded-2xl font-black uppercase tracking-widest text-[10px] hover:bg-slate-800 transition-colors"
                         >
-                            Cancel
+                            Decline
                         </button>
                         <button
                             onClick={confirmDeleteQuestion}
-                            className="px-4 py-2 text-white bg-red-600 rounded-lg hover:bg-red-700 font-medium"
+                            className="flex-1 py-4 bg-red-600 text-white rounded-2xl font-black uppercase tracking-widest text-[10px] shadow-lg shadow-red-600/20 hover:bg-red-500 transition-colors"
                         >
-                            Confirm Delete
+                            Confirm Deletion
                         </button>
-                    </>
+                    </div>
                 }
             >
-                <div className="flex items-center gap-4 text-gray-600">
-                    <div className="w-12 h-12 bg-red-50 rounded-full flex items-center justify-center text-red-600 shrink-0">
-                        <AlertTriangle size={24} />
+                <div className="flex flex-col items-center text-center gap-6 py-4">
+                    <div className="w-16 h-16 bg-red-500/10 rounded-[24px] flex items-center justify-center text-red-500 border border-red-500/20">
+                        <Trash2 size={32} />
                     </div>
-                    <p>
-                        Are you sure you want to delete this question permanently? 
-                        This action will remove it from the question bank and cannot be undone.
-                    </p>
+                    <div className="space-y-2">
+                        <p className="text-foreground font-bold text-lg">Destroy Question Record?</p>
+                        <p className="text-slate-600  max-w-[280px]">
+                            This will permanently purge the question from your technical repository. This sequence is irreversible.
+                        </p>
+                    </div>
                 </div>
             </Modal>
+
+            <input 
+                type="file" 
+                ref={csvInputRef} 
+                accept=".csv" 
+                onChange={(e) => {
+                    const file = e.target.files?.[0];
+                    if (file) handleCSVUpload(file);
+                    e.target.value = ""; 
+                }} 
+                className="hidden" 
+            />
         </div>
     );
 }
@@ -789,64 +876,64 @@ function CategoryBlock({ cat, catIdx, active, onToggle, onRemoveCat, onRenameCat
     };
 
     return (
-        <div className="border border-gray-100 rounded-xl overflow-hidden shadow-sm">
-            <div className={`px-4 py-3 cursor-pointer transition-colors flex items-center justify-between ${active?.category === cat.name && !active?.sub_category ? "bg-indigo-700 text-white" : "bg-gray-900 text-gray-300 hover:bg-gray-800"}`}
+        <div className="border border-slate-100 rounded-2xl bg-white shadow-sm">
+            <div className={`px-5 py-4 cursor-pointer transition-all flex items-center justify-between rounded-t-2xl ${active?.category === cat.name && !active?.sub_category ? "bg-indigo-600 text-white shadow-lg" : "text-slate-500 hover:bg-slate-50 hover:text-slate-900"}`}
                 onClick={() => { onSelect("", ""); if (!cat.expanded) onToggle(); }}>
-                <div className="flex items-center gap-2 flex-1">
-                    <ChevronRight size={14} className={`transition ${cat.expanded ? "rotate-90" : ""}`} onClick={(e) => { e.stopPropagation(); onToggle(); }} />
-                    <input type="text" value={cat.name} onChange={e => onRenameCat(e.target.value)} onClick={e => e.stopPropagation()} className="bg-transparent border-none font-bold text-sm w-full focus:ring-0 text-white placeholder:text-gray-400" />
+                <div className="flex items-center gap-3 flex-1">
+                    <ChevronRight size={16} className={`transition-transform duration-300 ${cat.expanded ? "rotate-90" : ""}`} onClick={(e) => { e.stopPropagation(); onToggle(); }} />
+                    <input type="text" value={cat.name} onChange={e => onRenameCat(e.target.value)} onClick={e => e.stopPropagation()} className="bg-transparent border-none font-bold text-sm w-full focus:ring-0 text-current placeholder:text-slate-600" />
                 </div>
-                <button onClick={(e) => { e.stopPropagation(); onRemoveCat(); }} className="p-1 hover:text-red-500 text-gray-400"><Trash2 size={13} /></button>
+                <button onClick={(e) => { e.stopPropagation(); onRemoveCat(); }} className="p-2 text-slate-300 hover:text-red-500 transition-colors"><Trash2 size={16} /></button>
             </div>
 
             {cat.expanded && (
-                <div className="p-4 bg-white space-y-4">
-                    <div className="flex items-center gap-2">
-                        <span className="text-[10px] font-black uppercase text-gray-500">Sub-categories?</span>
-                        <div className="flex border rounded-lg overflow-hidden">
-                            <button onClick={() => onHasSub(false)} className={`px-3 py-1 text-xs font-bold ${!cat.hasSubCategories ? "bg-indigo-600 text-white" : "bg-gray-100 text-gray-600"}`}>No</button>
-                            <button onClick={() => onHasSub(true)} className={`px-3 py-1 text-xs font-bold ${cat.hasSubCategories ? "bg-indigo-600 text-white" : "bg-gray-100 text-gray-600"}`}>Yes</button>
+                <div className="p-5 bg-white  space-y-6">
+                    <div className="flex items-center justify-between bg-white p-2 rounded-xl border border-slate-100">
+                        <span className="text-[10px] font-black uppercase text-slate-500 tracking-widest ml-2">Nested Subgroups?</span>
+                        <div className="flex bg-slate-50 rounded-lg p-1">
+                            <button onClick={() => onHasSub(false)} className={`px-4 py-1.5 text-[10px] font-black uppercase tracking-widest rounded-md transition-all ${!cat.hasSubCategories ? "bg-indigo-600 text-white shadow-md" : "text-slate-500 hover:text-slate-400"}`}>No</button>
+                            <button onClick={() => onHasSub(true)} className={`px-4 py-1.5 text-[10px] font-black uppercase tracking-widest rounded-md transition-all ${cat.hasSubCategories ? "bg-indigo-600 text-white shadow-md" : "text-slate-500 hover:text-slate-400"}`}>Yes</button>
                         </div>
                     </div>
 
                     {cat.hasSubCategories ? (
-                        <div className="space-y-3">
+                        <div className="space-y-4">
                             {cat.subGroups.map((sg, si) => (
-                                <div key={si} className="border rounded-xl p-3 bg-gray-50">
-                                    <div className="flex items-center justify-between mb-2">
-                                        <div className="flex items-center gap-1.5 flex-1">
-                                            <Tag size={12} className="text-indigo-500" />
-                                            <input type="text" value={sg.name} onChange={e => onRenameSub(si, e.target.value)} className="bg-transparent border-none text-xs font-bold focus:ring-0 w-full placeholder:text-gray-400 text-gray-900" placeholder="Sub-category…" />
+                                <div key={si} className="border border-slate-100 rounded-2xl p-5 bg-white shadow-sm hover:border-indigo-500/20 transition-all">
+                                    <div className="flex items-center justify-between mb-4">
+                                        <div className="flex items-center gap-2 flex-1">
+                                            <Tag size={14} className="text-indigo-500" />
+                                            <input type="text" value={sg.name} onChange={e => onRenameSub(si, e.target.value)} className="bg-transparent border-none text-sm font-bold focus:ring-0 w-full placeholder:text-slate-300 text-slate-900" placeholder="Sub-category…" />
                                         </div>
-                                        <button onClick={() => onRemoveSub(si)} className="text-gray-400 hover:text-red-500"><Trash2 size={12} /></button>
+                                        <button onClick={() => onRemoveSub(si)} className="text-slate-400  hover:text-red-500 transition-colors"><Trash2 size={14} /></button>
                                     </div>
-                                    <div className="flex flex-wrap gap-1.5 mb-2">
+                                    <div className="flex flex-wrap gap-2 mb-4">
                                         {sg.difficulties.map((d, di) => (
-                                            <div key={di} className="flex items-center gap-1">
-                                                <button onClick={() => onSelect(sg.name, d.difficulty)} className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${diffColor(d.difficulty)} ${active?.category === cat.name && active?.sub_category === sg.name && active?.difficulty === d.difficulty ? "ring-2 ring-indigo-500" : ""}`}>
-                                                    {d.difficulty} {d.count > 0 && <span>({d.count})</span>}
+                                            <div key={di} className="relative group/diff">
+                                                <button onClick={() => onSelect(sg.name, d.difficulty)} className={`pl-3 pr-8 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${active?.category === cat.name && active?.sub_category === sg.name && active?.difficulty === d.difficulty ? "bg-indigo-600 text-white ring-4 ring-indigo-500/20" : "bg-slate-50  text-slate-400 border border-slate-200  hover:border-slate-700 hover:text-slate-300"}`}>
+                                                    {d.difficulty} {d.count > 0 && <span className="opacity-50 ml-1">[{d.count}]</span>}
                                                 </button>
-                                                <button onClick={() => onRemoveDiff(si, di)} className="text-gray-400 hover:text-red-500"><X size={10} /></button>
+                                                <button onClick={() => onRemoveDiff(si, di)} className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-600 hover:text-red-400 opacity-0 group-hover/diff:opacity-100 transition-opacity"><X size={12} /></button>
                                             </div>
                                         ))}
                                     </div>
                                     <DifficultyAdder value={diffInputs[si] || ""} onChange={v => setDiffInputs(p => ({ ...p, [si]: v }))} onAdd={() => { onAddDiff(si, diffInputs[si]); setDiffInputs(p => ({ ...p, [si]: "" })); }} />
                                 </div>
                             ))}
-                             <div className="flex gap-2">
-                                <input type="text" value={newSub} onChange={e => setNewSub(e.target.value)} className="flex-1 p-2 text-xs border rounded-lg placeholder:text-gray-400 font-bold text-gray-900" placeholder="New sub-category…" />
-                                <button onClick={() => { onAddSub(newSub); setNewSub(""); }} className="p-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors"><Plus size={14} /></button>
+                             <div className="relative flex items-center bg-slate-50/50 border border-slate-100 rounded-2xl p-1 transition-all focus-within:bg-white focus-within:shadow-sm overflow-hidden">
+                                <input type="text" value={newSub} onChange={e => setNewSub(e.target.value)} className="flex-1 min-w-0 px-4 py-2.5 bg-transparent border-none font-bold text-slate-900 text-sm outline-none placeholder:text-slate-300" placeholder="New subgroup…" />
+                                <button onClick={() => { onAddSub(newSub); setNewSub(""); }} className="shrink-0 w-9 h-9 bg-indigo-600 text-white rounded-xl hover:bg-indigo-500 transition-all active:scale-95 flex items-center justify-center shadow-sm"><Plus size={18} /></button>
                             </div>
                         </div>
                     ) : (
-                        <div className="border rounded-xl p-3 bg-gray-50">
-                            <div className="flex flex-wrap gap-1.5 mb-2">
+                        <div className="border border-slate-100 rounded-3xl p-6 bg-slate-50/30 shadow-inner">
+                            <div className="flex flex-wrap gap-2 mb-4">
                                 {cat.subGroups[0]?.difficulties.map((d, di) => (
-                                    <div key={di} className="flex items-center gap-1">
-                                        <button onClick={() => onSelect("", d.difficulty)} className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${diffColor(d.difficulty)} ${active?.category === cat.name && !active?.sub_category && active?.difficulty === d.difficulty ? "ring-2 ring-indigo-500" : ""}`}>
-                                            {d.difficulty} {d.count > 0 && <span>({d.count})</span>}
+                                    <div key={di} className="relative group/diff">
+                                        <button onClick={() => onSelect("", d.difficulty)} className={`pl-3 pr-8 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${active?.category === cat.name && !active?.sub_category && active?.difficulty === d.difficulty ? "bg-indigo-600 text-white ring-4 ring-indigo-500/20" : "bg-slate-50  text-slate-400 border border-slate-200  hover:border-slate-700 hover:text-slate-300"}`}>
+                                            {d.difficulty} {d.count > 0 && <span className="opacity-50 ml-1">[{d.count}]</span>}
                                         </button>
-                                        <button onClick={() => onRemoveDiff(0, di)} className="text-gray-400 hover:text-red-500"><X size={10} /></button>
+                                        <button onClick={() => onRemoveDiff(0, di)} className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-600 hover:text-red-400 opacity-0 group-hover/diff:opacity-100 transition-opacity"><X size={12} /></button>
                                     </div>
                                 ))}
                             </div>
@@ -904,49 +991,61 @@ function AudioConfiguration({ cat, onSaveAudio }: {
     };
 
     return (
-        <div className="bg-white rounded-3xl p-6 border border-indigo-100 shadow-sm">
-            <div className="flex items-center justify-between mb-6">
-                <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 bg-indigo-50 rounded-xl flex items-center justify-center text-indigo-600"><Music size={20} /></div>
+        <div className="bg-white  rounded-[32px] p-8 border border-slate-200 shadow-sm relative overflow-hidden group/audio">
+            <div className="absolute top-0 right-0 w-32 h-32 bg-indigo-500/5 blur-3xl -mr-16 -mt-16 group-hover/audio:bg-indigo-500/10 transition-colors" />
+            
+            <div className="flex items-center justify-between mb-8 relative z-10">
+                <div className="flex items-center gap-4">
+                    <div className="w-14 h-14 bg-white  border border-slate-200   rounded-2xl flex items-center justify-center text-indigo-500  shadow-inner group-hover/audio:scale-105 transition-transform"><Music size={28} /></div>
                     <div>
-                        <h3 className="text-lg font-bold text-gray-900">Audio Configuration</h3>
-                        <p className="text-[10px] font-bold text-indigo-600 uppercase tracking-widest">
-                            For {activeDiff ? `${activeDiff} ` : ""}{activeSub || cat?.name}
+                        <h3 className="text-xl font-black text-foreground tracking-tight">Audio Asset Performance</h3>
+                        <p className="text-[10px] font-black text-indigo-400 uppercase tracking-[0.2em] mt-1">
+                            Slot: {activeDiff ? `${activeDiff} ` : ""}{activeSub || cat?.name}
                         </p>
                     </div>
                 </div>
-                <div className="flex gap-2">
+                <div className="flex gap-3">
                     {node?.audio_url && (
                         <button 
                             onClick={() => setShowDeleteModal(true)}
-                            className="p-2 bg-red-50 text-red-600 rounded-xl hover:bg-red-100 transition-colors"
-                            title="Remove Audio"
+                            className="w-12 h-12 flex items-center justify-center bg-white text-slate-500 rounded-xl hover:text-red-400 border border-slate-100 transition-all hover:bg-slate-50"
+                            title="Purge Audio"
                         >
-                            <Trash2 size={18} />
+                            <Trash2 size={20} />
                         </button>
                     )}
-                    <button onClick={() => setIsEditing(!isEditing)} className={`px-4 py-2 rounded-xl text-xs font-bold ${isEditing ? "bg-indigo-600 text-white" : "bg-gray-100 text-gray-600"}`}>
-                        {isEditing ? "Done" : "Manage"}
+                    <button onClick={() => setIsEditing(!isEditing)} className={`px-6 py-3 rounded-xl text-xs font-black uppercase tracking-widest transition-all ${isEditing ? "bg-indigo-600 text-white shadow-lg shadow-indigo-600/20" : "bg-white text-slate-400 border border-slate-100 hover:border-slate-200 hover:text-slate-600"}`}>
+                        {isEditing ? "Finalize" : "Config"}
                     </button>
                 </div>
             </div>
 
             {isEditing ? (
-                <div className="space-y-4">
-                    <div className="space-y-2">
-                        <label className="text-[10px] font-black text-gray-500 uppercase tracking-wider">Audio URL</label>
-                        <div className="flex gap-2">
-                            <input type="text" value={audioUrl} onChange={e => { setAudioUrl(e.target.value); onSaveAudio(e.target.value); }} className="flex-1 p-3 text-sm bg-gray-50 border rounded-xl placeholder:text-gray-500 font-medium" placeholder="URL…" />
-                            <label className="cursor-pointer p-3 bg-indigo-50 text-indigo-600 rounded-xl hover:bg-indigo-100 transition-colors">
+                <div className="space-y-6 relative z-10 animate-in fade-in slide-in-from-bottom-2 duration-300">
+                    <div className="space-y-3">
+                        <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1">Universal Resource Locator (URL)</label>
+                        <div className="flex gap-3">
+                            <input type="text" value={audioUrl} onChange={e => { setAudioUrl(e.target.value); onSaveAudio(e.target.value); }} className="flex-1 p-4 bg-white  border border-slate-200   rounded-2xl placeholder:text-slate-300  font-bold text-foreground outline-none focus:border-indigo-500/50 transition-all" placeholder="https://storage.hireit.ai/..." />
+                            <label className="cursor-pointer w-14 h-14 flex items-center justify-center bg-indigo-600 text-white rounded-2xl hover:bg-indigo-500 shadow-lg shadow-indigo-600/20 transition-all active:scale-90 shrink-0">
                                 <input type="file" className="hidden" accept="audio/*" onChange={handleUpload} disabled={uploading} />
-                                {uploading ? <RefreshCw size={18} className="animate-spin" /> : <Upload size={18} />}
+                                {uploading ? <RefreshCw size={24} className="animate-spin" /> : <Upload size={24} />}
                             </label>
                         </div>
                     </div>
                 </div>
             ) : (
-                <div className="p-3 bg-indigo-50/50 rounded-xl border border-indigo-100 flex items-center gap-3">
-                    {node.audio_url ? <audio src={node.audio_url.startsWith("http") ? node.audio_url : `${API_BASE}${node.audio_url}`} controls className="h-8 flex-1" /> : <span className="text-xs text-gray-500 font-medium">No Audio Configured for this Level</span>}
+                <div className="p-6 bg-white/80   rounded-2xl border border-slate-200   flex items-center gap-6 relative z-10 backdrop-blur-sm group-hover/audio:border-indigo-500/20 transition-colors">
+                    {node.audio_url ? (
+                        <>
+                            <div className="w-10 h-10 bg-indigo-600/10 rounded-full flex items-center justify-center text-indigo-600  border border-indigo-500/20"><Play size={16} /></div>
+                            <audio src={node.audio_url.startsWith("http") ? node.audio_url : `${API_BASE}${node.audio_url}`} controls className="h-10 flex-1 opacity-70 hover:opacity-100 transition-opacity filter   invert-0" />
+                        </>
+                    ) : (
+                        <div className="flex items-center gap-4 text-slate-600 py-2">
+                            <AlertCircle size={20} />
+                            <span className="text-xs font-black uppercase tracking-widest">No audio sequence defined for this level</span>
+                        </div>
+                    )}
                 </div>
             )}
 
@@ -954,14 +1053,14 @@ function AudioConfiguration({ cat, onSaveAudio }: {
             <Modal
                 isOpen={showDeleteModal}
                 onClose={() => setShowDeleteModal(false)}
-                title="Remove Audio Configuration"
+                title="Purge Audio Sequence"
                 footer={
-                    <>
+                    <div className="flex gap-4 w-full">
                         <button
                             onClick={() => setShowDeleteModal(false)}
-                            className="px-4 py-2 text-gray-700 hover:text-gray-900 font-medium"
+                            className="flex-1 py-4 bg-white  text-slate-400 border border-slate-200  rounded-2xl font-black uppercase tracking-widest text-[10px] hover:bg-slate-800 transition-colors"
                         >
-                            Cancel
+                            Retain Asset
                         </button>
                         <button
                             onClick={() => {
@@ -969,22 +1068,23 @@ function AudioConfiguration({ cat, onSaveAudio }: {
                                 setShowDeleteModal(false);
                                 showToast("Audio configuration removed", "info");
                             }}
-                            className="px-4 py-2 text-white bg-red-600 rounded-lg hover:bg-red-700 font-medium"
+                            className="flex-1 py-4 bg-red-600 text-white rounded-2xl font-black uppercase tracking-widest text-[10px] shadow-lg shadow-red-600/20 hover:bg-red-500 transition-colors"
                         >
-                            Confirm Remove
+                            Confirm Purge
                         </button>
-                    </>
+                    </div>
                 }
             >
-                <div className="flex items-center gap-4 text-gray-600">
-                    <div className="w-12 h-12 bg-red-50 rounded-full flex items-center justify-center text-red-600 shrink-0">
-                        <AlertTriangle size={24} />
+                <div className="flex flex-col items-center text-center gap-6 py-4">
+                    <div className="w-16 h-16 bg-red-500/10 rounded-[24px] flex items-center justify-center text-red-500 border border-red-500/20">
+                        <Trash2 size={32} />
                     </div>
-                    <p>
-                        Are you sure you want to remove the audio configuration for 
-                        <strong> {activeDiff ? `${activeDiff} ` : ""}{activeSub || cat?.name}</strong>?
-                        This action cannot be undone.
-                    </p>
+                    <div className="space-y-2">
+                        <p className="text-foreground font-bold text-lg">Remove Audio Sequence?</p>
+                        <p className="text-slate-600  max-w-[280px]">
+                            The audio configured for <strong>{activeDiff ? `${activeDiff} ` : ""}{activeSub || cat?.name}</strong> will be permanently detached.
+                        </p>
+                    </div>
                 </div>
             </Modal>
         </div>
@@ -994,9 +1094,9 @@ function AudioConfiguration({ cat, onSaveAudio }: {
 
 function DifficultyAdder({ value, onChange, onAdd }: { value: string; onChange: (v: string) => void; onAdd: () => void; }) {
     return (
-        <div className="flex gap-1.5 items-center">
-            <input type="text" value={value} onChange={e => onChange(e.target.value)} onKeyDown={e => e.key === "Enter" && onAdd()} className="flex-1 p-1.5 text-xs border rounded-lg placeholder:text-gray-500 font-medium" placeholder="Difficulty…" />
-            <button onClick={onAdd} className="p-1.5 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors"><Plus size={12} /></button>
+        <div className="flex items-center bg-white border border-slate-100 rounded-xl p-1 shadow-sm focus-within:ring-2 focus-within:ring-indigo-500/5 transition-all mt-2 overflow-hidden">
+            <input type="text" value={value} onChange={e => onChange(e.target.value)} onKeyDown={e => e.key === "Enter" && onAdd()} className="flex-1 min-w-0 px-3 py-2 text-xs bg-transparent border-none font-bold text-slate-900 outline-none placeholder:text-slate-300" placeholder="Level name..." />
+            <button onClick={onAdd} className="shrink-0 w-8 h-8 bg-slate-50 text-indigo-600 rounded-lg hover:bg-indigo-600 hover:text-white transition-all border border-slate-100 flex items-center justify-center active:scale-95 shadow-sm shadow-indigo-600/5"><Plus size={14} /></button>
         </div>
     );
 }

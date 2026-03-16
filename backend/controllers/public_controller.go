@@ -74,3 +74,41 @@ func (ctrl *PublicController) StartDemoAssessment(c *gin.Context) {
 		},
 	})
 }
+// StartAssessmentOTP handles candidate login using phone number + OTP
+func (ctrl *PublicController) StartAssessmentOTP(c *gin.Context) {
+	var input struct {
+		Phone string `json:"phone" binding:"required"`
+		OTP   string `json:"otp" binding:"required"`
+	}
+
+	if err := c.ShouldBindJSON(&input); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	token, user, err := ctrl.authService.StartAssessmentWithOTP(ctx, input.Phone, input.OTP)
+	if err != nil {
+		switch err.Error() {
+		case "invalid OTP":
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid OTP. Please try again."})
+		case "candidate not found. please check your phone number":
+			c.JSON(http.StatusNotFound, gin.H{"error": "Candidate not found. Please check your phone number."})
+		default:
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to validate OTP"})
+		}
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"token": token,
+		"user": gin.H{
+			"id":    user.ID,
+			"name":  user.Name,
+			"email": user.Email,
+			"role":  user.Role,
+		},
+	})
+}

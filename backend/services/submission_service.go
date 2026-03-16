@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"math/rand"
 	"hireit-backend/models"
 	"hireit-backend/repositories"
 	"strings"
@@ -367,6 +368,12 @@ func (s *submissionService) GetOrGenerateQuestions(ctx context.Context, assessme
 			})
 		}
 	}
+
+	// Shuffle questions so candidates get them in a random order
+	rand.Seed(time.Now().UnixNano())
+	rand.Shuffle(len(generatedQuestions), func(i, j int) {
+		generatedQuestions[i], generatedQuestions[j] = generatedQuestions[j], generatedQuestions[i]
+	})
 
 	// 4. Save/Update Submission with Locked Questions
 	if submission == nil {

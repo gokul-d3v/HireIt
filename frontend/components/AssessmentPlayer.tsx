@@ -67,6 +67,8 @@ export default function AssessmentPlayer({ assessmentId, onComplete }: Assessmen
     const [showWarningModal, setShowWarningModal] = useState(false);
     const [violationReason, setViolationReason] = useState("");
     const [violationEvidence, setViolationEvidence] = useState<string | null>(null);
+    const violationQueue = useRef<Array<{ reason: string; evidence?: string }>>([]);
+    const isModalOpenRef = useRef(false);
     const [modelsLoaded, setModelsLoaded] = useState(false);
     const [calibrationStep, setCalibrationStep] = useState<'not_started' | 'calibrating' | 'completed'>('not_started');
     const [calibrationFeedback, setCalibrationFeedback] = useState("Position your face within the frame");
@@ -85,6 +87,11 @@ export default function AssessmentPlayer({ assessmentId, onComplete }: Assessmen
 
     // Snapshot State
     const [snapshots, setSnapshots] = useState<{
+        initial?: { image: string, descriptor?: Float32Array };
+        middle?: { image: string, descriptor?: Float32Array };
+        end?: { image: string, descriptor?: Float32Array };
+    }>({});
+    const snapshotsRef = useRef<{
         initial?: { image: string, descriptor?: Float32Array };
         middle?: { image: string, descriptor?: Float32Array };
         end?: { image: string, descriptor?: Float32Array };
@@ -154,6 +161,10 @@ export default function AssessmentPlayer({ assessmentId, onComplete }: Assessmen
             }
 
             const snapshotData = { image: imageBase64, descriptor };
+            
+            // Update ref to avoid stale closures in submit function
+            snapshotsRef.current[type] = snapshotData;
+
             setSnapshots(prev => ({
                 ...prev,
                 [type]: snapshotData
@@ -169,16 +180,32 @@ export default function AssessmentPlayer({ assessmentId, onComplete }: Assessmen
         setTimeout(() => setHeaderWarning(prev => prev === msg ? null : prev), 5000);
     };
 
+    const showNextViolationModal = () => {
+        const next = violationQueue.current.shift();
+        if (!next) {
+            isModalOpenRef.current = false;
+            return;
+        }
+        isModalOpenRef.current = true;
+        setViolationReason(next.reason);
+        setViolationEvidence(next.evidence ?? null);
+        setShowWarningModal(true);
+    };
+
     const handleViolation = (reason: string, evidenceBase64?: string) => {
         setViolations(prev => {
             const newCount = prev + 1;
-            setViolationReason(reason);
-            if (evidenceBase64) setViolationEvidence(evidenceBase64);
-            setShowWarningModal(true);
 
             if (newCount >= 3) {
-                submitAssessment(true); // Auto submit on 3rd violation
+                // Fatal — queue it then auto-submit after
+                violationQueue.current.push({ reason, evidence: evidenceBase64 });
+                if (!isModalOpenRef.current) showNextViolationModal();
+                submitAssessment(true);
+            } else {
+                violationQueue.current.push({ reason, evidence: evidenceBase64 });
+                if (!isModalOpenRef.current) showNextViolationModal();
             }
+
             return newCount;
         });
     };
@@ -703,12 +730,14 @@ export default function AssessmentPlayer({ assessmentId, onComplete }: Assessmen
             let initialVsMiddleDistance = null;
             let initialVsEndDistance = null;
 
-            if (snapshots.initial?.descriptor) {
-                if (snapshots.middle?.descriptor) {
-                    initialVsMiddleDistance = faceapi.euclideanDistance(snapshots.initial.descriptor, snapshots.middle.descriptor);
+            const currentSnapshots = snapshotsRef.current;
+
+            if (currentSnapshots.initial?.descriptor) {
+                if (currentSnapshots.middle?.descriptor) {
+                    initialVsMiddleDistance = faceapi.euclideanDistance(currentSnapshots.initial.descriptor, currentSnapshots.middle.descriptor);
                 }
                 if (endSnapshot?.descriptor) {
-                    initialVsEndDistance = faceapi.euclideanDistance(snapshots.initial.descriptor, endSnapshot.descriptor);
+                    initialVsEndDistance = faceapi.euclideanDistance(currentSnapshots.initial.descriptor, endSnapshot.descriptor);
                 }
             }
 
@@ -722,8 +751,8 @@ export default function AssessmentPlayer({ assessmentId, onComplete }: Assessmen
                 answers: formattedAnswers,
                 violations: loggedViolations,
                 face_snapshots: {
-                    initial_image: snapshots.initial?.image || "",
-                    middle_image: snapshots.middle?.image || "",
+                    initial_image: currentSnapshots.initial?.image || "",
+                    middle_image: currentSnapshots.middle?.image || "",
                     end_image: endSnapshot?.image || "",
                     initial_vs_middle_distance: initialVsMiddleDistance,
                     initial_vs_end_distance: initialVsEndDistance
@@ -896,25 +925,30 @@ export default function AssessmentPlayer({ assessmentId, onComplete }: Assessmen
                                 </div>
                             )}
 
-                            <h2 className="text-2xl font-medium text-gray-900">{currentQuestion.text}</h2>
+                            <h2 className="text-2xl font-medium text-gray-900">
+                                {currentQuestionIndex + 1}. {currentQuestion.text.replace(/^\d+\.\s*/, '')}
+                            </h2>
                         </div>
 
                         <div className="space-y-4">
                             {currentQuestion.type === "MCQ" && currentQuestion.options.map((opt, idx) => (
-                                <label key={idx} className={`flex items-center p-4 border rounded-lg cursor-pointer transition ${answers[currentQuestion.id] === idx.toString()
-                                    ? "border-indigo-500 bg-indigo-50 ring-1 ring-indigo-500"
-                                    : "border-gray-200 hover:bg-gray-50"
-                                    }`}>
-                                    <input
-                                        type="radio"
-                                        name={`question-${currentQuestion.id}`}
-                                        value={idx.toString()}
-                                        checked={answers[currentQuestion.id] === idx.toString()}
-                                        onChange={() => handleAnswerChange(idx.toString())}
-                                        className="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300"
-                                    />
-                                    <span className="ml-3 text-gray-700">{opt}</span>
-                                </label>
+                                <button
+                                    type="button"
+                                    key={idx}
+                                    onClick={() => handleAnswerChange(idx.toString())}
+                                    className={`w-full flex items-center gap-4 p-4 border-2 rounded-xl cursor-pointer transition text-left ${answers[currentQuestion.id] === idx.toString()
+                                        ? "border-indigo-500 bg-indigo-50 ring-1 ring-indigo-500"
+                                        : "border-gray-200 hover:bg-gray-50 hover:border-gray-300"
+                                        }`}
+                                >
+                                    <span className={`flex-none w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold transition ${answers[currentQuestion.id] === idx.toString()
+                                        ? "bg-indigo-600 text-white"
+                                        : "bg-gray-100 text-gray-500"
+                                        }`}>
+                                        {idx + 1}
+                                    </span>
+                                    <span className="text-gray-800 font-medium">{opt}</span>
+                                </button>
                             ))}
 
                             {(currentQuestion.type === "SUBJECTIVE" || currentQuestion.type === "CODING") && (
@@ -1031,9 +1065,15 @@ export default function AssessmentPlayer({ assessmentId, onComplete }: Assessmen
                             onClick={async () => {
                                 setShowWarningModal(false);
                                 setViolationEvidence(null);
-                                try {
-                                    await document.documentElement.requestFullscreen();
-                                } catch (e) { }
+                                // Show next queued violation if any, else restore fullscreen
+                                if (violationQueue.current.length > 0) {
+                                    setTimeout(showNextViolationModal, 300);
+                                } else {
+                                    isModalOpenRef.current = false;
+                                    try {
+                                        await document.documentElement.requestFullscreen();
+                                    } catch (e) { }
+                                }
                             }}
                             className="w-full py-2 bg-indigo-600 text-white rounded-lg font-medium hover:bg-indigo-700"
                         >

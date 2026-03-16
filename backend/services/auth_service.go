@@ -21,6 +21,7 @@ type AuthService interface {
 	GoogleLogin(ctx context.Context, email, name, role string) (string, string, bool, error)
 	StartPublicAssessment(ctx context.Context, name, email, phone string) (string, *models.User, error)
 	StartDemoAssessment(ctx context.Context) (string, *models.User, error)
+	StartAssessmentWithOTP(ctx context.Context, phone, otp string) (string, *models.User, error)
 }
 
 type authService struct {
@@ -190,6 +191,30 @@ func (s *authService) StartDemoAssessment(ctx context.Context) (string, *models.
 	}
 
 	return tokenString, &demoUser, nil
+}
+
+func (s *authService) StartAssessmentWithOTP(ctx context.Context, phone, otp string) (string, *models.User, error) {
+	// Validate OTP against environment variable
+	expectedOTP := os.Getenv("DEVELOPMENT_OTP")
+	if expectedOTP == "" {
+		return "", nil, errors.New("OTP not configured")
+	}
+	if otp != expectedOTP {
+		return "", nil, errors.New("invalid OTP")
+	}
+
+	// Look up candidate by phone number (they must be pre-registered)
+	user, err := s.userRepo.FindByPhone(ctx, phone)
+	if err != nil {
+		return "", nil, errors.New("candidate not found. please check your phone number")
+	}
+
+	tokenString, err := s.generateJWT(user)
+	if err != nil {
+		return "", nil, err
+	}
+
+	return tokenString, user, nil
 }
 
 func (s *authService) generateJWT(user *models.User) (string, error) {

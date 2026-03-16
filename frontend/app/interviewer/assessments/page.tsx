@@ -106,9 +106,9 @@ export default function InterviewerAssessmentsPage() {
                         <h1 className="text-2xl font-bold text-gray-900">My Assessments</h1>
                         <p className="text-gray-700 font-medium">Manage your technical assessments and view submissions.</p>
                     </div>
-                    <button
+                        <button
                         onClick={() => router.push("/interviewer/assessments/create")}
-                        className="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition shadow-sm"
+                        className="flex items-center gap-2 px-6 py-2.5 bg-indigo-600 text-white rounded-full hover:bg-indigo-700 transition shadow-md shadow-indigo-600/20 font-bold active:scale-95"
                     >
                         <Plus size={20} /> Create New
                     </button>
@@ -117,13 +117,13 @@ export default function InterviewerAssessmentsPage() {
                 <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden mb-6">
                     <div className="p-4 border-b border-gray-200 flex gap-4">
                         <div className="relative flex-1">
-                            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-600" size={20} />
+                            <Search className="absolute left-4 top-1/2 transform -translate-y-1/2 text-gray-400" size={20} />
                             <input
                                 type="text"
                                 placeholder="Search assessments..."
                                 value={searchTerm}
                                 onChange={(e) => setSearchTerm(e.target.value)}
-                                className="w-full pl-10 pr-4 py-2 border border-gray-400 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 text-gray-900 font-bold placeholder:text-gray-400"
+                                className="w-full pl-12 pr-4 py-3 border border-gray-200 rounded-full focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 text-gray-900 font-bold placeholder:text-gray-400 bg-gray-50/50 outline-none transition-all"
                             />
                         </div>
                     </div>

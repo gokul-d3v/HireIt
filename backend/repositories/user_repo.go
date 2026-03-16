@@ -14,6 +14,7 @@ import (
 type UserRepository interface {
 	Create(ctx context.Context, user *models.User) (primitive.ObjectID, error)
 	FindByEmail(ctx context.Context, email string) (*models.User, error)
+	FindByPhone(ctx context.Context, phone string) (*models.User, error)
 	FindByID(ctx context.Context, id primitive.ObjectID) (*models.User, error)
 	UpdatePassword(ctx context.Context, id primitive.ObjectID, hashedPassword string) error
 }
@@ -39,6 +40,15 @@ func (r *mongoUserRepo) Create(ctx context.Context, user *models.User) (primitiv
 func (r *mongoUserRepo) FindByEmail(ctx context.Context, email string) (*models.User, error) {
 	var user models.User
 	err := r.collection.FindOne(ctx, bson.M{"email": email, "deleted_at": nil}).Decode(&user)
+	if err != nil {
+		return nil, err
+	}
+	return &user, nil
+}
+
+func (r *mongoUserRepo) FindByPhone(ctx context.Context, phone string) (*models.User, error) {
+	var user models.User
+	err := r.collection.FindOne(ctx, bson.M{"phone": phone, "deleted_at": nil}).Decode(&user)
 	if err != nil {
 		return nil, err
 	}
