@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef } from "react";
 import { useRouter, useParams } from "next/navigation";
 import { useToast } from "@/components/ui/Toast";
-import { Phone, ShieldCheck, ArrowRight, BookOpen, Loader2, CheckCircle } from "lucide-react";
+import { Phone, ShieldCheck, ArrowRight, BookOpen, Loader2, CheckCircle, ShieldAlert } from "lucide-react";
 
 export default function PublicAssessmentLanding() {
     const router = useRouter();
@@ -16,6 +16,7 @@ export default function PublicAssessmentLanding() {
     const [step, setStep] = useState<"phone" | "otp">("phone");
     const [submitting, setSubmitting] = useState(false);
     const [sendingOtp, setSendingOtp] = useState(false);
+    const [isRestrictedDevice, setIsRestrictedDevice] = useState(false);
 
     const otpRefs = [
         useRef<HTMLInputElement>(null),
@@ -25,6 +26,19 @@ export default function PublicAssessmentLanding() {
     ];
 
     useEffect(() => {
+        // Device Restriction Check
+        const ua = navigator.userAgent;
+        const mobileRegex = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i;
+        const tabletRegex = /(ipad|tablet|(android(?!.*mobile))|(windows(?!.*phone)(.*touch))|kindle|playbook|silk|(puffin(?!.*(IP|AP|WP))))/;
+        
+        const isMobileOrTablet = mobileRegex.test(ua) || tabletRegex.test(ua.toLowerCase()) || (navigator.maxTouchPoints > 0 && window.innerWidth < 1024);
+        
+        if (isMobileOrTablet) {
+            setIsRestrictedDevice(true);
+            setLoading(false);
+            return;
+        }
+
         if (params.id) {
             const token = localStorage.getItem("token");
             const storedUser = localStorage.getItem("user");
@@ -149,6 +163,42 @@ export default function PublicAssessmentLanding() {
             <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600"></div>
         </div>
     );
+
+    if (isRestrictedDevice) {
+        return (
+            <div className="min-h-screen bg-white flex items-center justify-center p-6 text-center">
+                <div className="max-w-md">
+                    <div className="bg-red-50 w-20 h-20 rounded-full flex items-center justify-center mx-auto mb-6">
+                        <ShieldAlert className="text-red-600" size={40} />
+                    </div>
+                    <h2 className="text-3xl font-black text-gray-900 mb-4 tracking-tight">Desktop Required</h2>
+                    <p className="text-gray-600 text-lg font-medium leading-relaxed mb-8">
+                        To maintain exam integrity and provide a secure proctoring environment, this assessment <span className="text-indigo-600 font-bold">must be taken on a Desktop or Laptop</span>.
+                    </p>
+                    <div className="bg-gray-50 border border-gray-100 rounded-2xl p-6 text-left mb-8">
+                        <p className="text-sm font-bold text-gray-400 uppercase tracking-widest mb-3">Requirements Checklist:</p>
+                        <ul className="space-y-3">
+                            <li className="flex items-start gap-3 text-gray-700 font-medium">
+                                <div className="mt-1 w-1.5 h-1.5 rounded-full bg-indigo-500 shrink-0" />
+                                <span>Functional Webcam & Microphone</span>
+                            </li>
+                            <li className="flex items-start gap-3 text-gray-700 font-medium">
+                                <div className="mt-1 w-1.5 h-1.5 rounded-full bg-indigo-500 shrink-0" />
+                                <span>Stable Internet Connection</span>
+                            </li>
+                            <li className="flex items-start gap-3 text-gray-700 font-medium">
+                                <div className="mt-1 w-1.5 h-1.5 rounded-full bg-indigo-500 shrink-0" />
+                                <span>Latest Browser (Chrome/Edge/Safari)</span>
+                            </li>
+                        </ul>
+                    </div>
+                    <p className="text-gray-400 text-sm italic">
+                        Access is restricted on mobile and tablet devices.
+                    </p>
+                </div>
+            </div>
+        );
+    }
 
     return (
         <div className="min-h-screen bg-gradient-to-br from-indigo-50 via-white to-purple-50 flex items-center justify-center p-4">

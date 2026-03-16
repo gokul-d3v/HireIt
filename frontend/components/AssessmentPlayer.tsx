@@ -38,6 +38,7 @@ export default function AssessmentPlayer({ assessmentId, onComplete }: Assessmen
     const router = useRouter();
     const { showToast } = useToast();
     const [showSubmitModal, setShowSubmitModal] = useState(false);
+    const [isRestrictedDevice, setIsRestrictedDevice] = useState(false);
 
     const isDemoUser = useRef(false);
 
@@ -48,6 +49,17 @@ export default function AssessmentPlayer({ assessmentId, onComplete }: Assessmen
                 const user = JSON.parse(storedUser);
                 isDemoUser.current = !!user.is_demo;
             } catch (e) {}
+        }
+
+        // Device Restriction Check
+        const ua = navigator.userAgent;
+        const mobileRegex = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i;
+        const tabletRegex = /(ipad|tablet|(android(?!.*mobile))|(windows(?!.*phone)(.*touch))|kindle|playbook|silk|(puffin(?!.*(IP|AP|WP))))/;
+        
+        const isMobileOrTablet = mobileRegex.test(ua) || tabletRegex.test(ua.toLowerCase()) || (navigator.maxTouchPoints > 0 && window.innerWidth < 1024);
+        
+        if (isMobileOrTablet) {
+            setIsRestrictedDevice(true);
         }
     }, []);
 
@@ -778,6 +790,45 @@ export default function AssessmentPlayer({ assessmentId, onComplete }: Assessmen
     };
 
     if (loading) return <div className="p-8 flex justify-center"><div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600"></div></div>;
+
+    if (isRestrictedDevice) {
+        return (
+            <div className="min-h-screen bg-white flex items-center justify-center p-6 text-center">
+                <div className="max-w-md">
+                    <div className="bg-red-50 w-20 h-20 rounded-full flex items-center justify-center mx-auto mb-6">
+                        <ShieldAlert className="text-red-600" size={40} />
+                    </div>
+                    <h2 className="text-3xl font-black text-gray-900 mb-4 tracking-tight">Desktop Required</h2>
+                    <p className="text-gray-600 text-lg font-medium leading-relaxed mb-8">
+                        For security reasons and to ensure a stable proctoring environment, assessments can only be taken on a <span className="text-indigo-600">Desktop or Laptop</span>.
+                    </p>
+                    <div className="bg-gray-50 border border-gray-100 rounded-2xl p-6 text-left mb-8">
+                        <p className="text-sm font-bold text-gray-400 uppercase tracking-widest mb-3">Why is this required?</p>
+                        <ul className="space-y-3">
+                            <li className="flex items-start gap-3 text-gray-700 font-medium">
+                                <div className="mt-1 w-1.5 h-1.5 rounded-full bg-indigo-500 shrink-0" />
+                                <span>Advanced AI proctoring & behavior analysis</span>
+                            </li>
+                            <li className="flex items-start gap-3 text-gray-700 font-medium">
+                                <div className="mt-1 w-1.5 h-1.5 rounded-full bg-indigo-500 shrink-0" />
+                                <span>Ensuring mandatory Full-Screen mode</span>
+                            </li>
+                            <li className="flex items-start gap-3 text-gray-700 font-medium">
+                                <div className="mt-1 w-1.5 h-1.5 rounded-full bg-indigo-500 shrink-0" />
+                                <span>Stable connection for video evidence upload</span>
+                            </li>
+                        </ul>
+                    </div>
+                    <button 
+                        onClick={() => router.push('/candidate/assessments')}
+                        className="w-full bg-indigo-600 text-white py-4 rounded-xl font-bold hover:bg-indigo-700 shadow-lg shadow-indigo-600/20 transition-all active:scale-[0.98]"
+                    >
+                        Back to Assessments
+                    </button>
+                </div>
+            </div>
+        );
+    }
 
     if (!assessment) return <div className="p-8 text-center">Assessment not found or failed to load.</div>;
 
