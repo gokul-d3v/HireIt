@@ -784,18 +784,76 @@ export default function ExamSheetPage() {
                             <h2 className="text-xl font-black text-slate-900">Refine Question</h2>
                             <button onClick={() => setEditingQ(null)} className="p-3 hover:bg-slate-50 rounded-2xl text-slate-400 transition-colors"><X size={24} /></button>
                         </div>
-                        <div className="p-10 space-y-8">
+                        <div className="p-10 max-h-[80vh] overflow-y-auto space-y-8">
+                            <div className="space-y-2">
+                                <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1">Question Type</label>
+                                <select 
+                                    value={editingQ.type} 
+                                    onChange={e => setEditingQ({ 
+                                        ...editingQ, 
+                                        type: e.target.value,
+                                        options: e.target.value === "MCQ" ? (editingQ.options?.length ? editingQ.options : ["", "", "", ""]) : undefined,
+                                        correct_answer: e.target.value === "MCQ" ? (editingQ.correct_answer || "A") : undefined
+                                    })} 
+                                    className="w-full p-4 bg-white border border-slate-200 rounded-2xl font-bold text-foreground focus:ring-4 focus:ring-indigo-500/10 transition-all outline-none appearance-none"
+                                >
+                                    <option value="MCQ">Multiple Choice (MCQ)</option>
+                                    <option value="SUBJECTIVE">Subjective / Coding</option>
+                                </select>
+                            </div>
+
                             <div className="space-y-2">
                                 <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1">Question content</label>
                                 <textarea 
                                     value={editingQ.text} 
                                     onChange={e => setEditingQ({ ...editingQ, text: e.target.value })} 
-                                    rows={6} 
-                                    className="w-full p-6 bg-white  border border-slate-200  rounded-3xl font-bold text-foreground placeholder:text-slate-700 focus:ring-4 focus:ring-indigo-500/10 transition-all outline-none" 
+                                    rows={4} 
+                                    className="w-full p-6 bg-white border border-slate-200 rounded-3xl font-bold text-foreground placeholder:text-slate-700 focus:ring-4 focus:ring-indigo-500/10 transition-all outline-none" 
                                 />
                             </div>
+
+                            {editingQ.type === "MCQ" && (
+                                <div className="space-y-4">
+                                    <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1">Options & Answer</label>
+                                    <div className="grid grid-cols-1 gap-3">
+                                        {(editingQ.options || ["", "", "", ""]).map((opt, oi) => (
+                                            <div key={oi} className="relative group">
+                                                <div className="absolute left-4 top-1/2 -translate-y-1/2 w-8 h-8 bg-slate-50 rounded-lg flex items-center justify-center text-xs font-black text-slate-500 border border-slate-200 group-focus-within:border-indigo-500/50 group-focus-within:text-indigo-400 transition-all">
+                                                    {optionLetters[oi]}
+                                                </div>
+                                                <input 
+                                                    type="text" 
+                                                    value={opt} 
+                                                    onChange={e => { 
+                                                        const o = [...(editingQ.options || ["", "", "", ""])]; 
+                                                        o[oi] = e.target.value; 
+                                                        setEditingQ({ ...editingQ, options: o }); 
+                                                    }} 
+                                                    className="w-full pl-16 pr-4 py-4 bg-white border border-slate-200 rounded-2xl text-foreground font-bold placeholder:text-slate-700 outline-none focus:border-indigo-500/30 transition-all" 
+                                                    placeholder={`Alternative ${optionLetters[oi]}…`} 
+                                                />
+                                            </div>
+                                        ))}
+                                    </div>
+                                    <div className="flex justify-between items-center bg-white p-2 rounded-2xl border border-slate-200">
+                                        <span className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-4">Correct Key:</span>
+                                        <div className="flex gap-2">
+                                            {optionLetters.map(l => (
+                                                <button 
+                                                    key={l} 
+                                                    onClick={() => setEditingQ({ ...editingQ, correct_answer: l })} 
+                                                    className={`w-12 h-12 rounded-xl font-black transition-all ${editingQ.correct_answer === l ? "bg-indigo-600 text-white shadow-lg shadow-indigo-600/20" : "text-slate-600 hover:text-slate-400"}`}
+                                                >
+                                                    {l}
+                                                </button>
+                                            ))}
+                                        </div>
+                                    </div>
+                                </div>
+                            )}
+
                             <div className="flex gap-4">
-                                <button onClick={() => setEditingQ(null)} className="flex-1 py-5 bg-white  text-slate-400 border border-slate-200  rounded-[32px] font-black uppercase tracking-widest text-[10px] hover:bg-slate-800 transition-colors">Abort Changes</button>
+                                <button onClick={() => setEditingQ(null)} className="flex-1 py-5 bg-white text-slate-400 border border-slate-200 rounded-[32px] font-black uppercase tracking-widest text-[10px] hover:bg-slate-800 transition-colors">Abort Changes</button>
                                 <button onClick={handleEditSave} disabled={importing} className="flex-1 py-5 bg-indigo-600 text-white rounded-[32px] font-black shadow-2xl shadow-indigo-600/30 hover:bg-indigo-500 transition-all active:scale-95">{importing ? "Syncing..." : "Apply Updates"}</button>
                             </div>
                         </div>
