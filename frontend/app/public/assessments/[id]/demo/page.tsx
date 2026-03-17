@@ -28,7 +28,7 @@ export default function PublicDemoAssessmentPage() {
             if (data.token && data.user) {
                 localStorage.setItem("token", data.token);
                 localStorage.setItem("user", JSON.stringify(data.user));
-
+                                                                           
                 showToast("Starting Demo Assessment...", "success");
                 // Redirect straight to the take page, bypassing the normal registration
                 router.replace(`/public/assessments/${id}/take`);

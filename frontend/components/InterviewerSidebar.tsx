@@ -1,11 +1,21 @@
 "use client";
 
 import { useState } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, usePathname } from "next/navigation";
 import { BarChart3, FilePlus, Users, Menu, X, FileText, BookOpen, LogOut } from "lucide-react";
+
 export default function InterviewerSidebar() {
     const router = useRouter();
+    const pathname = usePathname();
     const [isOpen, setIsOpen] = useState(false);
+
+    const navItems = [
+        { label: "Dashboard", icon: BarChart3, path: "/interviewer/dashboard" },
+        { label: "Assessments", icon: FilePlus, path: "/interviewer/assessments" },
+        { label: "Exam Results", icon: FileText, path: "/interviewer/exam-results" },
+        { label: "Exam Sheet", icon: BookOpen, path: "/interviewer/exam-sheet" },
+        { label: "Interviews", icon: Users, path: "/interviewer/interviews" },
+    ];
 
     return (
         <>
@@ -47,56 +57,34 @@ export default function InterviewerSidebar() {
                     </div>
                 </div>
                 <nav className="mt-6 px-4 space-y-2">
-                    <button
-                        onClick={() => {
-                            router.push("/interviewer/dashboard");
-                            setIsOpen(false);
-                        }}
-                        className="w-full flex items-center gap-3 px-4 py-3 text-sm font-bold text-slate-500 hover:bg-slate-50 hover:text-slate-900 rounded-xl transition-all group"
-                    >
-                        <BarChart3 size={20} className="group-hover:scale-110 transition-transform" />
-                        Dashboard
-                    </button>
-                    <button
-                        onClick={() => {
-                            router.push("/interviewer/assessments");
-                            setIsOpen(false);
-                        }}
-                        className="w-full flex items-center gap-3 px-4 py-3 text-sm font-bold text-slate-500 hover:bg-slate-50 hover:text-slate-900 rounded-xl transition-all group"
-                    >
-                        <FilePlus size={20} className="group-hover:scale-110 transition-transform" />
-                        Assessments
-                    </button>
-                    <button
-                        onClick={() => {
-                            router.push("/interviewer/exam-results");
-                            setIsOpen(false);
-                        }}
-                        className="w-full flex items-center gap-3 px-4 py-3 text-sm font-bold text-slate-500 hover:bg-slate-50 hover:text-slate-900 rounded-xl transition-all group"
-                    >
-                        <FileText size={20} className="group-hover:scale-110 transition-transform" />
-                        Exam Results
-                    </button>
-                    <button
-                        onClick={() => {
-                            router.push("/interviewer/exam-sheet");
-                            setIsOpen(false);
-                        }}
-                        className="w-full flex items-center gap-3 px-4 py-3 text-sm font-bold text-slate-500 hover:bg-slate-50 hover:text-slate-900 rounded-xl transition-all group"
-                    >
-                        <BookOpen size={20} className="group-hover:scale-110 transition-transform" />
-                        Exam Sheet
-                    </button>
-                    <button
-                        onClick={() => {
-                            router.push("/interviewer/interviews");
-                            setIsOpen(false);
-                        }}
-                        className="w-full flex items-center gap-3 px-4 py-3 text-sm font-bold text-slate-500 hover:bg-slate-50 hover:text-slate-900 rounded-xl transition-all group"
-                    >
-                        <Users size={20} className="group-hover:scale-110 transition-transform" />
-                        Interviews
-                    </button>
+                    {navItems.map((item) => {
+                        const isActive = pathname === item.path;
+                        const Icon = item.icon;
+                        return (
+                            <button
+                                key={item.path}
+                                onClick={() => {
+                                    router.push(item.path);
+                                    setIsOpen(false);
+                                }}
+                                className={`
+                                    w-full flex items-center gap-3 px-4 py-3 text-sm font-bold rounded-xl transition-all group
+                                    ${isActive 
+                                        ? "bg-indigo-50 text-indigo-600 shadow-sm shadow-indigo-100/50" 
+                                        : "text-slate-500 hover:bg-slate-50 hover:text-slate-900"}
+                                `}
+                            >
+                                <Icon 
+                                    size={20} 
+                                    className={`transition-transform ${isActive ? "scale-110" : "group-hover:scale-110"}`} 
+                                />
+                                {item.label}
+                                {isActive && (
+                                    <div className="ml-auto w-1.5 h-1.5 rounded-full bg-indigo-600 shadow-[0_0_8px_rgba(79,70,229,0.5)]" />
+                                )}
+                            </button>
+                        );
+                    })}
                 </nav>
                 <div className="absolute bottom-0 w-64 p-4">
                     <button
@@ -115,3 +103,4 @@ export default function InterviewerSidebar() {
         </>
     );
 }
+

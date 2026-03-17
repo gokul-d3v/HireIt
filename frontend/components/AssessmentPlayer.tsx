@@ -563,6 +563,10 @@ export default function AssessmentPlayer({ assessmentId, onComplete }: Assessmen
             const assessmentData = responseData.assessment || responseData;
             const savedAnswers = responseData.saved_answers || {};
 
+            if (!assessmentData || responseData.error || !assessmentData.questions) {
+                throw new Error(responseData.error || "Assessment data is invalid or missing questions.");
+            }
+
             // Check if already submitted (completed)
             const existingSubmission = submissionsData?.find((s: any) => s.assessment_id === id && s.status !== "in_progress");
             if (existingSubmission) {

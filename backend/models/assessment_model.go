@@ -27,7 +27,7 @@ type Question struct {
 type QuestionRule struct {
 	Category          string `bson:"category" json:"category" binding:"required"`
 	SubCategory       string `bson:"sub_category,omitempty" json:"sub_category,omitempty"`
-	Difficulty        string `bson:"diff iculty" json:"difficulty" binding:"required"`
+	Difficulty        string `bson:"difficulty" json:"difficulty" binding:"required"`
 	Count             int    `bson:"count" json:"count" binding:"required"`
 	PointsPerQuestion int    `bson:"points_per_question" json:"points_per_question" binding:"required"`
 	AudioURL          string `bson:"audio_url,omitempty" json:"audio_url,omitempty"`

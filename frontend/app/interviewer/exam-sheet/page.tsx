@@ -129,7 +129,7 @@ export default function ExamSheetPage() {
         setLoading(true);
         try {
             const [res, configRes] = await Promise.all([
-                fetch(`${API_BASE}/api/admin/questions`, { headers: authHeaders() }),
+                fetch(`${API_BASE}/api/admin/questions?limit=2000`, { headers: authHeaders() }),
                 fetch(`${API_BASE}/api/admin/questions/config`, { headers: authHeaders() })
             ]);
 
@@ -342,6 +342,7 @@ export default function ExamSheetPage() {
 
     const loadMore = useCallback(async () => {
         if (!active || loadingMore || !hasMore) return;
+        
         setLoadingMore(true);
         const nextPage = page + 1;
         try {
@@ -352,42 +353,54 @@ export default function ExamSheetPage() {
                 limit: "20" 
             });
             if (active.sub_category) p.set("sub_category", active.sub_category);
+            
             const res = await fetch(`${API_BASE}/api/admin/questions?${p}`, { headers: authHeaders() });
             const d = await res.json();
             const newQs = d.questions || [];
             
             if (newQs.length > 0) {
-                setQuestions((prev: Question[]) => {
-                    const existingIds = new Set(prev.map((q: Question) => q.id));
+                setQuestions(prev => {
+                    const existingIds = new Set(prev.map(q => q.id));
                     const uniqueNew = newQs.filter((q: Question) => !existingIds.has(q.id));
-                    const combined = [...prev, ...uniqueNew];
-                    setHasMore(combined.length < (d.total || 0));
-                    return combined;
+                    return [...prev, ...uniqueNew];
                 });
                 setPage(nextPage);
-            } else {
-                setHasMore(false);
             }
-        } catch { showToast("Failed to load more", "error"); }
-        finally { setLoadingMore(false); }
-    }, [active, hasMore, loadingMore, page, showToast]);
+            
+            // Check if we have more based on total items
+            const currentTotalLoaded = questions.length + newQs.length;
+            setHasMore(currentTotalLoaded < (d.total || 0));
+            
+        } catch (err) { 
+            console.error("Load more failed:", err);
+            showToast("Failed to load more questions", "error"); 
+        } finally { 
+            setLoadingMore(false); 
+        }
+    }, [active, hasMore, loadingMore, page, questions.length, showToast]);
 
     useEffect(() => {
-        if (!workspaceRef.current) return;
+        if (!workspaceRef.current || !hasMore || loadingMore || loadingQ) return;
+        
         const obs = new IntersectionObserver(
             entries => {
-                if (entries[0].isIntersecting && hasMore && !loadingMore && !loadingQ) {
+                if (entries[0].isIntersecting) {
                     loadMore();
                 }
             },
             { 
                 root: workspaceRef.current, 
                 threshold: 0.1,
-                rootMargin: "150px" 
+                rootMargin: "200px" 
             }
         );
-        if (observerTarget.current) obs.observe(observerTarget.current);
-        return () => obs.disconnect();
+        
+        const target = observerTarget.current;
+        if (target) obs.observe(target);
+        return () => {
+            if (target) obs.unobserve(target);
+            obs.disconnect();
+        };
     }, [hasMore, loadingMore, loadingQ, loadMore]);
 
     async function deleteQuestion(id: string) {
@@ -671,7 +684,19 @@ export default function ExamSheetPage() {
                                         </div>
 
                                         <div className="space-y-4">
-                                            {filtered.map((q, idx) => (
+                                            {loadingQ ? (
+                                                <div className="py-20 flex flex-col items-center justify-center text-slate-400">
+                                                    <RefreshCw className="animate-spin w-8 h-8 mb-4 text-indigo-500" />
+                                                    <p className="font-medium">Loading questions...</p>
+                                                </div>
+                                            ) : filtered.length === 0 ? (
+                                                <div className="py-20 flex flex-col items-center justify-center text-slate-400">
+                                                    <Search className="w-12 h-12 mb-4 text-slate-200" />
+                                                    <p className="font-bold text-slate-500 text-lg">No questions found</p>
+                                                    <p className="text-sm mt-1">Try answering a different category or clear your search.</p>
+                                                </div>
+                                            ) : (
+                                                filtered.map((q, idx) => (
                                                 <div key={q.id} className="group bg-white  border border-slate-200 rounded-[32px] p-8 hover:border-indigo-500/30 transition-all shadow-sm">
                                                     <div className="flex justify-between items-start gap-10">
                                                         <div className="space-y-4 flex-1">
@@ -684,14 +709,18 @@ export default function ExamSheetPage() {
                                                             <p className="text-xl font-bold text-foreground leading-snug">{q.text}</p>
                                                             {q.options && q.options.length > 0 && (
                                                                 <div className="grid grid-cols-2 gap-3 mt-4">
-                                                                    {q.options.map((opt, i) => (
-                                                                        <div key={i} className={`p-4 rounded-xl border text-sm font-bold flex items-center gap-3 ${String.fromCharCode(64 + i + 1) === q.correct_answer ? "bg-emerald-500/5 border-emerald-500/20 text-emerald-400" : "bg-white  border-slate-200  text-slate-500"}`}>
-                                                                            <div className={`w-6 h-6 rounded-lg flex items-center justify-center text-[10px] ${String.fromCharCode(64 + i + 1) === q.correct_answer ? "bg-emerald-500 text-white" : "bg-slate-50  text-slate-600"}`}>
-                                                                                {optionLetters[i]}
-                                                                            </div>
-                                                                            {opt}
-                                                                        </div>
-                                                                    ))}
+                                                                        {q.options.map((opt, i) => {
+                                                                            const letter = String.fromCharCode(64 + i + 1);
+                                                                            const isCorrect = q.correct_answer === letter || q.correct_answer === opt;
+                                                                            return (
+                                                                                <div key={i} className={`p-4 rounded-xl border text-sm font-bold flex items-center gap-3 ${isCorrect ? "bg-emerald-500/5 border-emerald-500/20 text-emerald-400" : "bg-white  border-slate-200  text-slate-500"}`}>
+                                                                                    <div className={`w-6 h-6 rounded-lg flex items-center justify-center text-[10px] ${isCorrect ? "bg-emerald-500 text-white" : "bg-slate-50  text-slate-600"}`}>
+                                                                                        {optionLetters[i]}
+                                                                                    </div>
+                                                                                    {opt}
+                                                                                </div>
+                                                                            );
+                                                                        })}
                                                                 </div>
                                                             )}
                                                         </div>
@@ -701,7 +730,8 @@ export default function ExamSheetPage() {
                                                         </div>
                                                     </div>
                                                 </div>
-                                            ))}
+                                                ))
+                                            )}
                                             {hasMore && <div ref={observerTarget} className="py-10 text-center"><RefreshCw className="animate-spin mx-auto text-indigo-600" /></div>}
                                         </div>
                                     </div>
