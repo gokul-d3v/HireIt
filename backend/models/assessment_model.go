@@ -18,6 +18,8 @@ type Question struct {
 	ID            primitive.ObjectID `bson:"_id,omitempty" json:"id"`
 	Text          string             `bson:"text" json:"text" binding:"required"`
 	Type          QuestionType       `bson:"type" json:"type" binding:"required"`
+	PassageTitle  string             `bson:"passage_title,omitempty" json:"passage_title,omitempty"`
+	PassageText   string             `bson:"passage_text,omitempty" json:"passage_text,omitempty"`
 	Options       []string           `bson:"options,omitempty" json:"options,omitempty"` // For MCQ
 	CorrectAnswer string             `bson:"correct_answer,omitempty" json:"correct_answer,omitempty"`
 	Points        int                `bson:"points" json:"points" binding:"required"`
@@ -41,10 +43,10 @@ type Assessment struct {
 	QuestionRules []QuestionRule     `bson:"question_rules" json:"question_rules"`
 	Questions     []Question         `json:"questions,omitempty" bson:"-"` // Virtual field for API response
 	CreatedBy     primitive.ObjectID `bson:"created_by" json:"created_by"`
-	CreatedAt   time.Time          `bson:"created_at" json:"created_at"`
-	UpdatedAt   time.Time          `bson:"updated_at" json:"updated_at"`
+	CreatedAt     time.Time          `bson:"created_at" json:"created_at"`
+	UpdatedAt     time.Time          `bson:"updated_at" json:"updated_at"`
 
-	PassingScore  int                `bson:"passing_score" json:"passing_score"` // Minimum score to pass
-	TotalMarks    int                `bson:"total_marks" json:"total_marks"`     // Sum of all question points
-	DeletedAt     *time.Time         `bson:"deleted_at,omitempty" json:"-"`      // For soft delete
+	PassingScore int        `bson:"passing_score" json:"passing_score"` // Minimum score to pass
+	TotalMarks   int        `bson:"total_marks" json:"total_marks"`     // Sum of all question points
+	DeletedAt    *time.Time `bson:"deleted_at,omitempty" json:"-"`      // For soft delete
 }

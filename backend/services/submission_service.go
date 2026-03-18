@@ -4,9 +4,9 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"math/rand"
 	"hireit-backend/models"
 	"hireit-backend/repositories"
+	"math/rand"
 	"strings"
 	"time"
 
@@ -188,7 +188,7 @@ func (s *submissionService) SubmitAssessment(ctx context.Context, assessmentID, 
 			msg := "📸 <b>Face Snapshot Verification Submitted</b>\n"
 			msg += "Assessment: " + sub.AssessmentID.Hex() + "\n"
 			msg += "Candidate: " + sub.CandidateName + " (" + sub.CandidateEmail + ")\n"
-			
+
 			if snapshots.InitialVsMiddleDistance != nil {
 				msg += fmt.Sprintf("\nMatch (Initial vs Middle): <b>%.2f</b> (Lower is better)", *snapshots.InitialVsMiddleDistance)
 			}
@@ -361,6 +361,8 @@ func (s *submissionService) GetOrGenerateQuestions(ctx context.Context, assessme
 				ID:            entry.ID,
 				Text:          entry.Text,
 				Type:          entry.Type,
+				PassageTitle:  entry.PassageTitle,
+				PassageText:   entry.PassageText,
 				Options:       entry.Options,
 				CorrectAnswer: entry.CorrectAnswer,
 				Points:        rule.PointsPerQuestion,
@@ -369,24 +371,26 @@ func (s *submissionService) GetOrGenerateQuestions(ctx context.Context, assessme
 		}
 	}
 
-	// Shuffle questions so candidates get them in a random order
+	// Shuffle by passage groups so reading-comprehension sets stay together.
 	rand.Seed(time.Now().UnixNano())
-	rand.Shuffle(len(generatedQuestions), func(i, j int) {
-		generatedQuestions[i], generatedQuestions[j] = generatedQuestions[j], generatedQuestions[i]
+	groups := groupQuestionsByPassage(generatedQuestions)
+	rand.Shuffle(len(groups), func(i, j int) {
+		groups[i], groups[j] = groups[j], groups[i]
 	})
+	generatedQuestions = flattenQuestionGroups(groups)
 
 	// 4. Save/Update Submission with Locked Questions
 	if submission == nil {
 		// Create placeholder submission to lock questions
 		user, _ := s.userRepo.FindByID(ctx, cID)
 		submission = &models.Submission{
-			AssessmentID: aID,
-			CandidateID:  cID,
+			AssessmentID:       aID,
+			CandidateID:        cID,
 			GeneratedQuestions: generatedQuestions,
-			Status:       "in_progress",
-			CreatedAt:    time.Now(),
-			StartedAt:    time.Now(),
-			UpdatedAt:    time.Now(),
+			Status:             "in_progress",
+			CreatedAt:          time.Now(),
+			StartedAt:          time.Now(),
+			UpdatedAt:          time.Now(),
 		}
 		if user != nil {
 			submission.CandidateName = user.Name

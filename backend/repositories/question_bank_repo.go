@@ -15,6 +15,7 @@ type QuestionBankRepository interface {
 	Find(ctx context.Context, filter bson.M, opts *options.FindOptions) ([]models.QuestionBankEntry, error)
 	Sample(ctx context.Context, filter bson.M, size int) ([]models.QuestionBankEntry, error)
 	DeleteByID(ctx context.Context, id primitive.ObjectID) error
+	DeleteByFilter(ctx context.Context, filter bson.M) (int64, error)
 	Update(ctx context.Context, id primitive.ObjectID, question *models.QuestionBankEntry) error
 	CountByFilter(ctx context.Context, filter bson.M) (int64, error)
 
@@ -79,6 +80,14 @@ func (r *mongoQuestionBankRepo) Sample(ctx context.Context, filter bson.M, size 
 func (r *mongoQuestionBankRepo) DeleteByID(ctx context.Context, id primitive.ObjectID) error {
 	_, err := r.collection.DeleteOne(ctx, bson.M{"_id": id})
 	return err
+}
+
+func (r *mongoQuestionBankRepo) DeleteByFilter(ctx context.Context, filter bson.M) (int64, error) {
+	res, err := r.collection.DeleteMany(ctx, filter)
+	if err != nil {
+		return 0, err
+	}
+	return res.DeletedCount, nil
 }
 
 func (r *mongoQuestionBankRepo) Update(ctx context.Context, id primitive.ObjectID, question *models.QuestionBankEntry) error {

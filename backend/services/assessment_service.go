@@ -71,7 +71,6 @@ func (s *assessmentService) GetAssessmentByID(ctx context.Context, idStr string,
 		return nil, err
 	}
 
-
 	if assessment.DeletedAt != nil {
 		return nil, errors.New("assessment deleted")
 	}
@@ -126,7 +125,7 @@ func (s *assessmentService) SampleQuestions(ctx context.Context, rules []models.
 		if err != nil {
 			return nil, err
 		}
-		
+
 		for _, entry := range bankEntries {
 			// Resolve Audio URL: Rule > Bank Config > Question Entry
 			finalAudio := rule.AudioURL
@@ -173,6 +172,8 @@ func (s *assessmentService) SampleQuestions(ctx context.Context, rules []models.
 				ID:            entry.ID,
 				Text:          entry.Text,
 				Type:          entry.Type,
+				PassageTitle:  entry.PassageTitle,
+				PassageText:   entry.PassageText,
 				Options:       entry.Options,
 				CorrectAnswer: entry.CorrectAnswer,
 				Points:        rule.PointsPerQuestion,
@@ -182,5 +183,5 @@ func (s *assessmentService) SampleQuestions(ctx context.Context, rules []models.
 		}
 	}
 
-	return allQuestions, nil
+	return flattenQuestionGroups(groupQuestionsByPassage(allQuestions)), nil
 }

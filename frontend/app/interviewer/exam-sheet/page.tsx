@@ -20,6 +20,7 @@ import {
     ActiveSlot,
     setTree, 
     setExpanded, 
+    setSubExpanded,
     setActiveSlot, 
     removeDifficulty as removeDifficultyAction, 
     removeCategory as removeCategoryAction,
@@ -40,6 +41,7 @@ interface Question {
     id: string; category: string; sub_category?: string;
     difficulty: string; type: string; text: string;
     options?: string[]; correct_answer?: string; audio_url?: string;
+    passage_title?: string; passage_text?: string;
 }
 
 interface DiffNode { difficulty: string; count: number; }
@@ -47,6 +49,33 @@ interface DiffNode { difficulty: string; count: number; }
 interface ImportQuestion {
     text: string; type: string;
     options: string[]; correct_answer: string; audio_url?: string;
+    passage_title?: string; passage_text?: string;
+}
+
+interface DifficultyDeleteTarget {
+    catIdx: number;
+    subIdx: number;
+    diffIdx: number;
+    category: string;
+    sub_category: string;
+    difficulty: string;
+    questionCount: number;
+}
+
+function mergeUniqueQuestions(existing: Question[], incoming: Question[]): Question[] {
+    const merged = new Map<string, Question>();
+
+    for (const question of existing) {
+        merged.set(question.id, question);
+    }
+
+    for (const question of incoming) {
+        if (!merged.has(question.id)) {
+            merged.set(question.id, question);
+        }
+    }
+
+    return Array.from(merged.values());
 }
 
 function authHeaders(): Record<string, string> {
@@ -55,6 +84,133 @@ function authHeaders(): Record<string, string> {
 }
 
 const optionLetters = ["A", "B", "C", "D"];
+
+function ensureMinimumMcqOptionRows(options?: string[]): string[] {
+    const normalized = [...(options || []).slice(0, optionLetters.length)];
+    while (normalized.length < 2) {
+        normalized.push("");
+    }
+    return normalized;
+}
+
+function trimTrailingEmptyOptions(options?: string[]): string[] {
+    const trimmedOptions = [...(options || []).slice(0, optionLetters.length)].map(option => option.trim());
+    let lastFilledIndex = trimmedOptions.length - 1;
+
+    for (; lastFilledIndex >= 0; lastFilledIndex--) {
+        if (trimmedOptions[lastFilledIndex] !== "") {
+            break;
+        }
+    }
+
+    return trimmedOptions.slice(0, lastFilledIndex + 1);
+}
+
+function getVisibleMcqOptions(options?: string[]): string[] {
+    return trimTrailingEmptyOptions(options).filter(option => option !== "");
+}
+
+function createEditableMcqOptions(options?: string[]): string[] {
+    return ensureMinimumMcqOptionRows(getVisibleMcqOptions(options));
+}
+
+function addMcqOptionRow(options?: string[]): string[] {
+    const normalized = ensureMinimumMcqOptionRows(options);
+    if (normalized.length >= optionLetters.length) {
+        return normalized;
+    }
+    return [...normalized, ""];
+}
+
+function removeMcqOptionAt(options: string[] | undefined, correctAnswer: string | undefined, optionIndex: number): { options: string[]; correctAnswer: string } {
+    const normalized = ensureMinimumMcqOptionRows(options);
+    const currentAnswer = getMcqAnswerLetter(correctAnswer, normalized);
+
+    if (normalized.length <= 2) {
+        return {
+            options: normalized,
+            correctAnswer: currentAnswer,
+        };
+    }
+
+    const nextOptions = normalized.filter((_, idx) => idx !== optionIndex);
+    const currentAnswerIndex = optionLetters.indexOf(currentAnswer);
+    let nextAnswer = currentAnswer;
+
+    if (currentAnswerIndex === optionIndex) {
+        nextAnswer = optionLetters[Math.min(optionIndex, nextOptions.length - 1)];
+    } else if (currentAnswerIndex > optionIndex) {
+        nextAnswer = optionLetters[currentAnswerIndex - 1];
+    }
+
+    return {
+        options: ensureMinimumMcqOptionRows(nextOptions),
+        correctAnswer: nextAnswer,
+    };
+}
+
+function getMcqAnswerLetter(correctAnswer?: string, options?: string[]): string {
+    const normalizedAnswer = (correctAnswer || "").trim();
+    if (!normalizedAnswer) {
+        return "A";
+    }
+
+    const upperAnswer = normalizedAnswer.toUpperCase();
+    const directMatch = optionLetters.find(letter => letter === upperAnswer);
+    if (directMatch) {
+        return directMatch;
+    }
+
+    const optionIndex = (options || []).findIndex(option => option.trim() === normalizedAnswer);
+    if (optionIndex >= 0 && optionIndex < optionLetters.length) {
+        return optionLetters[optionIndex];
+    }
+
+    const numericIndex = Number.parseInt(normalizedAnswer, 10);
+    if (!Number.isNaN(numericIndex) && numericIndex >= 0 && numericIndex < optionLetters.length) {
+        return optionLetters[numericIndex];
+    }
+
+    return "A";
+}
+
+function resolveMcqAnswerText(correctAnswer?: string, options?: string[]): string {
+    const normalizedAnswer = (correctAnswer || "").trim();
+    if (!normalizedAnswer) {
+        return "";
+    }
+
+    const upperAnswer = normalizedAnswer.toUpperCase();
+    const letterIndex = optionLetters.indexOf(upperAnswer);
+    if (letterIndex !== -1) {
+        return options?.[letterIndex]?.trim() || "";
+    }
+
+    const numericIndex = Number.parseInt(normalizedAnswer, 10);
+    if (!Number.isNaN(numericIndex)) {
+        return options?.[numericIndex]?.trim() || "";
+    }
+
+    const matchingOption = (options || []).find(option => option.trim() === normalizedAnswer);
+    return matchingOption?.trim() || normalizedAnswer;
+}
+
+function createEditableQuestion(question: Question): Question {
+    if (question.type !== "MCQ") {
+        return {
+            ...question,
+            correct_answer: question.correct_answer || "",
+        };
+    }
+
+    const options = createEditableMcqOptions(question.options);
+
+    return {
+        ...question,
+        options,
+        correct_answer: getMcqAnswerLetter(question.correct_answer, options),
+    };
+}
 
 /* ─── Page ───────────────────────────────────────── */
 export default function ExamSheetPage() {
@@ -81,7 +237,6 @@ export default function ExamSheetPage() {
 
     /* UI state */
     const [addCatName, setAddCatName] = useState("");
-    const observerTarget = useRef<HTMLDivElement>(null);
     const workspaceRef = useRef<HTMLDivElement>(null);
 
     /* import panel */
@@ -89,13 +244,15 @@ export default function ExamSheetPage() {
     const [importMode, setImportMode] = useState<"form" | "json">("form");
     const [jsonText, setJsonText] = useState("");
     const [importing, setImporting] = useState(false);
-    const [formQ, setFormQ] = useState<ImportQuestion>({ text: "", type: "MCQ", options: ["", "", "", ""], correct_answer: "A" });
+    const [formQ, setFormQ] = useState<ImportQuestion>({ text: "", type: "MCQ", options: ["", ""], correct_answer: "A" });
     const [audioUploading, setAudioUploading] = useState(false);
     const csvInputRef = useRef<HTMLInputElement | null>(null);
     const [isDragging, setIsDragging] = useState(false);
     const [editingQ, setEditingQ] = useState<Question | null>(null);
     const [showDeleteQuestionModal, setShowDeleteQuestionModal] = useState(false);
     const [questionToDelete, setQuestionToDelete] = useState<string | null>(null);
+    const [difficultyToDelete, setDifficultyToDelete] = useState<DifficultyDeleteTarget | null>(null);
+    const [deletingDifficulty, setDeletingDifficulty] = useState(false);
 
     const buildTree = useCallback((qs: Question[]): CategoryNode[] => {
         const map = new Map<string, Map<string, Map<string, number>>>();
@@ -116,7 +273,7 @@ export default function ExamSheetPage() {
                 const diffs: DiffNode[] = [];
                 diffMap.forEach((count, diff) => diffs.push({ difficulty: diff, count }));
                 diffs.sort((a, b) => a.difficulty.localeCompare(b.difficulty));
-                subGroups.push({ name: subName, difficulties: diffs });
+                subGroups.push({ name: subName, difficulties: diffs, expanded: true });
             });
             subGroups.sort((a, b) => a.name.localeCompare(b.name));
             nodes.push({ name: catName, hasSubCategories: hasSub, subGroups, difficulties: [], expanded: true });
@@ -151,7 +308,8 @@ export default function ExamSheetPage() {
                             count: 0,
                             audio_url: d.audio_url 
                         })),
-                        audio_url: sub.audio_url
+                        audio_url: sub.audio_url,
+                        expanded: sub.expanded !== undefined ? sub.expanded : true
                     })) : [{ 
                         name: "", 
                         difficulties: (cat.difficulties || []).map((d: any) => ({ 
@@ -159,7 +317,8 @@ export default function ExamSheetPage() {
                             count: 0,
                             audio_url: d.audio_url 
                         })),
-                        audio_url: cat.audio_url
+                        audio_url: cat.audio_url,
+                        expanded: true
                     }],
                     expanded: cat.expanded !== undefined ? cat.expanded : false,
                     audio_url: cat.audio_url
@@ -232,7 +391,8 @@ export default function ExamSheetPage() {
                             difficulty: d.difficulty,
                             audio_url: d.audio_url
                         })),
-                        audio_url: s.audio_url
+                        audio_url: s.audio_url,
+                        expanded: s.expanded ?? true
                     })) : [],
                     difficulties: !cat.hasSubCategories ? cat.subGroups[0]?.difficulties.map(d => ({
                         difficulty: d.difficulty,
@@ -255,14 +415,17 @@ export default function ExamSheetPage() {
 
     function addCategory() {
         const name = addCatName.trim();
-        if (!name) return;
+        if (!name) {
+            showToast("Please enter a category name", "error");
+            return;
+        }
         if (tree.find(c => c.name.toLowerCase() === name.toLowerCase())) {
             showToast("Category already exists", "error"); return;
         }
         dispatch(setTree([...tree, {
             name,
             hasSubCategories: false,
-            subGroups: [{ name: "", difficulties: [] }],
+            subGroups: [{ name: "", difficulties: [], expanded: true }],
             difficulties: [],
             expanded: true,
         }]));
@@ -281,9 +444,10 @@ export default function ExamSheetPage() {
             if (sub) p.set("sub_category", sub);
             const res = await fetch(`${API_BASE}/api/admin/questions?${p}`, { headers: authHeaders() });
             const d = await res.json();
-            setQuestions(d.questions || []);
+            const firstPageQuestions = mergeUniqueQuestions([], d.questions || []);
+            setQuestions(firstPageQuestions);
             setTotalCount(d.total || 0);
-            setHasMore((d.questions?.length || 0) < (d.total || 0));
+            setHasMore(firstPageQuestions.length < (d.total || 0));
         } catch { showToast("Failed to load questions", "error"); }
         finally { setLoadingQ(false); }
     }
@@ -305,11 +469,22 @@ export default function ExamSheetPage() {
 
             const d = await res.json();
             if (d.imported_count > 0) {
-                showToast(`Success! Imported ${d.imported_count} questions.`, "success");
+                const skippedCount = Number(d.skipped_count || 0);
+                if (skippedCount > 0) {
+                    const warningSuffix = Array.isArray(d.warnings) && d.warnings.length > 0
+                        ? ` ${d.warnings[0]}`
+                        : "";
+                    showToast(`Imported ${d.imported_count}, skipped ${skippedCount}.${warningSuffix}`, "info");
+                } else {
+                    showToast(`Success! Imported ${d.imported_count} questions.`, "success");
+                }
+                await load();
                 await selectSlot(active.category, active.sub_category, active.difficulty);
                 setViewMode("list");
             } else {
-                showToast(d.error || "No questions imported. Check CSV format.", "error");
+                const skippedCount = Number(d.skipped_count || 0);
+                const skippedMessage = skippedCount > 0 ? ` ${skippedCount} row(s) were skipped.` : "";
+                showToast(d.error || `No questions imported.${skippedMessage} Check CSV format.`, "error");
             }
         } catch { showToast("Failed to upload CSV", "error"); }
         finally { setImporting(false); setIsDragging(false); }
@@ -357,19 +532,16 @@ export default function ExamSheetPage() {
             const res = await fetch(`${API_BASE}/api/admin/questions?${p}`, { headers: authHeaders() });
             const d = await res.json();
             const newQs = d.questions || [];
-            
+            const mergedQuestions = mergeUniqueQuestions(questions, newQs);
+            const appendedCount = mergedQuestions.length - questions.length;
+
             if (newQs.length > 0) {
-                setQuestions(prev => {
-                    const existingIds = new Set(prev.map(q => q.id));
-                    const uniqueNew = newQs.filter((q: Question) => !existingIds.has(q.id));
-                    return [...prev, ...uniqueNew];
-                });
+                setQuestions(mergedQuestions);
                 setPage(nextPage);
             }
             
             // Check if we have more based on total items
-            const currentTotalLoaded = questions.length + newQs.length;
-            setHasMore(currentTotalLoaded < (d.total || 0));
+            setHasMore(appendedCount > 0 && mergedQuestions.length < (d.total || 0));
             
         } catch (err) { 
             console.error("Load more failed:", err);
@@ -377,36 +549,33 @@ export default function ExamSheetPage() {
         } finally { 
             setLoadingMore(false); 
         }
-    }, [active, hasMore, loadingMore, page, questions.length, showToast]);
+    }, [active, hasMore, loadingMore, page, questions, showToast]);
+
+    const maybeLoadMore = useCallback((container?: HTMLDivElement | null) => {
+        if (!container || viewMode !== "list" || !hasMore || loadingMore || loadingQ) {
+            return;
+        }
+
+        const distanceFromBottom = container.scrollHeight - container.scrollTop - container.clientHeight;
+        if (distanceFromBottom <= 240) {
+            loadMore();
+        }
+    }, [hasMore, loadMore, loadingMore, loadingQ, viewMode]);
+
+    const handleWorkspaceScroll = useCallback((e: React.UIEvent<HTMLDivElement>) => {
+        maybeLoadMore(e.currentTarget);
+    }, [maybeLoadMore]);
 
     useEffect(() => {
-        if (!workspaceRef.current || !hasMore || loadingMore || loadingQ) return;
-        
-        const obs = new IntersectionObserver(
-            entries => {
-                if (entries[0].isIntersecting) {
-                    loadMore();
-                }
-            },
-            { 
-                root: workspaceRef.current, 
-                threshold: 0.1,
-                rootMargin: "200px" 
-            }
-        );
-        
-        const target = observerTarget.current;
-        if (target) obs.observe(target);
-        return () => {
-            if (target) obs.unobserve(target);
-            obs.disconnect();
-        };
-    }, [hasMore, loadingMore, loadingQ, loadMore]);
+        const container = workspaceRef.current;
+        if (!container) return;
 
-    async function deleteQuestion(id: string) {
-        setQuestionToDelete(id);
-        setShowDeleteQuestionModal(true);
-    }
+        const timer = window.setTimeout(() => {
+            maybeLoadMore(container);
+        }, 0);
+
+        return () => window.clearTimeout(timer);
+    }, [questions.length, hasMore, loadingQ, loadingMore, maybeLoadMore, viewMode]);
 
     async function confirmDeleteQuestion() {
         if (!questionToDelete) return;
@@ -422,14 +591,186 @@ export default function ExamSheetPage() {
         }
     }
 
+    async function fetchAllQuestionsForSlot(category: string, subCategory: string, difficulty: string): Promise<Question[]> {
+        const allQuestions: Question[] = [];
+        let currentPage = 1;
+        const limit = 200;
+
+        while (true) {
+            const params = new URLSearchParams({
+                category,
+                difficulty,
+                page: currentPage.toString(),
+                limit: limit.toString(),
+            });
+            if (subCategory) {
+                params.set("sub_category", subCategory);
+            }
+
+            const res = await fetch(`${API_BASE}/api/admin/questions?${params}`, { headers: authHeaders() });
+            if (!res.ok) {
+                throw new Error("Failed to load questions for this level");
+            }
+
+            const data = await res.json();
+            const batch: Question[] = data.questions || [];
+            allQuestions.push(...batch);
+
+            if (batch.length === 0 || allQuestions.length >= Number(data.total || 0)) {
+                break;
+            }
+
+            currentPage += 1;
+        }
+
+        return allQuestions;
+    }
+
+    async function deleteQuestionsIndividually(questionsToDelete: Question[]): Promise<number> {
+        let deletedCount = 0;
+
+        for (const question of questionsToDelete) {
+            const res = await fetch(`${API_BASE}/api/admin/questions/${question.id}`, {
+                method: "DELETE",
+                headers: authHeaders(),
+            });
+
+            if (!res.ok) {
+                throw new Error("Failed to delete one or more questions");
+            }
+
+            deletedCount += 1;
+        }
+
+        return deletedCount;
+    }
+
+    async function confirmDeleteDifficulty() {
+        if (!difficultyToDelete) return;
+
+        const isDeletingActiveSlot =
+            active?.category === difficultyToDelete.category &&
+            active?.sub_category === difficultyToDelete.sub_category &&
+            active?.difficulty === difficultyToDelete.difficulty;
+
+        try {
+            setDeletingDifficulty(true);
+
+            const params = new URLSearchParams({
+                category: difficultyToDelete.category,
+                difficulty: difficultyToDelete.difficulty,
+            });
+            if (difficultyToDelete.sub_category) {
+                params.set("sub_category", difficultyToDelete.sub_category);
+            }
+
+            let deletedCount = 0;
+
+            try {
+                const res = await fetch(`${API_BASE}/api/admin/questions?${params}`, {
+                    method: "DELETE",
+                    headers: authHeaders(),
+                });
+
+                if (!res.ok) {
+                    throw new Error("Bulk delete unavailable");
+                }
+
+                const data = await res.json().catch(() => ({}));
+                deletedCount = Number(data.deleted_count || 0);
+            } catch {
+                const questionsForSlot = await fetchAllQuestionsForSlot(
+                    difficultyToDelete.category,
+                    difficultyToDelete.sub_category,
+                    difficultyToDelete.difficulty
+                );
+                deletedCount = await deleteQuestionsIndividually(questionsForSlot);
+            }
+
+            dispatch(removeDifficultyAction({
+                catIdx: difficultyToDelete.catIdx,
+                subIdx: difficultyToDelete.subIdx,
+                diffIdx: difficultyToDelete.diffIdx,
+            }));
+
+            if (isDeletingActiveSlot) {
+                setQuestions([]);
+                setTotalCount(0);
+                setHasMore(false);
+                setPage(1);
+                setSearch("");
+                setShowImport(false);
+            }
+
+            showToast(
+                deletedCount > 0
+                    ? `Deleted ${deletedCount} question${deletedCount === 1 ? "" : "s"} from ${difficultyToDelete.difficulty}`
+                    : `${difficultyToDelete.difficulty} removed. No stored questions were found.`,
+                "success"
+            );
+        } catch {
+            showToast("Failed to delete level questions", "error");
+        } finally {
+            setDeletingDifficulty(false);
+            setDifficultyToDelete(null);
+        }
+    }
+
     async function handleEditSave() {
         if (!editingQ || !editingQ.text.trim()) return;
+
+        const trimmedText = editingQ.text.trim();
+        let payload: Question;
+
+        if (editingQ.type === "MCQ") {
+            const rawOptions = trimTrailingEmptyOptions(editingQ.options);
+
+            if (rawOptions.length < 2) {
+                showToast("Please provide at least two answer options", "error");
+                return;
+            }
+
+            if (rawOptions.some(option => !option)) {
+                showToast("Please remove empty gaps between answer options", "error");
+                return;
+            }
+
+            const resolvedAnswer = resolveMcqAnswerText(editingQ.correct_answer, rawOptions);
+            if (!resolvedAnswer) {
+                showToast("Please choose the correct answer", "error");
+                return;
+            }
+
+            if (!rawOptions.includes(resolvedAnswer)) {
+                showToast("Correct answer must match one of the options", "error");
+                return;
+            }
+
+            payload = {
+                ...editingQ,
+                text: trimmedText,
+                passage_title: editingQ.passage_title?.trim() || "",
+                passage_text: editingQ.passage_text?.trim() || "",
+                options: rawOptions,
+                correct_answer: resolvedAnswer,
+            };
+        } else {
+            payload = {
+                ...editingQ,
+                text: trimmedText,
+                passage_title: editingQ.passage_title?.trim() || "",
+                passage_text: editingQ.passage_text?.trim() || "",
+                options: [],
+                correct_answer: (editingQ.correct_answer || "").trim(),
+            };
+        }
+
         try {
             setImporting(true);
             const res = await fetch(`${API_BASE}/api/admin/questions/${editingQ.id}`, {
                 method: "PUT",
                 headers: { ...authHeaders(), "Content-Type": "application/json" },
-                body: JSON.stringify(editingQ)
+                body: JSON.stringify(payload)
             });
             if (res.ok) {
                 showToast("Updated successfully", "success");
@@ -446,12 +787,44 @@ export default function ExamSheetPage() {
         if (!active || !formQ.text.trim()) { showToast("Question text required", "error"); return; }
         setImporting(true);
         try {
-            const payload = { questions: [{ ...formQ, category: active.category, sub_category: active.sub_category, difficulty: active.difficulty, options: formQ.type === "MCQ" ? formQ.options : [], correct_answer: formQ.type === "MCQ" ? formQ.correct_answer : "" }] };
+            let nextOptions: string[] = [];
+            let nextAnswer = "";
+
+            if (formQ.type === "MCQ") {
+                nextOptions = trimTrailingEmptyOptions(formQ.options);
+
+                if (nextOptions.length < 2) {
+                    showToast("Please provide at least two answer options", "error");
+                    return;
+                }
+
+                if (nextOptions.some(option => !option)) {
+                    showToast("Please remove empty gaps between answer options", "error");
+                    return;
+                }
+
+                nextAnswer = resolveMcqAnswerText(formQ.correct_answer, nextOptions);
+                if (!nextAnswer) {
+                    showToast("Please choose the correct answer", "error");
+                    return;
+                }
+            }
+
+            const payload = {
+                questions: [{
+                    ...formQ,
+                    category: active.category,
+                    sub_category: active.sub_category,
+                    difficulty: active.difficulty,
+                    options: formQ.type === "MCQ" ? nextOptions : [],
+                    correct_answer: formQ.type === "MCQ" ? nextAnswer : "",
+                }]
+            };
             const res = await fetch(`${API_BASE}/api/admin/questions/import`, { method: "POST", headers: { ...authHeaders(), "Content-Type": "application/json" }, body: JSON.stringify(payload) });
             const d = await res.json();
             if (d.imported_count > 0) {
                 showToast("Added!", "success");
-                setFormQ({ text: "", type: "MCQ", options: ["", "", "", ""], correct_answer: "A" });
+                setFormQ({ text: "", type: "MCQ", options: ["", ""], correct_answer: "A" });
                 await selectSlot(active.category, active.sub_category, active.difficulty);
                 setViewMode("list");
             }
@@ -476,7 +849,18 @@ export default function ExamSheetPage() {
         finally { setImporting(false); }
     }
 
-    const filtered = questions.filter(q => !search || q.text.toLowerCase().includes(search.toLowerCase()));
+    const filtered = mergeUniqueQuestions([], questions).filter(q => {
+        if (!search) return true;
+
+        const needle = search.toLowerCase();
+        return (
+            q.text.toLowerCase().includes(needle) ||
+            (q.passage_title || "").toLowerCase().includes(needle) ||
+            (q.passage_text || "").toLowerCase().includes(needle)
+        );
+    });
+    const formMcqOptions = formQ.type === "MCQ" ? ensureMinimumMcqOptionRows(formQ.options) : [];
+    const editableMcqOptions = editingQ?.type === "MCQ" ? ensureMinimumMcqOptionRows(editingQ.options) : [];
 
     if (isLoading) return <div className="min-h-screen flex items-center justify-center">Loading…</div>;
     if (!isAuthenticated || user?.role !== "interviewer") { router.push("/login"); return null; }
@@ -509,6 +893,7 @@ export default function ExamSheetPage() {
                             <CategoryBlock key={ci} cat={cat} catIdx={ci}
                                 active={active}
                                 onToggle={() => dispatch(setExpanded({ catIdx: ci, expanded: !cat.expanded }))}
+                                onToggleSub={(si, expanded) => dispatch(setSubExpanded({ catIdx: ci, subIdx: si, expanded }))}
                                 onRemoveCat={() => dispatch(removeCategoryAction(ci))}
                                 onRenameCat={(name) => dispatch(renameCategoryAction({ catIdx: ci, newName: name }))}
                                 onHasSub={(has) => dispatch(toggleHasSubAction({ catIdx: ci, has }))}
@@ -516,7 +901,21 @@ export default function ExamSheetPage() {
                                 onRemoveSub={(si) => dispatch(removeSubCategoryAction({ catIdx: ci, subIdx: si }))}
                                 onRenameSub={(si, newName) => dispatch(renameSubCategoryAction({ catIdx: ci, subIdx: si, newName }))}
                                 onAddDiff={(si, diff) => dispatch(addDifficultyAction({ catIdx: ci, subIdx: si, diff }))}
-                                onRemoveDiff={(si, di) => dispatch(removeDifficultyAction({ catIdx: ci, subIdx: si, diffIdx: di }))}
+                                onRemoveDiff={(si, di) => {
+                                    const sub = cat.subGroups[si];
+                                    const diff = sub?.difficulties[di];
+                                    if (!sub || !diff) return;
+
+                                    setDifficultyToDelete({
+                                        catIdx: ci,
+                                        subIdx: si,
+                                        diffIdx: di,
+                                        category: cat.name,
+                                        sub_category: sub.name,
+                                        difficulty: diff.difficulty,
+                                        questionCount: diff.count,
+                                    });
+                                }}
                                 onSelect={(s, d) => selectSlot(cat.name, s, d)}
                             />
                         ))}
@@ -537,7 +936,7 @@ export default function ExamSheetPage() {
                 </div>
 
                 {/* ───── RIGHT: Workspace ───── */}
-                <div ref={workspaceRef} className="flex-1 overflow-y-auto bg-white">
+                <div ref={workspaceRef} onScroll={handleWorkspaceScroll} className="flex-1 overflow-y-auto bg-white">
                     {!active ? (
                         <div className="flex flex-col items-center justify-center h-full text-center p-8">
                             <div className="w-24 h-24 bg-white  rounded-[32px] border border-slate-200 flex items-center justify-center mb-8 shadow-sm">
@@ -706,12 +1105,29 @@ export default function ExamSheetPage() {
                                                                 </div>
                                                                 <span className="text-xs font-bold text-slate-600">ID: {q.id.slice(-8)}</span>
                                                             </div>
+                                                            {q.passage_text && (
+                                                                <div className="p-5 rounded-[24px] border border-amber-500/15 bg-amber-500/5">
+                                                                    <p className="text-[10px] font-black uppercase tracking-widest text-amber-500 mb-2">
+                                                                        {q.passage_title || "Reading Passage"}
+                                                                    </p>
+                                                                    <p className="text-sm font-medium text-slate-600 whitespace-pre-wrap leading-relaxed">
+                                                                        {q.passage_text}
+                                                                    </p>
+                                                                </div>
+                                                            )}
                                                             <p className="text-xl font-bold text-foreground leading-snug">{q.text}</p>
-                                                            {q.options && q.options.length > 0 && (
-                                                                <div className="grid grid-cols-2 gap-3 mt-4">
-                                                                        {q.options.map((opt, i) => {
-                                                                            const letter = String.fromCharCode(64 + i + 1);
-                                                                            const isCorrect = q.correct_answer === letter || q.correct_answer === opt;
+                                                            {(() => {
+                                                                const visibleOptions = getVisibleMcqOptions(q.options);
+                                                                const correctAnswerText = resolveMcqAnswerText(q.correct_answer, trimTrailingEmptyOptions(q.options));
+
+                                                                if (visibleOptions.length === 0) {
+                                                                    return null;
+                                                                }
+
+                                                                return (
+                                                                    <div className="grid grid-cols-2 gap-3 mt-4">
+                                                                        {visibleOptions.map((opt, i) => {
+                                                                            const isCorrect = opt === correctAnswerText;
                                                                             return (
                                                                                 <div key={i} className={`p-4 rounded-xl border text-sm font-bold flex items-center gap-3 ${isCorrect ? "bg-emerald-500/5 border-emerald-500/20 text-emerald-400" : "bg-white  border-slate-200  text-slate-500"}`}>
                                                                                     <div className={`w-6 h-6 rounded-lg flex items-center justify-center text-[10px] ${isCorrect ? "bg-emerald-500 text-white" : "bg-slate-50  text-slate-600"}`}>
@@ -721,18 +1137,25 @@ export default function ExamSheetPage() {
                                                                                 </div>
                                                                             );
                                                                         })}
+                                                                    </div>
+                                                                );
+                                                            })()}
+                                                            {q.type !== "MCQ" && q.correct_answer && (
+                                                                <div className="mt-4 p-4 rounded-2xl border border-indigo-500/15 bg-indigo-500/5">
+                                                                    <p className="text-[10px] font-black uppercase tracking-widest text-indigo-400 mb-2">Correct Answer</p>
+                                                                    <p className="text-sm font-bold text-slate-700 whitespace-pre-wrap">{q.correct_answer}</p>
                                                                 </div>
                                                             )}
                                                         </div>
                                                         <div className="flex flex-col gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                                                            <button onClick={() => setEditingQ(q)} className="p-3 bg-white  text-slate-400 hover:text-white hover:bg-slate-800 border border-slate-200  rounded-xl transition-all"><Edit2 size={16} /></button>
+                                                            <button onClick={() => setEditingQ(createEditableQuestion(q))} className="p-3 bg-white  text-slate-400 hover:text-white hover:bg-slate-800 border border-slate-200  rounded-xl transition-all"><Edit2 size={16} /></button>
                                                             <button onClick={() => { setQuestionToDelete(q.id); setShowDeleteQuestionModal(true); }} className="p-3 bg-white  text-slate-400 hover:text-red-400 hover:bg-red-500/10 border border-slate-200  rounded-xl transition-all"><Trash2 size={16} /></button>
                                                         </div>
                                                     </div>
                                                 </div>
                                                 ))
                                             )}
-                                            {hasMore && <div ref={observerTarget} className="py-10 text-center"><RefreshCw className="animate-spin mx-auto text-indigo-600" /></div>}
+                                            {hasMore && <div className="py-10 text-center"><RefreshCw className="animate-spin mx-auto text-indigo-600" /></div>}
                                         </div>
                                     </div>
                                 </div>
@@ -755,7 +1178,19 @@ export default function ExamSheetPage() {
                                 <div className="space-y-8">
                                     <div className="space-y-2">
                                         <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1">Question Type</label>
-                                        <select value={formQ.type} onChange={e => setFormQ(p => ({ ...p, type: e.target.value }))} className="w-full p-4 bg-white  border border-slate-200  rounded-2xl font-bold text-foreground focus:ring-4 focus:ring-indigo-500/10 transition-all outline-none appearance-none">
+                                        <select
+                                            value={formQ.type}
+                                            onChange={e => {
+                                                const nextType = e.target.value;
+                                                setFormQ(p => ({
+                                                    ...p,
+                                                    type: nextType,
+                                                    options: nextType === "MCQ" ? createEditableMcqOptions(p.options) : p.options,
+                                                    correct_answer: nextType === "MCQ" ? getMcqAnswerLetter(p.correct_answer, p.options) : p.correct_answer,
+                                                }));
+                                            }}
+                                            className="w-full p-4 bg-white  border border-slate-200  rounded-2xl font-bold text-foreground focus:ring-4 focus:ring-indigo-500/10 transition-all outline-none appearance-none"
+                                        >
                                             <option value="MCQ">Multiple Choice (MCQ)</option>
                                             <option value="SUBJECTIVE">Subjective / Coding</option>
                                         </select>
@@ -764,27 +1199,84 @@ export default function ExamSheetPage() {
                                         <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1">Question Content</label>
                                         <textarea value={formQ.text} onChange={e => setFormQ(p => ({ ...p, text: e.target.value }))} rows={4} className="w-full p-5 bg-white  border border-slate-200  rounded-3xl font-bold text-foreground placeholder:text-slate-700 focus:ring-4 focus:ring-indigo-500/10 transition-all outline-none" placeholder="Enter the technical question here…" />
                                     </div>
+                                    <div className="space-y-2">
+                                        <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1">Passage Title (Optional)</label>
+                                        <input
+                                            type="text"
+                                            value={formQ.passage_title || ""}
+                                            onChange={e => setFormQ(p => ({ ...p, passage_title: e.target.value }))}
+                                            className="w-full p-4 bg-white border border-slate-200 rounded-2xl font-bold text-foreground placeholder:text-slate-700 outline-none focus:border-indigo-500/30 transition-all"
+                                            placeholder="e.g. Community Library Announcement"
+                                        />
+                                    </div>
+                                    <div className="space-y-2">
+                                        <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1">Passage Text (Optional)</label>
+                                        <textarea
+                                            value={formQ.passage_text || ""}
+                                            onChange={e => setFormQ(p => ({ ...p, passage_text: e.target.value }))}
+                                            rows={5}
+                                            className="w-full p-5 bg-white border border-slate-200 rounded-3xl font-medium text-foreground placeholder:text-slate-700 focus:ring-4 focus:ring-indigo-500/10 transition-all outline-none"
+                                            placeholder="Paste the shared reading passage here if this question belongs to one."
+                                        />
+                                    </div>
                                     {formQ.type === "MCQ" && (
                                         <div className="space-y-4">
                                             <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1">Options & Answer</label>
                                             <div className="grid grid-cols-1 gap-3">
-                                                {formQ.options.map((opt, oi) => (
+                                                {formMcqOptions.map((opt, oi) => (
                                                     <div key={oi} className="relative group">
                                                         <div className="absolute left-4 top-1/2 -translate-y-1/2 w-8 h-8 bg-slate-50  rounded-lg flex items-center justify-center text-xs font-black text-slate-500 border border-slate-200  group-focus-within:border-indigo-500/50 group-focus-within:text-indigo-400 transition-all">
                                                             {optionLetters[oi]}
                                                         </div>
-                                                        <input type="text" value={opt} onChange={e => { const o = [...formQ.options]; o[oi] = e.target.value; setFormQ(p => ({ ...p, options: o })); }} className="w-full pl-16 pr-4 py-4 bg-white  border border-slate-200  rounded-2xl text-foreground font-bold placeholder:text-slate-700 outline-none focus:border-indigo-500/30 transition-all" placeholder={`Alternative ${optionLetters[oi]}…`} />
+                                                        <input
+                                                            type="text"
+                                                            value={opt}
+                                                            onChange={e => {
+                                                                const o = [...formMcqOptions];
+                                                                o[oi] = e.target.value;
+                                                                setFormQ(p => ({ ...p, options: o }));
+                                                            }}
+                                                            className="w-full pl-16 pr-14 py-4 bg-white  border border-slate-200  rounded-2xl text-foreground font-bold placeholder:text-slate-700 outline-none focus:border-indigo-500/30 transition-all"
+                                                            placeholder={`Alternative ${optionLetters[oi]}…`}
+                                                        />
+                                                        {formMcqOptions.length > 2 && (
+                                                            <button
+                                                                type="button"
+                                                                onClick={() => {
+                                                                    const next = removeMcqOptionAt(formMcqOptions, formQ.correct_answer, oi);
+                                                                    setFormQ(p => ({ ...p, options: next.options, correct_answer: next.correctAnswer }));
+                                                                }}
+                                                                className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 hover:text-red-500 transition-colors"
+                                                            >
+                                                                <X size={14} />
+                                                            </button>
+                                                        )}
                                                     </div>
                                                 ))}
                                             </div>
+                                            {formMcqOptions.length < optionLetters.length && (
+                                                <button
+                                                    type="button"
+                                                    onClick={() => setFormQ(p => ({ ...p, options: addMcqOptionRow(formMcqOptions) }))}
+                                                    className="text-xs font-black uppercase tracking-widest text-indigo-500 hover:text-indigo-400 transition-colors"
+                                                >
+                                                    + Add Option
+                                                </button>
+                                            )}
                                             <div className="flex justify-between items-center bg-white  p-2 rounded-2xl border border-slate-200 ">
                                                 <span className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-4">Correct Key:</span>
                                                 <div className="flex gap-2">
-                                                    {optionLetters.map(l => (
-                                                        <button key={l} onClick={() => setFormQ(p => ({ ...p, correct_answer: l }))} className={`w-12 h-12 rounded-xl font-black transition-all ${formQ.correct_answer === l ? "bg-indigo-600 text-white shadow-lg shadow-indigo-600/20" : "text-slate-600 hover:text-slate-400"}`}>{l}</button>
-                                                    ))}
+                                                    {formMcqOptions.map((_, idx) => {
+                                                        const letter = optionLetters[idx];
+                                                        return (
+                                                            <button key={letter} onClick={() => setFormQ(p => ({ ...p, correct_answer: letter }))} className={`w-12 h-12 rounded-xl font-black transition-all ${formQ.correct_answer === letter ? "bg-indigo-600 text-white shadow-lg shadow-indigo-600/20" : "text-slate-600 hover:text-slate-400"}`}>{letter}</button>
+                                                        );
+                                                    })}
                                                 </div>
                                             </div>
+                                            <p className="text-xs font-bold text-slate-500 px-1">
+                                                Selected answer: {resolveMcqAnswerText(formQ.correct_answer, formMcqOptions) || "Choose an option"}
+                                            </p>
                                         </div>
                                     )}
                                     <button onClick={handleImportForm} disabled={importing} className="w-full py-5 bg-indigo-600 text-white rounded-[32px] font-black shadow-2xl shadow-indigo-600/30 hover:bg-indigo-500 transition-all active:scale-95 disabled:opacity-50 mt-4">
@@ -795,7 +1287,7 @@ export default function ExamSheetPage() {
                                 <div className="space-y-6">
                                     <div className="p-4 bg-indigo-500/5 border border-indigo-500/10 rounded-2xl">
                                         <p className="text-xs text-indigo-400 leading-relaxed font-medium">
-                                            Paste a JSON array of question objects. Ensure each object follows the schema: <code>{"{ text, type, options?, correct_answer? }"}</code>
+                                            Paste a JSON array of question objects. Ensure each object follows the schema: <code>{"{ text, type, options?, correct_answer?, passage_title?, passage_text? }"}</code>
                                         </p>
                                     </div>
                                     <textarea value={jsonText} onChange={e => setJsonText(e.target.value)} rows={12} className="w-full p-6 bg-white  text-indigo-400 font-mono text-sm rounded-3xl border border-slate-200  focus:border-indigo-500/50 outline-none transition-all" placeholder="[ { 'text': '...' }, ... ]" />
@@ -819,16 +1311,33 @@ export default function ExamSheetPage() {
                                 <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1">Question Type</label>
                                 <select 
                                     value={editingQ.type} 
-                                    onChange={e => setEditingQ({ 
-                                        ...editingQ, 
-                                        type: e.target.value,
-                                        options: e.target.value === "MCQ" ? (editingQ.options?.length ? editingQ.options : ["", "", "", ""]) : undefined,
-                                        correct_answer: e.target.value === "MCQ" ? (editingQ.correct_answer || "A") : undefined
-                                    })} 
+                                    onChange={e => {
+                                        const nextType = e.target.value;
+                                        if (nextType === "MCQ") {
+                                            const nextOptions = createEditableMcqOptions(editingQ.options);
+                                            setEditingQ({
+                                                ...editingQ,
+                                                type: nextType,
+                                                options: nextOptions,
+                                                correct_answer: getMcqAnswerLetter(editingQ.correct_answer, nextOptions),
+                                            });
+                                            return;
+                                        }
+
+                                        setEditingQ({
+                                            ...editingQ,
+                                            type: nextType,
+                                            options: undefined,
+                                            correct_answer: editingQ.type === "MCQ"
+                                                ? resolveMcqAnswerText(editingQ.correct_answer, editingQ.options)
+                                                : (editingQ.correct_answer || ""),
+                                        });
+                                    }} 
                                     className="w-full p-4 bg-white border border-slate-200 rounded-2xl font-bold text-foreground focus:ring-4 focus:ring-indigo-500/10 transition-all outline-none appearance-none"
                                 >
                                     <option value="MCQ">Multiple Choice (MCQ)</option>
-                                    <option value="SUBJECTIVE">Subjective / Coding</option>
+                                    <option value="SUBJECTIVE">Subjective</option>
+                                    <option value="CODING">Coding</option>
                                 </select>
                             </div>
 
@@ -842,11 +1351,33 @@ export default function ExamSheetPage() {
                                 />
                             </div>
 
+                            <div className="space-y-2">
+                                <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1">Passage Title (Optional)</label>
+                                <input
+                                    type="text"
+                                    value={editingQ.passage_title || ""}
+                                    onChange={e => setEditingQ({ ...editingQ, passage_title: e.target.value })}
+                                    className="w-full p-4 bg-white border border-slate-200 rounded-2xl font-bold text-foreground placeholder:text-slate-700 outline-none focus:border-indigo-500/30 transition-all"
+                                    placeholder="e.g. Community Library Announcement"
+                                />
+                            </div>
+
+                            <div className="space-y-2">
+                                <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1">Passage Text (Optional)</label>
+                                <textarea
+                                    value={editingQ.passage_text || ""}
+                                    onChange={e => setEditingQ({ ...editingQ, passage_text: e.target.value })}
+                                    rows={5}
+                                    className="w-full p-5 bg-white border border-slate-200 rounded-3xl font-medium text-foreground placeholder:text-slate-700 focus:ring-4 focus:ring-indigo-500/10 transition-all outline-none"
+                                    placeholder="Paste the shared reading passage here if this question belongs to one."
+                                />
+                            </div>
+
                             {editingQ.type === "MCQ" && (
                                 <div className="space-y-4">
                                     <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1">Options & Answer</label>
                                     <div className="grid grid-cols-1 gap-3">
-                                        {(editingQ.options || ["", "", "", ""]).map((opt, oi) => (
+                                        {editableMcqOptions.map((opt, oi) => (
                                             <div key={oi} className="relative group">
                                                 <div className="absolute left-4 top-1/2 -translate-y-1/2 w-8 h-8 bg-slate-50 rounded-lg flex items-center justify-center text-xs font-black text-slate-500 border border-slate-200 group-focus-within:border-indigo-500/50 group-focus-within:text-indigo-400 transition-all">
                                                     {optionLetters[oi]}
@@ -855,30 +1386,78 @@ export default function ExamSheetPage() {
                                                     type="text" 
                                                     value={opt} 
                                                     onChange={e => { 
-                                                        const o = [...(editingQ.options || ["", "", "", ""])]; 
+                                                        const o = [...editableMcqOptions];
                                                         o[oi] = e.target.value; 
                                                         setEditingQ({ ...editingQ, options: o }); 
                                                     }} 
-                                                    className="w-full pl-16 pr-4 py-4 bg-white border border-slate-200 rounded-2xl text-foreground font-bold placeholder:text-slate-700 outline-none focus:border-indigo-500/30 transition-all" 
+                                                    className="w-full pl-16 pr-14 py-4 bg-white border border-slate-200 rounded-2xl text-foreground font-bold placeholder:text-slate-700 outline-none focus:border-indigo-500/30 transition-all" 
                                                     placeholder={`Alternative ${optionLetters[oi]}…`} 
                                                 />
+                                                {editableMcqOptions.length > 2 && (
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => {
+                                                            const next = removeMcqOptionAt(editableMcqOptions, editingQ.correct_answer, oi);
+                                                            setEditingQ({ ...editingQ, options: next.options, correct_answer: next.correctAnswer });
+                                                        }}
+                                                        className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 hover:text-red-500 transition-colors"
+                                                    >
+                                                        <X size={14} />
+                                                    </button>
+                                                )}
                                             </div>
                                         ))}
                                     </div>
+                                    {editableMcqOptions.length < optionLetters.length && (
+                                        <button
+                                            type="button"
+                                            onClick={() => setEditingQ({ ...editingQ, options: addMcqOptionRow(editableMcqOptions) })}
+                                            className="text-xs font-black uppercase tracking-widest text-indigo-500 hover:text-indigo-400 transition-colors"
+                                        >
+                                            + Add Option
+                                        </button>
+                                    )}
                                     <div className="flex justify-between items-center bg-white p-2 rounded-2xl border border-slate-200">
                                         <span className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-4">Correct Key:</span>
                                         <div className="flex gap-2">
-                                            {optionLetters.map(l => (
+                                            {editableMcqOptions.map((_, idx) => {
+                                                const letter = optionLetters[idx];
+                                                return (
                                                 <button 
-                                                    key={l} 
-                                                    onClick={() => setEditingQ({ ...editingQ, correct_answer: l })} 
-                                                    className={`w-12 h-12 rounded-xl font-black transition-all ${editingQ.correct_answer === l ? "bg-indigo-600 text-white shadow-lg shadow-indigo-600/20" : "text-slate-600 hover:text-slate-400"}`}
+                                                    key={letter} 
+                                                    onClick={() => setEditingQ({ ...editingQ, correct_answer: letter })} 
+                                                    className={`w-12 h-12 rounded-xl font-black transition-all ${editingQ.correct_answer === letter ? "bg-indigo-600 text-white shadow-lg shadow-indigo-600/20" : "text-slate-600 hover:text-slate-400"}`}
                                                 >
-                                                    {l}
+                                                    {letter}
                                                 </button>
-                                            ))}
+                                                );
+                                            })}
                                         </div>
                                     </div>
+                                    <p className="text-xs font-bold text-slate-500 px-1">
+                                        Selected answer: {resolveMcqAnswerText(editingQ.correct_answer, editableMcqOptions) || "Choose an option"}
+                                    </p>
+                                </div>
+                            )}
+
+                            {editingQ.type !== "MCQ" && (
+                                <div className="space-y-4">
+                                    <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1">Correct Option</label>
+                                    <div className="relative group">
+                                        <div className="absolute left-4 top-1/2 -translate-y-1/2 w-8 h-8 bg-slate-50 rounded-lg flex items-center justify-center text-xs font-black text-slate-500 border border-slate-200 group-focus-within:border-indigo-500/50 group-focus-within:text-indigo-400 transition-all">
+                                            A
+                                        </div>
+                                        <input
+                                            type="text"
+                                            value={editingQ.correct_answer || ""}
+                                            onChange={e => setEditingQ({ ...editingQ, correct_answer: e.target.value })}
+                                            className="w-full pl-16 pr-4 py-4 bg-white border border-slate-200 rounded-2xl text-foreground font-bold placeholder:text-slate-700 outline-none focus:border-indigo-500/30 transition-all"
+                                            placeholder="Enter the correct option..."
+                                        />
+                                    </div>
+                                    <p className="text-xs font-bold text-slate-500 px-1">
+                                        Selected option: {editingQ.correct_answer?.trim() || "Enter an option"}
+                                    </p>
                                 </div>
                             )}
 
@@ -926,6 +1505,45 @@ export default function ExamSheetPage() {
                 </div>
             </Modal>
 
+            <Modal
+                isOpen={!!difficultyToDelete}
+                onClose={() => !deletingDifficulty && setDifficultyToDelete(null)}
+                title="Delete Level"
+                footer={
+                    <div className="flex gap-4 w-full">
+                        <button
+                            onClick={() => setDifficultyToDelete(null)}
+                            disabled={deletingDifficulty}
+                            className="flex-1 py-4 bg-white text-slate-400 border border-slate-200 rounded-2xl font-black uppercase tracking-widest text-[10px] hover:bg-slate-800 transition-colors disabled:opacity-50"
+                        >
+                            Keep Level
+                        </button>
+                        <button
+                            onClick={confirmDeleteDifficulty}
+                            disabled={deletingDifficulty}
+                            className="flex-1 py-4 bg-red-600 text-white rounded-2xl font-black uppercase tracking-widest text-[10px] shadow-lg shadow-red-600/20 hover:bg-red-500 transition-colors disabled:opacity-50"
+                        >
+                            {deletingDifficulty ? "Deleting..." : "Delete Level"}
+                        </button>
+                    </div>
+                }
+            >
+                <div className="flex flex-col items-center text-center gap-6 py-4">
+                    <div className="w-16 h-16 bg-red-500/10 rounded-[24px] flex items-center justify-center text-red-500 border border-red-500/20">
+                        <AlertTriangle size={32} />
+                    </div>
+                    <div className="space-y-2">
+                        <p className="text-foreground font-bold text-lg">Remove {difficultyToDelete?.difficulty} and its questions?</p>
+                        <p className="text-slate-600 max-w-[320px]">
+                            This will permanently delete all questions stored under <strong>{difficultyToDelete?.category}{difficultyToDelete?.sub_category ? ` / ${difficultyToDelete.sub_category}` : ""} / {difficultyToDelete?.difficulty}</strong>.
+                        </p>
+                        <p className="text-xs font-bold uppercase tracking-widest text-red-500">
+                            {difficultyToDelete?.questionCount || 0} question{difficultyToDelete?.questionCount === 1 ? "" : "s"} currently linked
+                        </p>
+                    </div>
+                </div>
+            </Modal>
+
             <input 
                 type="file" 
                 ref={csvInputRef} 
@@ -942,9 +1560,9 @@ export default function ExamSheetPage() {
 }
 
 /* ── CategoryBlock component ── */
-function CategoryBlock({ cat, catIdx, active, onToggle, onRemoveCat, onRenameCat, onHasSub, onAddSub, onRemoveSub, onRenameSub, onAddDiff, onRemoveDiff, onSelect }: {
+function CategoryBlock({ cat, catIdx, active, onToggle, onToggleSub, onRemoveCat, onRenameCat, onHasSub, onAddSub, onRemoveSub, onRenameSub, onAddDiff, onRemoveDiff, onSelect }: {
     cat: CategoryNode; catIdx: number; active: ActiveSlot | null;
-    onToggle: () => void; onRemoveCat: () => void; onRenameCat: (name: string) => void;
+    onToggle: () => void; onToggleSub: (subIdx: number, expanded: boolean) => void; onRemoveCat: () => void; onRenameCat: (name: string) => void;
     onHasSub: (v: boolean) => void;
     onAddSub: (n: string) => void; onRemoveSub: (subIdx: number) => void;
     onRenameSub: (subIdx: number, name: string) => void;
@@ -954,6 +1572,7 @@ function CategoryBlock({ cat, catIdx, active, onToggle, onRemoveCat, onRenameCat
 }) {
     const [newSub, setNewSub] = useState("");
     const [diffInputs, setDiffInputs] = useState<Record<number, string>>({});
+    const { showToast } = useToast();
 
     const diffColor = (d: string) => {
         const l = d.toLowerCase();
@@ -963,13 +1582,40 @@ function CategoryBlock({ cat, catIdx, active, onToggle, onRemoveCat, onRenameCat
         return "bg-indigo-100 text-indigo-700";
     };
 
+    function handleAddSub() {
+        const trimmed = newSub.trim();
+        if (!trimmed) {
+            showToast("Please enter a subgroup name", "error");
+            return;
+        }
+        onAddSub(trimmed);
+        setNewSub("");
+    }
+
+    function handleAddDiff(subIdx: number) {
+        const trimmed = (diffInputs[subIdx] || "").trim();
+        if (!trimmed) {
+            showToast("Please enter a level name", "error");
+            return;
+        }
+        onAddDiff(subIdx, trimmed);
+        setDiffInputs(p => ({ ...p, [subIdx]: "" }));
+    }
+
     return (
         <div className="border border-slate-100 rounded-2xl bg-white shadow-sm">
             <div className={`px-5 py-4 cursor-pointer transition-all flex items-center justify-between rounded-t-2xl ${active?.category === cat.name && !active?.sub_category ? "bg-indigo-600 text-white shadow-lg" : "text-slate-500 hover:bg-slate-50 hover:text-slate-900"}`}
                 onClick={() => { onSelect("", ""); if (!cat.expanded) onToggle(); }}>
                 <div className="flex items-center gap-3 flex-1">
                     <ChevronRight size={16} className={`transition-transform duration-300 ${cat.expanded ? "rotate-90" : ""}`} onClick={(e) => { e.stopPropagation(); onToggle(); }} />
-                    <input type="text" value={cat.name} onChange={e => onRenameCat(e.target.value)} onClick={e => e.stopPropagation()} className="bg-transparent border-none font-bold text-sm w-full focus:ring-0 text-current placeholder:text-slate-600" />
+                    <input
+                        type="text"
+                        value={cat.name}
+                        onChange={e => onRenameCat(e.target.value)}
+                        onBlur={e => onRenameCat(e.target.value.trim())}
+                        onClick={e => e.stopPropagation()}
+                        className="bg-transparent border-none font-bold text-sm w-full focus:ring-0 text-current placeholder:text-slate-600"
+                    />
                 </div>
                 <button onClick={(e) => { e.stopPropagation(); onRemoveCat(); }} className="p-2 text-slate-300 hover:text-red-500 transition-colors"><Trash2 size={16} /></button>
             </div>
@@ -988,29 +1634,53 @@ function CategoryBlock({ cat, catIdx, active, onToggle, onRemoveCat, onRenameCat
                         <div className="space-y-4">
                             {cat.subGroups.map((sg, si) => (
                                 <div key={si} className="border border-slate-100 rounded-2xl p-5 bg-white shadow-sm hover:border-indigo-500/20 transition-all">
-                                    <div className="flex items-center justify-between mb-4">
-                                        <div className="flex items-center gap-2 flex-1">
+                                    <div className="flex items-center justify-between gap-3 mb-4">
+                                        <div className="flex items-center gap-2 flex-1 min-w-0">
+                                            <button
+                                                type="button"
+                                                onClick={() => onToggleSub(si, !(sg.expanded ?? true))}
+                                                className="shrink-0 p-1 text-slate-400 hover:text-slate-700 transition-colors"
+                                            >
+                                                <ChevronRight size={14} className={`transition-transform duration-300 ${(sg.expanded ?? true) ? "rotate-90" : ""}`} />
+                                            </button>
                                             <Tag size={14} className="text-indigo-500" />
-                                            <input type="text" value={sg.name} onChange={e => onRenameSub(si, e.target.value)} className="bg-transparent border-none text-sm font-bold focus:ring-0 w-full placeholder:text-slate-300 text-slate-900" placeholder="Sub-category…" />
+                                            <input
+                                                type="text"
+                                                value={sg.name}
+                                                onChange={e => onRenameSub(si, e.target.value)}
+                                                onBlur={e => onRenameSub(si, e.target.value.trim())}
+                                                onClick={e => e.stopPropagation()}
+                                                className="bg-transparent border-none text-sm font-bold focus:ring-0 w-full placeholder:text-slate-300 text-slate-900"
+                                                placeholder="Sub-category…"
+                                            />
                                         </div>
                                         <button onClick={() => onRemoveSub(si)} className="text-slate-400  hover:text-red-500 transition-colors"><Trash2 size={14} /></button>
                                     </div>
-                                    <div className="flex flex-wrap gap-2 mb-4">
-                                        {sg.difficulties.map((d, di) => (
-                                            <div key={di} className="relative group/diff">
-                                                <button onClick={() => onSelect(sg.name, d.difficulty)} className={`pl-3 pr-8 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${active?.category === cat.name && active?.sub_category === sg.name && active?.difficulty === d.difficulty ? "bg-indigo-600 text-white ring-4 ring-indigo-500/20" : "bg-slate-50  text-slate-400 border border-slate-200  hover:border-slate-700 hover:text-slate-300"}`}>
-                                                    {d.difficulty} {d.count > 0 && <span className="opacity-50 ml-1">[{d.count}]</span>}
-                                                </button>
-                                                <button onClick={() => onRemoveDiff(si, di)} className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-600 hover:text-red-400 opacity-0 group-hover/diff:opacity-100 transition-opacity"><X size={12} /></button>
+                                    {(sg.expanded ?? true) && (
+                                        <>
+                                            <div className="flex flex-wrap gap-2 mb-4">
+                                                {sg.difficulties.map((d, di) => (
+                                                    <div key={di} className="relative group/diff">
+                                                        <button onClick={() => onSelect(sg.name, d.difficulty)} className={`pl-3 pr-8 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${active?.category === cat.name && active?.sub_category === sg.name && active?.difficulty === d.difficulty ? "bg-indigo-600 text-white ring-4 ring-indigo-500/20" : "bg-slate-50  text-slate-400 border border-slate-200  hover:border-slate-700 hover:text-slate-300"}`}>
+                                                            {d.difficulty} {d.count > 0 && <span className="opacity-50 ml-1">[{d.count}]</span>}
+                                                        </button>
+                                                        <button
+                                                            onClick={() => onRemoveDiff(si, di)}
+                                                            className={`absolute right-2 top-1/2 -translate-y-1/2 transition-colors ${active?.category === cat.name && active?.sub_category === sg.name && active?.difficulty === d.difficulty ? "text-white/80 hover:text-white" : "text-slate-500 hover:text-red-400"}`}
+                                                        >
+                                                            <X size={12} />
+                                                        </button>
+                                                    </div>
+                                                ))}
                                             </div>
-                                        ))}
-                                    </div>
-                                    <DifficultyAdder value={diffInputs[si] || ""} onChange={v => setDiffInputs(p => ({ ...p, [si]: v }))} onAdd={() => { onAddDiff(si, diffInputs[si]); setDiffInputs(p => ({ ...p, [si]: "" })); }} />
+                                            <DifficultyAdder value={diffInputs[si] || ""} onChange={v => setDiffInputs(p => ({ ...p, [si]: v }))} onAdd={() => handleAddDiff(si)} />
+                                        </>
+                                    )}
                                 </div>
                             ))}
                              <div className="relative flex items-center bg-slate-50/50 border border-slate-100 rounded-2xl p-1 transition-all focus-within:bg-white focus-within:shadow-sm overflow-hidden">
                                 <input type="text" value={newSub} onChange={e => setNewSub(e.target.value)} className="flex-1 min-w-0 px-4 py-2.5 bg-transparent border-none font-bold text-slate-900 text-sm outline-none placeholder:text-slate-300" placeholder="New subgroup…" />
-                                <button onClick={() => { onAddSub(newSub); setNewSub(""); }} className="shrink-0 w-9 h-9 bg-indigo-600 text-white rounded-xl hover:bg-indigo-500 transition-all active:scale-95 flex items-center justify-center shadow-sm"><Plus size={18} /></button>
+                                <button onClick={handleAddSub} className="shrink-0 w-9 h-9 bg-indigo-600 text-white rounded-xl hover:bg-indigo-500 transition-all active:scale-95 flex items-center justify-center shadow-sm"><Plus size={18} /></button>
                             </div>
                         </div>
                     ) : (
@@ -1021,11 +1691,16 @@ function CategoryBlock({ cat, catIdx, active, onToggle, onRemoveCat, onRenameCat
                                         <button onClick={() => onSelect("", d.difficulty)} className={`pl-3 pr-8 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${active?.category === cat.name && !active?.sub_category && active?.difficulty === d.difficulty ? "bg-indigo-600 text-white ring-4 ring-indigo-500/20" : "bg-slate-50  text-slate-400 border border-slate-200  hover:border-slate-700 hover:text-slate-300"}`}>
                                             {d.difficulty} {d.count > 0 && <span className="opacity-50 ml-1">[{d.count}]</span>}
                                         </button>
-                                        <button onClick={() => onRemoveDiff(0, di)} className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-600 hover:text-red-400 opacity-0 group-hover/diff:opacity-100 transition-opacity"><X size={12} /></button>
+                                        <button
+                                            onClick={() => onRemoveDiff(0, di)}
+                                            className={`absolute right-2 top-1/2 -translate-y-1/2 transition-colors ${active?.category === cat.name && !active?.sub_category && active?.difficulty === d.difficulty ? "text-white/80 hover:text-white" : "text-slate-500 hover:text-red-400"}`}
+                                        >
+                                            <X size={12} />
+                                        </button>
                                     </div>
                                 ))}
                             </div>
-                            <DifficultyAdder value={diffInputs[0] || ""} onChange={v => setDiffInputs(p => ({ ...p, 0: v }))} onAdd={() => { onAddDiff(0, diffInputs[0]); setDiffInputs(p => ({ ...p, 0: "" })); }} />
+                            <DifficultyAdder value={diffInputs[0] || ""} onChange={v => setDiffInputs(p => ({ ...p, 0: v }))} onAdd={() => handleAddDiff(0)} />
                         </div>
                     )}
                 </div>

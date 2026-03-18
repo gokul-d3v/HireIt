@@ -19,6 +19,8 @@ interface Question {
     options: string[];
     points: number;
     audio_url?: string; // For Listening questions
+    passage_title?: string;
+    passage_text?: string;
 }
 
 interface Assessment {
@@ -457,7 +459,7 @@ export default function AssessmentPlayer({ assessmentId, onComplete }: Assessmen
             setTimeout(() => captureSnapshot('initial'), 1000);
 
             const model = await blazeface.load();
-            let missingFaceCount = 0;
+            const missingFaceCount = 0;
             detectionInterval.current = setInterval(async () => {
                 if (videoRef.current && videoRef.current.readyState === 4) {
                     const predictions = await model.estimateFaces(videoRef.current, false);
@@ -498,7 +500,7 @@ export default function AssessmentPlayer({ assessmentId, onComplete }: Assessmen
                 source.connect(analyser);
 
                 const dataArray = new Uint8Array(analyser.frequencyBinCount);
-                let consecutiveNoiseCount = 0;
+                const consecutiveNoiseCount = 0;
 
                 audioIntervalRef.current = setInterval(() => {
                     analyser.getByteFrequencyData(dataArray);
@@ -975,7 +977,23 @@ export default function AssessmentPlayer({ assessmentId, onComplete }: Assessmen
                                         <span className="text-xs font-bold text-indigo-700 uppercase tracking-wider">Listening Passage — Play before answering</span>
                                     </div>
                                     <div className="p-3 bg-indigo-50/50 rounded-xl border border-indigo-100 flex items-center gap-3">
-                                        {currentQuestion.audio_url ? <audio src={currentQuestion.audio_url.startsWith("http") ? currentQuestion.audio_url : `${process.env.NEXT_PUBLIC_API_URL || "http://localhost:8080"}${currentQuestion.audio_url}`} controls className="h-8 flex-1" /> : <span className="text-xs text-gray-600 font-medium">No Audio Configured for this Level</span>}
+                                        {currentQuestion.audio_url ? <audio ref={questionAudioRef} src={currentQuestion.audio_url.startsWith("http") ? currentQuestion.audio_url : `${process.env.NEXT_PUBLIC_API_URL || "http://localhost:8080"}${currentQuestion.audio_url}`} controls className="h-8 flex-1" /> : <span className="text-xs text-gray-600 font-medium">No Audio Configured for this Level</span>}
+                                    </div>
+                                </div>
+                            )}
+
+                            {currentQuestion.passage_text && (
+                                <div className="mb-5 p-5 bg-amber-50 border border-amber-200 rounded-xl shadow-sm">
+                                    <div className="flex items-center gap-2 mb-3">
+                                        <div className="w-2 h-2 rounded-full bg-amber-500"></div>
+                                        <span className="text-xs font-bold text-amber-700 uppercase tracking-wider">
+                                            {currentQuestion.passage_title || "Reading Passage"}
+                                        </span>
+                                    </div>
+                                    <div className="max-h-72 overflow-y-auto pr-2">
+                                        <p className="text-sm leading-relaxed text-slate-700 whitespace-pre-wrap">
+                                            {currentQuestion.passage_text}
+                                        </p>
                                     </div>
                                 </div>
                             )}

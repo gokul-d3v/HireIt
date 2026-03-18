@@ -11,6 +11,7 @@ export interface SubNode {
   difficulties: DiffNode[];
   audio_url?: string;
   showAudioUpload?: boolean;
+  expanded?: boolean;
 }
 
 export interface CategoryNode {
@@ -51,6 +52,14 @@ const questionBankSlice = createSlice({
         state.tree[action.payload.catIdx].expanded = action.payload.expanded;
       }
     },
+    setSubExpanded: (state, action: PayloadAction<{ catIdx: number; subIdx: number; expanded: boolean }>) => {
+      const { catIdx, subIdx, expanded } = action.payload;
+      const category = state.tree[catIdx];
+      const subGroup = category?.subGroups[subIdx];
+      if (!subGroup) return;
+
+      subGroup.expanded = expanded;
+    },
     setActiveSlot: (state, action: PayloadAction<ActiveSlot | null>) => {
       state.active = action.payload;
     },
@@ -86,8 +95,14 @@ const questionBankSlice = createSlice({
     },
     renameCategory: (state, action: PayloadAction<{ catIdx: number; newName: string }>) => {
         const { catIdx, newName } = action.payload;
-        if (state.tree[catIdx]) {
-            state.tree[catIdx].name = newName.trim();
+        const category = state.tree[catIdx];
+        if (!category) return;
+
+        const oldName = category.name;
+        category.name = newName;
+
+        if (state.active?.category === oldName) {
+            state.active.category = newName;
         }
     },
     toggleHasSub: (state, action: PayloadAction<{ catIdx: number; has: boolean }>) => {
@@ -111,6 +126,7 @@ const questionBankSlice = createSlice({
             });
             c.subGroups = [{
                 name: "",
+                expanded: true,
                 difficulties: Object.entries(mergedDiffs).map(([difficulty, data]) => ({ 
                     difficulty, 
                     count: data.count,
@@ -127,7 +143,7 @@ const questionBankSlice = createSlice({
         const { catIdx, subName } = action.payload;
         const c = state.tree[catIdx];
         if (!c) return;
-        c.subGroups.push({ name: subName.trim(), difficulties: [] });
+        c.subGroups.push({ name: subName.trim(), difficulties: [], expanded: true });
     },
     renameSubCategory: (state, action: PayloadAction<{ catIdx: number; subIdx: number; newName: string }>) => {
         const { catIdx, subIdx, newName } = action.payload;
@@ -135,7 +151,12 @@ const questionBankSlice = createSlice({
         if (!c) return;
         const sub = c.subGroups[subIdx];
         if (!sub) return;
-        sub.name = newName.trim();
+        const oldName = sub.name;
+        sub.name = newName;
+
+        if (state.active?.category === c.name && state.active?.sub_category === oldName) {
+            state.active.sub_category = newName;
+        }
     },
     removeSubCategory: (state, action: PayloadAction<{ catIdx: number; subIdx: number }>) => {
         const { catIdx, subIdx } = action.payload;
@@ -197,6 +218,7 @@ const questionBankSlice = createSlice({
 export const { 
     setTree, 
     setExpanded, 
+    setSubExpanded,
     setActiveSlot, 
     removeDifficulty, 
     removeCategory,

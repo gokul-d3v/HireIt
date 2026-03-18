@@ -12,6 +12,7 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"unicode"
 
 	"hireit-backend/models"
 	"hireit-backend/repositories"
@@ -26,6 +27,19 @@ type QuestionBankController struct {
 	repo repositories.QuestionBankRepository
 }
 
+func normalizeCSVHeaderKey(value string) string {
+	value = strings.TrimSpace(strings.ToLower(value))
+
+	var b strings.Builder
+	for _, r := range value {
+		if unicode.IsLetter(r) || unicode.IsDigit(r) {
+			b.WriteRune(r)
+		}
+	}
+
+	return b.String()
+}
+
 func NewQuestionBankController(repo repositories.QuestionBankRepository) *QuestionBankController {
 	return &QuestionBankController{repo: repo}
 }
@@ -37,6 +51,8 @@ func (ctrl *QuestionBankController) ImportQuestions(c *gin.Context) {
 			Category      string   `json:"category"`
 			SubCategory   string   `json:"sub_category"`
 			Difficulty    string   `json:"difficulty"`
+			PassageTitle  string   `json:"passage_title"`
+			PassageText   string   `json:"passage_text"`
 			Type          string   `json:"type"`
 			Text          string   `json:"text"`
 			Options       []string `json:"options"`
@@ -60,6 +76,8 @@ func (ctrl *QuestionBankController) ImportQuestions(c *gin.Context) {
 			Category:      q.Category,
 			SubCategory:   q.SubCategory,
 			Difficulty:    q.Difficulty,
+			PassageTitle:  q.PassageTitle,
+			PassageText:   q.PassageText,
 			Type:          models.QuestionType(q.Type),
 			Text:          q.Text,
 			Options:       q.Options,
@@ -152,6 +170,10 @@ func (ctrl *QuestionBankController) UploadCSV(c *gin.Context) {
 	defaultDiff := c.Query("difficulty")
 
 	reader := csv.NewReader(file)
+	reader.FieldsPerRecord = -1
+	reader.TrimLeadingSpace = true
+	reader.LazyQuotes = true
+
 	// Read header
 	header, err := reader.Read()
 	if err != nil {
@@ -162,10 +184,16 @@ func (ctrl *QuestionBankController) UploadCSV(c *gin.Context) {
 	// Simple column mapping (case-insensitive)
 	colMap := make(map[string]int)
 	for i, h := range header {
-		colMap[strings.ToLower(strings.ReplaceAll(h, " ", ""))] = i
+		colMap[normalizeCSVHeaderKey(h)] = i
 	}
 
 	_, hasText := colMap["text"]
+	if !hasText {
+		_, hasText = colMap["question"]
+	}
+	if !hasText {
+		_, hasText = colMap["questiontext"]
+	}
 	if !hasText {
 		// FALLBACK: Smart Parser for vertical list formats (single column or missing headers)
 		ctrl.handleSmartUpload(c, reader, header, defaultCat, defaultSub, defaultDiff)
@@ -176,50 +204,74 @@ func (ctrl *QuestionBankController) UploadCSV(c *gin.Context) {
 	defer cancel()
 
 	importedCount := 0
-	val := func(row []string, key string) string {
-		if idx, ok := colMap[key]; ok && idx < len(row) {
-			return strings.TrimSpace(row[idx])
+	skippedCount := 0
+	warnings := []string{}
+
+	addWarning := func(format string, args ...any) {
+		if len(warnings) >= 5 {
+			return
+		}
+		warnings = append(warnings, fmt.Sprintf(format, args...))
+	}
+
+	val := func(row []string, keys ...string) string {
+		for _, key := range keys {
+			if idx, ok := colMap[normalizeCSVHeaderKey(key)]; ok && idx < len(row) {
+				return strings.TrimSpace(row[idx])
+			}
 		}
 		return ""
 	}
 
+	rowNumber := 1 // Header row
 	for {
 		row, err := reader.Read()
+		rowNumber++
 		if err == io.EOF {
 			break
 		}
 		if err != nil {
-			continue // skip malformed rows
+			skippedCount++
+			addWarning("Row %d skipped: %v", rowNumber, err)
+			continue
 		}
 
-		cat := val(row, "category")
+		cat := defaultCat
 		if cat == "" {
-			cat = defaultCat
+			cat = val(row, "category", "cat")
 		}
-		sub := val(row, "subcategory")
+		sub := defaultSub
 		if sub == "" {
-			sub = defaultSub
+			sub = val(row, "sub_category", "subcategory", "subcat", "subgroup")
 		}
-		diff := val(row, "difficulty")
+		diff := defaultDiff
 		if diff == "" {
-			diff = defaultDiff
+			diff = val(row, "difficulty", "level")
 		}
+		text := val(row, "text", "question", "question_text", "questiontext", "prompt")
 
+		if text == "" {
+			skippedCount++
+			addWarning("Row %d skipped: missing question text", rowNumber)
+			continue
+		}
 		if cat == "" || diff == "" {
-			continue // Skip rows without basic context
+			skippedCount++
+			addWarning("Row %d skipped: missing category or difficulty", rowNumber)
+			continue
 		}
 
 		options := []string{}
-		if a := val(row, "optiona"); a != "" {
+		if a := val(row, "option_a", "optiona", "a", "choice_a", "choicea", "option1"); a != "" {
 			options = append(options, a)
 		}
-		if b := val(row, "optionb"); b != "" {
+		if b := val(row, "option_b", "optionb", "b", "choice_b", "choiceb", "option2"); b != "" {
 			options = append(options, b)
 		}
-		if c := val(row, "optionc"); c != "" {
+		if c := val(row, "option_c", "optionc", "c", "choice_c", "choicec", "option3"); c != "" {
 			options = append(options, c)
 		}
-		if d := val(row, "optiond"); d != "" {
+		if d := val(row, "option_d", "optiond", "d", "choice_d", "choiced", "option4"); d != "" {
 			options = append(options, d)
 		}
 
@@ -228,10 +280,12 @@ func (ctrl *QuestionBankController) UploadCSV(c *gin.Context) {
 			Category:      cat,
 			SubCategory:   sub,
 			Difficulty:    diff,
-			Type:          models.QuestionType(strings.ToUpper(val(row, "type"))),
-			Text:          val(row, "text"),
+			PassageTitle:  val(row, "passage_title", "passagetitle", "passage_name", "passagename"),
+			PassageText:   val(row, "passage_text", "passagetext", "passage", "reading_passage", "readingpassage"),
+			Type:          models.QuestionType(strings.ToUpper(val(row, "type", "question_type", "questiontype"))),
+			Text:          text,
 			Options:       options,
-			CorrectAnswer: val(row, "correctanswer"),
+			CorrectAnswer: val(row, "correct_answer", "correctanswer", "answer", "answer_key", "answerkey"),
 		}
 
 		if entry.Type == "" {
@@ -241,13 +295,22 @@ func (ctrl *QuestionBankController) UploadCSV(c *gin.Context) {
 		_, err = ctrl.repo.Create(ctx, entry)
 		if err == nil {
 			importedCount++
+		} else {
+			skippedCount++
+			addWarning("Row %d skipped: %v", rowNumber, err)
 		}
 	}
 
-	c.JSON(http.StatusOK, gin.H{
+	response := gin.H{
 		"message":        "CSV imported successfully",
 		"imported_count": importedCount,
-	})
+		"skipped_count":  skippedCount,
+	}
+	if len(warnings) > 0 {
+		response["warnings"] = warnings
+	}
+
+	c.JSON(http.StatusOK, response)
 }
 func (ctrl *QuestionBankController) SaveStructure(c *gin.Context) {
 	var input models.QuestionBankConfig
@@ -299,7 +362,14 @@ func (ctrl *QuestionBankController) ListQuestions(c *gin.Context) {
 	total, _ := ctrl.repo.CountByFilter(ctx, filter)
 
 	opts := options.Find().
-		SetSort(bson.D{{Key: "category", Value: 1}, {Key: "sub_category", Value: 1}, {Key: "difficulty", Value: 1}}).
+		SetSort(bson.D{
+			{Key: "category", Value: 1},
+			{Key: "sub_category", Value: 1},
+			{Key: "difficulty", Value: 1},
+			{Key: "passage_title", Value: 1},
+			{Key: "passage_text", Value: 1},
+			{Key: "_id", Value: 1},
+		}).
 		SetSkip(skip).
 		SetLimit(int64(limit))
 
@@ -366,6 +436,41 @@ func (ctrl *QuestionBankController) DeleteQuestion(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{"message": "Question deleted successfully"})
+}
+
+// DELETE /api/admin/questions
+// Query params: category, sub_category, difficulty
+func (ctrl *QuestionBankController) DeleteQuestionsByFilter(c *gin.Context) {
+	category := strings.TrimSpace(c.Query("category"))
+	difficulty := strings.TrimSpace(c.Query("difficulty"))
+	subCategory := strings.TrimSpace(c.Query("sub_category"))
+
+	if category == "" || difficulty == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "category and difficulty are required"})
+		return
+	}
+
+	filter := bson.M{
+		"category":   category,
+		"difficulty": difficulty,
+	}
+	if subCategory != "" {
+		filter["sub_category"] = subCategory
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	deletedCount, err := ctrl.repo.DeleteByFilter(ctx, filter)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to delete questions"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"message":       "Questions deleted successfully",
+		"deleted_count": deletedCount,
+	})
 }
 
 // PUT /api/admin/questions/:id
@@ -445,7 +550,42 @@ func (ctrl *QuestionBankController) handleSmartUpload(c *gin.Context, reader *cs
 		currentOptions []string
 		correctAnswer  string
 		importedCount  int
+		skippedCount   int
 	)
+
+	finalizeCurrent := func() {
+		if len(currentText) == 0 {
+			return
+		}
+
+		if defCat == "" || defDiff == "" {
+			skippedCount++
+			currentText = nil
+			currentOptions = nil
+			correctAnswer = ""
+			return
+		}
+
+		entry := &models.QuestionBankEntry{
+			ID:            primitive.NewObjectID(),
+			Category:      defCat,
+			SubCategory:   defSub,
+			Difficulty:    defDiff,
+			Type:          models.MultipleChoice,
+			Text:          strings.Join(currentText, "\n"),
+			Options:       currentOptions,
+			CorrectAnswer: correctAnswer,
+		}
+		if _, err := ctrl.repo.Create(ctx, entry); err == nil {
+			importedCount++
+		} else {
+			skippedCount++
+		}
+
+		currentText = nil
+		currentOptions = nil
+		correctAnswer = ""
+	}
 
 	processRow := func(row []string) {
 		if len(row) == 0 {
@@ -469,26 +609,7 @@ func (ctrl *QuestionBankController) handleSmartUpload(c *gin.Context, reader *cs
 				}
 			}
 			// Finalize current question
-			if len(currentText) > 0 {
-				entry := &models.QuestionBankEntry{
-					ID:            primitive.NewObjectID(),
-					Category:      defCat,
-					SubCategory:   defSub,
-					Difficulty:    defDiff,
-					Type:          models.MultipleChoice,
-					Text:          strings.Join(currentText, "\n"),
-					Options:       currentOptions,
-					CorrectAnswer: correctAnswer,
-				}
-				_, err := ctrl.repo.Create(ctx, entry)
-				if err == nil {
-					importedCount++
-				}
-				// Reset
-				currentText = nil
-				currentOptions = nil
-				correctAnswer = ""
-			}
+			finalizeCurrent()
 			return
 		}
 
@@ -524,8 +645,12 @@ func (ctrl *QuestionBankController) handleSmartUpload(c *gin.Context, reader *cs
 		processRow(row)
 	}
 
+	// Flush the last pending question if the file doesn't end with an explicit answer row.
+	finalizeCurrent()
+
 	c.JSON(http.StatusOK, gin.H{
 		"message":        "Smart CSV import completed",
 		"imported_count": importedCount,
+		"skipped_count":  skippedCount,
 	})
 }

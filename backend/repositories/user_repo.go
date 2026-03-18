@@ -16,6 +16,7 @@ type UserRepository interface {
 	FindByEmail(ctx context.Context, email string) (*models.User, error)
 	FindByPhone(ctx context.Context, phone string) (*models.User, error)
 	FindByID(ctx context.Context, id primitive.ObjectID) (*models.User, error)
+	UpsertCandidate(ctx context.Context, user *models.User) (*models.User, error)
 	UpdatePassword(ctx context.Context, id primitive.ObjectID, hashedPassword string) error
 }
 
@@ -62,6 +63,62 @@ func (r *mongoUserRepo) FindByID(ctx context.Context, id primitive.ObjectID) (*m
 		return nil, err
 	}
 	return &user, nil
+}
+
+func (r *mongoUserRepo) UpsertCandidate(ctx context.Context, user *models.User) (*models.User, error) {
+	var existing models.User
+	var filter bson.M
+
+	if user.Email != "" {
+		err := r.collection.FindOne(ctx, bson.M{"email": user.Email, "deleted_at": nil}).Decode(&existing)
+		if err == nil {
+			filter = bson.M{"_id": existing.ID}
+		} else if err != mongo.ErrNoDocuments {
+			return nil, err
+		}
+	}
+
+	if filter == nil && user.Phone != "" {
+		err := r.collection.FindOne(ctx, bson.M{"phone": user.Phone, "deleted_at": nil}).Decode(&existing)
+		if err == nil {
+			filter = bson.M{"_id": existing.ID}
+		} else if err != mongo.ErrNoDocuments {
+			return nil, err
+		}
+	}
+
+	now := time.Now()
+	if filter == nil {
+		user.ID = primitive.NewObjectID()
+		user.Role = "candidate"
+		user.IsDemo = false
+		if user.CreatedAt.IsZero() {
+			user.CreatedAt = now
+		}
+		user.UpdatedAt = now
+
+		_, err := r.collection.InsertOne(ctx, user)
+		if err != nil {
+			return nil, err
+		}
+		return user, nil
+	}
+
+	update := bson.M{
+		"name":       user.Name,
+		"email":      user.Email,
+		"phone":      user.Phone,
+		"role":       "candidate",
+		"is_demo":    false,
+		"updated_at": now,
+	}
+
+	_, err := r.collection.UpdateOne(ctx, filter, bson.M{"$set": update})
+	if err != nil {
+		return nil, err
+	}
+
+	return r.FindByID(ctx, existing.ID)
 }
 
 func (r *mongoUserRepo) UpdatePassword(ctx context.Context, id primitive.ObjectID, hashedPassword string) error {

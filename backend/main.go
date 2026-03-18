@@ -113,6 +113,7 @@ func main() {
 	assessService := services.NewAssessmentService(assessRepo, qbRepo)
 	submissionService := services.NewSubmissionService(subRepo, assessRepo, userRepo, qbRepo)
 	interviewService := services.NewInterviewService(interviewRepo)
+	candidateConsumer := services.NewCandidateDetailsConsumer(userRepo)
 
 	// Initialize Controllers
 	authCtrl := controllers.NewAuthController(authService)
@@ -147,6 +148,7 @@ func main() {
 	router.POST("/api/admin/questions/structure", questionBankController.SaveStructure)
 	router.GET("/api/admin/questions/config", questionBankController.GetConfig)
 	router.GET("/api/admin/questions", questionBankController.ListQuestions)
+	router.DELETE("/api/admin/questions", questionBankController.DeleteQuestionsByFilter)
 	router.GET("/api/admin/questions/count", questionBankController.CountQuestions)
 	router.POST("/api/admin/questions/upload-csv", questionBankController.UploadCSV)
 	router.PUT("/api/admin/questions/:id", questionBankController.UpdateQuestion)
@@ -176,6 +178,14 @@ func main() {
 	pool := utils.InitWorkerPool(5, 100)
 	defer pool.Shutdown()
 
+	consumerCtx, consumerCancel := context.WithCancel(context.Background())
+	defer consumerCancel()
+
+	if err := candidateConsumer.Start(consumerCtx); err != nil {
+		logger.Warnf("RabbitMQ candidate-details consumer failed to start: %v", err)
+	}
+	defer candidateConsumer.Close()
+
 	// Start Server in a goroutine for graceful shutdown
 	go func() {
 		logger.Infof("Server running on port %s", port)
@@ -190,6 +200,7 @@ func main() {
 	<-quit
 
 	logger.Info("Shutting down server...")
+	consumerCancel()
 
 	// Give outstanding requests 5 seconds to complete
 	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 5*time.Second)
