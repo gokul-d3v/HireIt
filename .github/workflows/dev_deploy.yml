@@ -53,6 +53,11 @@ jobs:
     needs: [build-and-push-backend, build-and-push-frontend]
     runs-on: [self-hosted, dev]
     steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+        with:
+          ref: dev
+
       - name: Lowercase Repository Name
         run: echo "REPO_LOWER=${GITHUB_REPOSITORY,,}" >> ${GITHUB_ENV}
 
@@ -92,6 +97,10 @@ jobs:
             -p 3000:3000 \
             --restart unless-stopped \
             ghcr.io/${{ env.REPO_LOWER }}/hireit-frontend-dev:latest
+
+      - name: Deploy Monitoring Stack
+        run: |
+          docker compose -f docker-compose.monitoring.yml up -d || docker-compose -f docker-compose.monitoring.yml up -d
 
       - name: Prune Dangling Images
         run: docker image prune -f

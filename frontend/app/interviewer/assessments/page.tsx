@@ -7,6 +7,7 @@ import { apiRequest } from "@/lib/api";
 import { useToast } from "@/components/ui/Toast";
 import { Modal } from "@/components/ui/Modal";
 import { Plus, Edit, Trash2, Users, Search, Clock, FileText, Share2 } from "lucide-react";
+import { copyToClipboard } from "@/lib/clipboard";
 
 interface Assessment {
     id: string;
@@ -75,10 +76,14 @@ export default function InterviewerAssessmentsPage() {
         }
     };
 
-    const handleShare = (id: string) => {
+    const handleShare = async (id: string) => {
         const shareUrl = `${window.location.origin}/public/assessments/${id}`;
-        navigator.clipboard.writeText(shareUrl);
-        showToast("Assessment link copied to clipboard!", "success");
+        const successful = await copyToClipboard(shareUrl);
+        if (successful) {
+            showToast("Assessment link copied to clipboard!", "success");
+        } else {
+            showToast("Failed to copy link. Please copy it manually.", "error");
+        }
     };
 
     const getPhases = (p1: Assessment) => {

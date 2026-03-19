@@ -12,6 +12,7 @@ import { useToast } from "@/components/ui/Toast";
 import { Modal } from "@/components/ui/Modal";
 import { useSearchParams } from "next/navigation";
 import { SetPasswordModal } from "@/components/auth/SetPasswordModal";
+import { copyToClipboard } from "@/lib/clipboard";
 
 interface Assessment {
     id: string;
@@ -136,10 +137,14 @@ function InterviewerDashboardContent() {
         }
     };
 
-    const handleShare = (id: string) => {
+    const handleShare = async (id: string) => {
         const shareUrl = `${window.location.origin}/public/assessments/${id}`;
-        navigator.clipboard.writeText(shareUrl);
-        showToast("Assessment link copied to clipboard!", "success");
+        const successful = await copyToClipboard(shareUrl);
+        if (successful) {
+            showToast("Assessment link copied to clipboard!", "success");
+        } else {
+            showToast("Failed to copy link. Please copy it manually.", "error");
+        }
     };
 
     if (isLoading) return <div className="min-h-screen flex items-center justify-center">Loading...</div>;
