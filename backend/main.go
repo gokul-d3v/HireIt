@@ -39,6 +39,9 @@ func isAllowedOrigin(origin string, frontendURL string) bool {
 		return false
 	}
 
+	logger := utils.GetLogger()
+	logger.Infof("CORS Check: origin='%s', allowed_frontend='%s'", origin, frontendURL)
+
 	allowedOrigins := map[string]struct{}{
 		"http://localhost:3000":          {},
 		"http://127.0.0.1:3000":          {},
@@ -51,8 +54,10 @@ func isAllowedOrigin(origin string, frontendURL string) bool {
 	}
 
 	if _, ok := allowedOrigins[origin]; ok {
+		logger.Infof("CORS Match found for: %s", origin)
 		return true
 	}
+	logger.Warnf("CORS Match NOT found for origin: %s. Allowed: %v", origin, allowedOrigins)
 
 	parsedOrigin, err := url.Parse(origin)
 	if err != nil {
