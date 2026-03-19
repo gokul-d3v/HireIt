@@ -12,13 +12,16 @@ jobs:
         with:
           ref: main
 
+      - name: Lowercase Repository Name
+        run: echo "REPO_LOWER=${GITHUB_REPOSITORY,,}" >> ${GITHUB_ENV}
+
       - name: Log in to GHCR
         run: echo ${{ secrets.GITHUB_TOKEN }} | docker login ghcr.io -u ${{ github.actor }} --password-stdin
 
       - name: Build and Push Backend Image
         run: |
-          docker build -t ghcr.io/${{ github.repository }}/hireit-backend-prod:latest ./backend
-          docker push ghcr.io/${{ github.repository }}/hireit-backend-prod:latest
+          docker build -t ghcr.io/${{ env.REPO_LOWER }}/hireit-backend-prod:latest ./backend
+          docker push ghcr.io/${{ env.REPO_LOWER }}/hireit-backend-prod:latest
 
   build-and-push-frontend:
     runs-on: ubuntu-latest
@@ -28,6 +31,9 @@ jobs:
         with:
           ref: main
 
+      - name: Lowercase Repository Name
+        run: echo "REPO_LOWER=${GITHUB_REPOSITORY,,}" >> ${GITHUB_ENV}
+
       - name: Log in to GHCR
         run: echo ${{ secrets.GITHUB_TOKEN }} | docker login ghcr.io -u ${{ github.actor }} --password-stdin
 
@@ -35,25 +41,28 @@ jobs:
         run: |
           docker build \
             --build-arg NEXT_PUBLIC_API_URL=${{ vars.PROD_NEXT_PUBLIC_API_URL }} \
-            -t ghcr.io/${{ github.repository }}/hireit-frontend-prod:latest ./frontend
-          docker push ghcr.io/${{ github.repository }}/hireit-frontend-prod:latest
+            --build-arg NEXT_PUBLIC_API_PORT=${{ vars.PROD_NEXT_PUBLIC_API_PORT || '8080' }} \
+            -t ghcr.io/${{ env.REPO_LOWER }}/hireit-frontend-prod:latest ./frontend
+          docker push ghcr.io/${{ env.REPO_LOWER }}/hireit-frontend-prod:latest
 
   deploy:
     needs: [build-and-push-backend, build-and-push-frontend]
     runs-on: [self-hosted, prod]
     steps:
+      - name: Lowercase Repository Name
+        run: echo "REPO_LOWER=${GITHUB_REPOSITORY,,}" >> ${GITHUB_ENV}
+
       - name: Log in to GHCR
         run: echo ${{ secrets.GITHUB_TOKEN }} | docker login ghcr.io -u ${{ github.actor }} --password-stdin
 
       - name: Deploy Backend
         run: |
-          docker pull ghcr.io/${{ github.repository }}/hireit-backend-prod:latest
+          docker pull ghcr.io/${{ env.REPO_LOWER }}/hireit-backend-prod:latest
           docker stop hireit-backend-prod || true
           docker rm hireit-backend-prod || true
           docker run -d \
             --name hireit-backend-prod \
             -p 8080:8080 \
-            -e PORT=8080 \
             -e APP_ENV=production \
             -e MONGO_URI="${{ secrets.PROD_MONGO_URI }}" \
             -e JWT_SECRET="${{ secrets.PROD_JWT_SECRET }}" \
@@ -64,19 +73,20 @@ jobs:
             -e TELEGRAM_CHAT_ID="${{ vars.PROD_TELEGRAM_CHAT_ID }}" \
             -e RABBITMQ_URL="${{ secrets.PROD_RABBITMQ_URL }}" \
             -e RABBITMQ_QUEUE="candidate_details" \
+            -e AUDIT_LOG_COLLECTION="audit_logs" \
             --restart unless-stopped \
-            ghcr.io/${{ github.repository }}/hireit-backend-prod:latest
+            ghcr.io/${{ env.REPO_LOWER }}/hireit-backend-prod:latest
 
       - name: Deploy Frontend
         run: |
-          docker pull ghcr.io/${{ github.repository }}/hireit-frontend-prod:latest
+          docker pull ghcr.io/${{ env.REPO_LOWER }}/hireit-frontend-prod:latest
           docker stop hireit-frontend-prod || true
           docker rm hireit-frontend-prod || true
           docker run -d \
             --name hireit-frontend-prod \
             -p 3000:3000 \
             --restart unless-stopped \
-            ghcr.io/${{ github.repository }}/hireit-frontend-prod:latest
+            ghcr.io/${{ env.REPO_LOWER }}/hireit-frontend-prod:latest
 
       - name: Prune Dangling Images
         run: docker image prune -f

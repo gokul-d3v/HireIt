@@ -5,17 +5,7 @@ function trimTrailingSlash(value: string) {
 }
 
 export function getApiUrl() {
-    const configuredUrl = process.env.NEXT_PUBLIC_API_URL?.trim();
-    if (configuredUrl) {
-        return trimTrailingSlash(configuredUrl);
-    }
-
-    if (typeof window !== "undefined") {
-        const { hostname, protocol } = window.location;
-        return `${protocol}//${hostname}:${DEFAULT_API_PORT}`;
-    }
-
-    return `http://localhost:${DEFAULT_API_PORT}`;
+    return trimTrailingSlash(process.env.NEXT_PUBLIC_API_URL?.trim() || `http://localhost:${DEFAULT_API_PORT}`);
 }
 
 export const API_URL = trimTrailingSlash(process.env.NEXT_PUBLIC_API_URL?.trim() || `http://localhost:${DEFAULT_API_PORT}`);
