@@ -1,0 +1,82 @@
+name: Production Deployment
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build-and-push-backend:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+        with:
+          ref: main
+
+      - name: Log in to GHCR
+        run: echo ${{ secrets.GITHUB_TOKEN }} | docker login ghcr.io -u ${{ github.actor }} --password-stdin
+
+      - name: Build and Push Backend Image
+        run: |
+          docker build -t ghcr.io/${{ github.repository }}/hireit-backend-prod:latest ./backend
+          docker push ghcr.io/${{ github.repository }}/hireit-backend-prod:latest
+
+  build-and-push-frontend:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+        with:
+          ref: main
+
+      - name: Log in to GHCR
+        run: echo ${{ secrets.GITHUB_TOKEN }} | docker login ghcr.io -u ${{ github.actor }} --password-stdin
+
+      - name: Build and Push Frontend Image
+        run: |
+          docker build \
+            --build-arg NEXT_PUBLIC_API_URL=${{ vars.PROD_NEXT_PUBLIC_API_URL }} \
+            -t ghcr.io/${{ github.repository }}/hireit-frontend-prod:latest ./frontend
+          docker push ghcr.io/${{ github.repository }}/hireit-frontend-prod:latest
+
+  deploy:
+    needs: [build-and-push-backend, build-and-push-frontend]
+    runs-on: [self-hosted, prod]
+    steps:
+      - name: Log in to GHCR
+        run: echo ${{ secrets.GITHUB_TOKEN }} | docker login ghcr.io -u ${{ github.actor }} --password-stdin
+
+      - name: Deploy Backend
+        run: |
+          docker pull ghcr.io/${{ github.repository }}/hireit-backend-prod:latest
+          docker stop hireit-backend-prod || true
+          docker rm hireit-backend-prod || true
+          docker run -d \
+            --name hireit-backend-prod \
+            -p 8080:8080 \
+            -e PORT=8080 \
+            -e APP_ENV=production \
+            -e MONGO_URI="${{ secrets.PROD_MONGO_URI }}" \
+            -e JWT_SECRET="${{ secrets.PROD_JWT_SECRET }}" \
+            -e GOOGLE_CLIENT_ID="${{ vars.PROD_GOOGLE_CLIENT_ID }}" \
+            -e GOOGLE_CLIENT_SECRET="${{ secrets.PROD_GOOGLE_CLIENT_SECRET }}" \
+            -e GOOGLE_REDIRECT_URL="${{ vars.PROD_GOOGLE_REDIRECT_URL }}" \
+            -e TELEGRAM_BOT_TOKEN="${{ secrets.PROD_TELEGRAM_BOT_TOKEN }}" \
+            -e TELEGRAM_CHAT_ID="${{ vars.PROD_TELEGRAM_CHAT_ID }}" \
+            -e RABBITMQ_URL="${{ secrets.PROD_RABBITMQ_URL }}" \
+            -e RABBITMQ_QUEUE="candidate_details" \
+            --restart unless-stopped \
+            ghcr.io/${{ github.repository }}/hireit-backend-prod:latest
+
+      - name: Deploy Frontend
+        run: |
+          docker pull ghcr.io/${{ github.repository }}/hireit-frontend-prod:latest
+          docker stop hireit-frontend-prod || true
+          docker rm hireit-frontend-prod || true
+          docker run -d \
+            --name hireit-frontend-prod \
+            -p 3000:3000 \
+            --restart unless-stopped \
+            ghcr.io/${{ github.repository }}/hireit-frontend-prod:latest
+
+      - name: Prune Dangling Images
+        run: docker image prune -f

@@ -4,6 +4,7 @@ package main
 import (
 	"context"
 	"hireit-backend/controllers"
+	"hireit-backend/middleware"
 	"hireit-backend/repositories"
 	"hireit-backend/routes"
 	"hireit-backend/services"
@@ -20,6 +21,7 @@ import (
 	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
 	"github.com/joho/godotenv"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
@@ -114,6 +116,7 @@ func main() {
 	// Configure connection pool for optimal performance
 	clientOptions := options.Client().
 		ApplyURI(mongoURI).
+		SetMonitor(utils.NewMongoMonitor()). // Register Prometheus Monitor
 		SetMaxPoolSize(500).                 // Increased to handle high concurrent load
 		SetMinPoolSize(20).                  // Maintains a healthy number of ready connections
 		SetMaxConnIdleTime(3 * time.Minute). // Close idle connections after 3 minutes
@@ -140,6 +143,7 @@ func main() {
 	interviewCollection := client.Database("broassess").Collection("interviews")
 	questionBankCollection := client.Database("broassess").Collection("question_bank")
 	questionBankConfigCollection := client.Database("broassess").Collection("question_bank_config")
+	auditLogCollection := client.Database("broassess").Collection("audit_logs")
 
 	// Create Indexes
 	_, _ = submissionCollection.Indexes().CreateOne(ctx, mongo.IndexModel{
@@ -153,11 +157,13 @@ func main() {
 	subRepo := repositories.NewSubmissionRepository(submissionCollection)
 	interviewRepo := repositories.NewInterviewRepository(interviewCollection)
 	qbRepo := repositories.NewQuestionBankRepository(questionBankCollection, questionBankConfigCollection)
+	auditLogRepo := repositories.NewAuditLogRepository(auditLogCollection)
 
 	// Initialize Services
 	authService := services.NewAuthService(userRepo)
 	assessService := services.NewAssessmentService(assessRepo, qbRepo)
-	submissionService := services.NewSubmissionService(subRepo, assessRepo, userRepo, qbRepo)
+	auditLogService := services.NewAuditLogService(auditLogRepo)
+	submissionService := services.NewSubmissionService(subRepo, assessRepo, userRepo, qbRepo, auditLogService)
 	interviewService := services.NewInterviewService(interviewRepo)
 	candidateConsumer := services.NewCandidateDetailsConsumer(userRepo)
 
@@ -174,6 +180,8 @@ func main() {
 	// Initialize Router with custom middleware for better performance
 	router := gin.New()
 	router.Use(gin.Recovery())
+	router.Use(middleware.PrometheusMiddleware())          // Prometheus Metrics
+	router.Use(middleware.AuditMiddleware(auditLogService)) // Global Audit Logger
 
 	// Only use the verbose logger in development
 	if os.Getenv("APP_ENV") != "production" {
@@ -206,6 +214,9 @@ func main() {
 			"time":   time.Now().Format(time.RFC3339),
 		})
 	})
+
+	// Prometheus Metrics Endpoint
+	router.GET("/metrics", gin.WrapH(promhttp.Handler()))
 
 	// Setup Routes
 	routes.SetupRoutes(router, authCtrl, googleCtrl, youtubeCtrl, publicCtrl, assessCtrl, interviewCtrl)

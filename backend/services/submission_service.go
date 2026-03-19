@@ -29,6 +29,7 @@ type submissionService struct {
 	assessmentRepo repositories.AssessmentRepository
 	userRepo       repositories.UserRepository
 	qbRepo         repositories.QuestionBankRepository
+	auditService   AuditLogService
 }
 
 func shouldReuseGeneratedQuestions(submission *models.Submission, assessment *models.Assessment) bool {
@@ -56,8 +57,14 @@ func shouldReuseGeneratedQuestions(submission *models.Submission, assessment *mo
 	return false
 }
 
-func NewSubmissionService(repo repositories.SubmissionRepository, assessmentRepo repositories.AssessmentRepository, userRepo repositories.UserRepository, qbRepo repositories.QuestionBankRepository) SubmissionService {
-	return &submissionService{repo: repo, assessmentRepo: assessmentRepo, userRepo: userRepo, qbRepo: qbRepo}
+func NewSubmissionService(repo repositories.SubmissionRepository, assessmentRepo repositories.AssessmentRepository, userRepo repositories.UserRepository, qbRepo repositories.QuestionBankRepository, auditService AuditLogService) SubmissionService {
+	return &submissionService{
+		repo:           repo,
+		assessmentRepo: assessmentRepo,
+		userRepo:       userRepo,
+		qbRepo:         qbRepo,
+		auditService:   auditService,
+	}
 }
 
 func (r *submissionService) GetSubmissions(ctx context.Context, assessmentID string) ([]models.Submission, error) {
@@ -170,6 +177,7 @@ func (s *submissionService) SubmitAssessment(ctx context.Context, assessmentID, 
 
 	submission, err := s.repo.FindOne(ctx, bson.M{"assessment_id": aID, "candidate_id": cID})
 	if err != nil {
+		s.auditService.RecordAction(ctx, cID, "", "SUBMIT_ASSESSMENT", "SUBMISSION", primitive.NilObjectID, "ERROR", "Submission doc not found", err.Error(), nil)
 		return nil, errors.New("submission not found")
 	}
 
@@ -269,6 +277,9 @@ func (s *submissionService) SubmitAssessment(ctx context.Context, assessmentID, 
 	err = s.repo.Update(ctx, submission.ID, submission)
 	if err != nil {
 		fmt.Printf("[CRITICAL ERROR] SubmitAssessment update failed: %v\n", err)
+		s.auditService.RecordAction(ctx, cID, submission.CandidateEmail, "SUBMIT_ASSESSMENT", "SUBMISSION", submission.ID, "ERROR", "Final DB update failed", err.Error(), nil)
+	} else {
+		s.auditService.RecordAction(ctx, cID, submission.CandidateEmail, "SUBMIT_ASSESSMENT", "SUBMISSION", submission.ID, "SUCCESS", "Assessment submitted successfully", "", nil)
 	}
 	return submission, err
 }
