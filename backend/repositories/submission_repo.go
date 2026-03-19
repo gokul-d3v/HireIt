@@ -27,7 +27,37 @@ type mongoSubmissionRepo struct {
 }
 
 func NewSubmissionRepository(collection *mongo.Collection) SubmissionRepository {
-	return &mongoSubmissionRepo{collection: collection}
+	repo := &mongoSubmissionRepo{collection: collection}
+	repo.EnsureIndexes()
+	return repo
+}
+
+func (r *mongoSubmissionRepo) EnsureIndexes() {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	indexModels := []mongo.IndexModel{
+		{
+			Keys: bson.D{{Key: "assessment_id", Value: 1}, {Key: "candidate_id", Value: 1}},
+			Options: options.Index().SetUnique(true),
+		},
+		{
+			Keys: bson.D{{Key: "candidate_id", Value: 1}},
+		},
+		{
+			Keys: bson.D{{Key: "assessment_id", Value: 1}},
+		},
+		{
+			Keys: bson.D{{Key: "is_demo", Value: 1}},
+		},
+	}
+
+	_, err := r.collection.Indexes().CreateMany(ctx, indexModels)
+	if err != nil {
+		fmt.Printf("Warning: Failed to create indexes for submissions: %v\n", err)
+	} else {
+		fmt.Println("Successfully created indexes for submissions collection")
+	}
 }
 
 func (r *mongoSubmissionRepo) Create(ctx context.Context, submission *models.Submission) (primitive.ObjectID, error) {

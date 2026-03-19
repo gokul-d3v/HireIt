@@ -114,10 +114,10 @@ func main() {
 	// Configure connection pool for optimal performance
 	clientOptions := options.Client().
 		ApplyURI(mongoURI).
-		SetMaxPoolSize(100).                 // Maximum connections in pool
-		SetMinPoolSize(10).                  // Minimum connections to maintain
+		SetMaxPoolSize(500).                 // Increased to handle high concurrent load
+		SetMinPoolSize(20).                  // Maintains a healthy number of ready connections
 		SetMaxConnIdleTime(3 * time.Minute). // Close idle connections after 3 minutes
-		SetServerSelectionTimeout(5 * time.Second)
+		SetServerSelectionTimeout(30 * time.Second) // Increased from 5s to allow for queuing under peak load
 
 	logger.Info("Connecting to MongoDB...")
 	var err error

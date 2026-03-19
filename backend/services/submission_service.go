@@ -105,11 +105,13 @@ func (s *submissionService) SaveProgress(ctx context.Context, assessmentID, cand
 
 	submission, err := s.repo.FindOne(ctx, bson.M{"assessment_id": aID, "candidate_id": cID})
 	if err != nil {
-		// Fetch user details for denormalized submission
+		// Fetch user and assessment details for denormalized submission
 		user, _ := s.userRepo.FindByID(ctx, cID)
+		assessment, _ := s.assessmentRepo.FindByID(ctx, aID)
 
 		// Create new in-progress submission
 		submission = &models.Submission{
+			ID:           primitive.NewObjectID(),
 			AssessmentID: aID,
 			CandidateID:  cID,
 			CreatedBy:    cID,
@@ -125,6 +127,9 @@ func (s *submissionService) SaveProgress(ctx context.Context, assessmentID, cand
 			submission.CandidateEmail = user.Email
 			submission.CandidatePhone = user.Phone
 			submission.IsDemo = user.IsDemo
+		}
+		if assessment != nil {
+			submission.MinPassingScore = assessment.PassingScore
 		}
 		_, err = s.repo.Create(ctx, submission)
 		return err
@@ -163,14 +168,19 @@ func (s *submissionService) SubmitAssessment(ctx context.Context, assessmentID, 
 	aID, _ := primitive.ObjectIDFromHex(assessmentID)
 	cID, _ := primitive.ObjectIDFromHex(candidateID)
 
-	assessment, err := s.assessmentRepo.FindByID(ctx, aID)
-	if err != nil {
-		return nil, errors.New("assessment not found")
-	}
-
 	submission, err := s.repo.FindOne(ctx, bson.M{"assessment_id": aID, "candidate_id": cID})
 	if err != nil {
 		return nil, errors.New("submission not found")
+	}
+
+	// Use denormalized PassingScore if available, otherwise fetch assessment
+	passingScore := submission.MinPassingScore
+	if passingScore == 0 {
+		assessment, err := s.assessmentRepo.FindByID(ctx, aID)
+		if err != nil {
+			return nil, errors.New("assessment not found")
+		}
+		passingScore = assessment.PassingScore
 	}
 
 	// Calculate Score using the dynamically generated questions locked to this submission
@@ -194,7 +204,7 @@ func (s *submissionService) SubmitAssessment(ctx context.Context, assessmentID, 
 		}
 	}
 
-	passed := totalScore >= assessment.PassingScore
+	passed := totalScore >= passingScore
 
 	if submission.StartedAt.IsZero() {
 		submission.StartedAt = time.Now()
@@ -208,7 +218,9 @@ func (s *submissionService) SubmitAssessment(ctx context.Context, assessmentID, 
 		submission.FaceSnapshots = faceSnapshots
 
 		// Upload to telegram asynchronously to avoid blocking the submission
+		// Using context.Background() since this is a fire-and-forget background task
 		go func(sub *models.Submission, snapshots *models.FaceSnapshots) {
+			bgCtx := context.Background()
 			// 1. Initial Match Info
 			msg := "📸 <b>Face Snapshot Verification Submitted</b>\n"
 			msg += "Assessment: " + sub.AssessmentID.Hex() + "\n"
@@ -243,8 +255,8 @@ func (s *submissionService) SubmitAssessment(ctx context.Context, assessmentID, 
 			}
 
 			// 3. Update the submission in DB with the new proxy URLs (offloading Base64)
-			// (Since this is in a goroutine, we need to save the snapshots back to DB)
-			_ = s.repo.Update(ctx, sub.ID, sub)
+			// Using bgCtx to ensure update persists even if request context is cancelled
+			_ = s.repo.Update(bgCtx, sub.ID, sub)
 		}(submission, faceSnapshots)
 	}
 
@@ -255,6 +267,9 @@ func (s *submissionService) SubmitAssessment(ctx context.Context, assessmentID, 
 	submission.UpdatedAt = time.Now()
 
 	err = s.repo.Update(ctx, submission.ID, submission)
+	if err != nil {
+		fmt.Printf("[CRITICAL ERROR] SubmitAssessment update failed: %v\n", err)
+	}
 	return submission, err
 }
 
@@ -353,6 +368,9 @@ func (s *submissionService) GetOrGenerateQuestions(ctx context.Context, assessme
 			submission.CandidateEmail = user.Email
 			submission.CandidatePhone = user.Phone
 			submission.IsDemo = user.IsDemo
+		}
+		if assessment != nil {
+			submission.MinPassingScore = assessment.PassingScore
 		}
 		_, err = s.repo.Create(ctx, submission)
 	} else {
