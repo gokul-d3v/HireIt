@@ -120,6 +120,10 @@ func main() {
 		logger.Infof("PORT env var detected: %s", port)
 	}
 
+	appEnv := os.Getenv("APP_ENV")
+	logger.Infof("APP_ENV: %s", appEnv)
+	logger.Infof("FRONTEND_URL: %s", os.Getenv("FRONTEND_URL"))
+
 	// MongoDB Connection with optimized pool settings
 	mongoURI := os.Getenv("MONGO_URI")
 	if mongoURI == "" {
