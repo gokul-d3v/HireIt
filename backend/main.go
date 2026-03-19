@@ -174,13 +174,22 @@ func main() {
 	// Initialize Router with custom middleware for better performance
 	router := gin.New()
 	router.Use(gin.Recovery())
-	router.Use(gin.Logger()) // Add logger
+
+	// Only use the verbose logger in development
+	if os.Getenv("APP_ENV") != "production" {
+		router.Use(gin.Logger())
+	}
 
 	frontendURL := os.Getenv("FRONTEND_URL")
 
 	// CORS Configuration
 	router.Use(cors.New(cors.Config{
 		AllowOriginFunc: func(origin string) bool {
+			// In production, only allow specific domains
+			if os.Getenv("APP_ENV") == "production" {
+				return normalizeOrigin(origin) == normalizeOrigin(os.Getenv("FRONTEND_URL"))
+			}
+			// In development, allow localhost and the configured frontend URL
 			return isAllowedOrigin(origin, frontendURL)
 		},
 		AllowMethods:     []string{"GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"},
@@ -189,6 +198,14 @@ func main() {
 		AllowCredentials: true,
 		MaxAge:           12 * time.Hour,
 	}))
+
+	// Health Check for monitoring
+	router.GET("/health", func(c *gin.Context) {
+		c.JSON(http.StatusOK, gin.H{
+			"status": "UP",
+			"time":   time.Now().Format(time.RFC3339),
+		})
+	})
 
 	// Setup Routes
 	routes.SetupRoutes(router, authCtrl, googleCtrl, youtubeCtrl, publicCtrl, assessCtrl, interviewCtrl)

@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"os"
 	"strings"
+	"time"
 )
 
 type TelegramResponse struct {
@@ -102,7 +103,9 @@ func SendTelegramVideo(video []byte, filename string, caption string) (string, e
 	}
 	req.Header.Set("Content-Type", writer.FormDataContentType())
 
-	client := &http.Client{}
+	client := &http.Client{
+		Timeout: 10 * time.Second,
+	}
 	resp, err := client.Do(req)
 	if err != nil {
 		return "", err
@@ -173,7 +176,9 @@ func SendTelegramPhoto(base64Str string, caption string) (string, error) {
 	}
 	req.Header.Set("Content-Type", w.FormDataContentType())
 
-	client := &http.Client{}
+	client := &http.Client{
+		Timeout: 15 * time.Second,
+	}
 	resp, err := client.Do(req)
 	if err != nil {
 		return "", err
