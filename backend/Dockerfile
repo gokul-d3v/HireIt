@@ -6,15 +6,13 @@ WORKDIR /app
 # Install build dependencies
 RUN apk add --no-cache git
 
-# Copy dependency files
-COPY go.mod go.sum ./
-# Aggressive Fix: Force 1.24 and reset dependencies inside the container to avoid 1.25 noise
+# Copy source code
+COPY . .
+
+# Aggressive Fix: Force 1.24 and reset dependencies inside the container AFTER copying source
 RUN sed -i 's/go 1.25.0/go 1.24.0/' go.mod && \
     rm -f go.sum && \
     go mod tidy
-
-# Copy source code
-COPY . .
 
 # Build the application
 RUN CGO_ENABLED=0 GOOS=linux go build -o main .
