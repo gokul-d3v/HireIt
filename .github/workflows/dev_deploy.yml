@@ -3,6 +3,10 @@ name: Development Deployment
 on:
   workflow_dispatch:
 
+permissions:
+  contents: read
+  packages: write
+
 jobs:
   build-and-push-backend:
     runs-on: ubuntu-latest
