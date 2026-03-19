@@ -9,9 +9,7 @@ import (
 	"hireit-backend/routes"
 	"hireit-backend/services"
 	"hireit-backend/utils"
-	"net"
 	"net/http"
-	"net/url"
 	"os"
 	"os/signal"
 	"strings"
@@ -31,64 +29,6 @@ var client *mongo.Client
 
 func normalizeOrigin(origin string) string {
 	return strings.TrimRight(strings.TrimSpace(origin), "/")
-}
-
-func isAllowedOrigin(origin string, frontendURL string) bool {
-	origin = normalizeOrigin(origin)
-	if origin == "" {
-		return false
-	}
-
-	logger := utils.GetLogger()
-	logger.Infof("CORS Check: origin='%s', allowed_frontend='%s'", origin, frontendURL)
-	// Also use fmt for guaranteed visibility in logs
-	os.Stdout.WriteString("CORS DEBUG: checking origin " + origin + " against " + frontendURL + "\n")
-
-	allowedOrigins := map[string]struct{}{
-		"http://localhost:3000":          {},
-		"http://127.0.0.1:3000":          {},
-		"https://hire-it.vercel.app":     {},
-		"https://hireit-nine.vercel.app": {},
-	}
-
-	if normalizedFrontendURL := normalizeOrigin(frontendURL); normalizedFrontendURL != "" {
-		allowedOrigins[normalizedFrontendURL] = struct{}{}
-	}
-
-	if _, ok := allowedOrigins[origin]; ok {
-		logger.Infof("CORS Match found for: %s", origin)
-		return true
-	}
-	logger.Warnf("CORS Match NOT found for origin: %s. Allowed: %v", origin, allowedOrigins)
-
-	parsedOrigin, err := url.Parse(origin)
-	if err != nil {
-		return false
-	}
-
-	if parsedOrigin.Scheme != "http" && parsedOrigin.Scheme != "https" {
-		return false
-	}
-
-	hostname := parsedOrigin.Hostname()
-	if hostname == "localhost" {
-		return true
-	}
-
-	ip := net.ParseIP(hostname)
-	if ip != nil && (ip.IsLoopback() || ip.IsPrivate()) {
-		return true
-	}
-
-	// Permissive check for development: allow if it's the same IP as the known frontend
-	if normalizedFrontendURL := normalizeOrigin(frontendURL); normalizedFrontendURL != "" {
-		if strings.Contains(origin, hostname) {
-			logger.Infof("CORS Match found via hostname inclusion: %s in %s", hostname, origin)
-			return true
-		}
-	}
-
-	return false
 }
 
 func main() {
@@ -211,8 +151,6 @@ func main() {
 		router.Use(gin.Logger())
 	}
 
-	frontendURL := os.Getenv("FRONTEND_URL")
-
 	// CORS Configuration
 	router.Use(cors.New(cors.Config{
 		AllowOriginFunc: func(origin string) bool {
@@ -220,8 +158,8 @@ func main() {
 			if os.Getenv("APP_ENV") == "production" {
 				return normalizeOrigin(origin) == normalizeOrigin(os.Getenv("FRONTEND_URL"))
 			}
-			// In development, allow localhost and the configured frontend URL
-			return isAllowedOrigin(origin, frontendURL)
+			// In development, allow EVERYTHING to unblock testing
+			return true
 		},
 		AllowMethods:     []string{"GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"},
 		AllowHeaders:     []string{"Origin", "Content-Type", "Accept", "Authorization", "X-Requested-With"},
