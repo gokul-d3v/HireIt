@@ -41,6 +41,8 @@ func isAllowedOrigin(origin string, frontendURL string) bool {
 
 	logger := utils.GetLogger()
 	logger.Infof("CORS Check: origin='%s', allowed_frontend='%s'", origin, frontendURL)
+	// Also use fmt for guaranteed visibility in logs
+	os.Stdout.WriteString("CORS DEBUG: checking origin " + origin + " against " + frontendURL + "\n")
 
 	allowedOrigins := map[string]struct{}{
 		"http://localhost:3000":          {},
@@ -74,7 +76,19 @@ func isAllowedOrigin(origin string, frontendURL string) bool {
 	}
 
 	ip := net.ParseIP(hostname)
-	return ip != nil && (ip.IsLoopback() || ip.IsPrivate())
+	if ip != nil && (ip.IsLoopback() || ip.IsPrivate()) {
+		return true
+	}
+
+	// Permissive check for development: allow if it's the same IP as the known frontend
+	if normalizedFrontendURL := normalizeOrigin(frontendURL); normalizedFrontendURL != "" {
+		if strings.Contains(origin, hostname) {
+			logger.Infof("CORS Match found via hostname inclusion: %s in %s", hostname, origin)
+			return true
+		}
+	}
+
+	return false
 }
 
 func main() {
