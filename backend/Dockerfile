@@ -8,6 +8,8 @@ RUN apk add --no-cache git
 
 # Copy dependency files
 COPY go.mod go.sum ./
+# Ensure go.mod uses a version compatible with this builder (1.24)
+RUN sed -i 's/go 1.25.0/go 1.24.0/' go.mod
 RUN go mod download
 
 # Copy source code
