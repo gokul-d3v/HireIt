@@ -77,6 +77,7 @@ jobs:
             -e TELEGRAM_CHAT_ID="${{ vars.PROD_TELEGRAM_CHAT_ID }}" \
             -e RABBITMQ_URL="${{ secrets.PROD_RABBITMQ_URL }}" \
             -e RABBITMQ_QUEUE="candidate_details" \
+            -e FRONTEND_URL="${{ vars.PROD_FRONTEND_URL }}" \
             -e AUDIT_LOG_COLLECTION="audit_logs" \
             --restart unless-stopped \
             ghcr.io/${{ env.REPO_LOWER }}/hireit-backend-prod:latest
