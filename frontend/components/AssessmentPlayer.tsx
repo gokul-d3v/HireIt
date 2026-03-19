@@ -298,7 +298,7 @@ export default function AssessmentPlayer({ assessmentId, onComplete }: Assessmen
             // Trigger immediate progress save so backend has the record for video linking
             saveProgress([...loggedViolations, violation]);
             // Start 7-second Video Evidence Recording
-            if (stream && !isRecordingRef.current) {
+            if (stream && !isRecordingRef.current && !isDemoUser.current) {
                 isRecordingRef.current = true;
                 
                 // Determine supported mime type

@@ -4,9 +4,8 @@
 import { useState, useEffect } from "react";
 import Link from "next/link";
 import { motion } from "framer-motion";
-import { User, Briefcase, ChevronLeft, Lock, Mail, ArrowRight, UserPlus, AlertCircle, Eye, EyeOff } from "lucide-react";
-import { cn } from "@/lib/utils";
-import { apiRequest, API_URL } from "@/lib/api";
+import { User, Briefcase, ChevronLeft, Lock, Mail, ArrowRight, AlertCircle, Eye, EyeOff } from "lucide-react";
+import { apiRequest, API_URL, getApiUrl } from "@/lib/api";
 import { useAuth } from "@/context/AuthContext";
 import { useRouter } from "next/navigation";
 
@@ -18,6 +17,7 @@ export default function SignupPage() {
   const [error, setError] = useState<string | null>(null);
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  const [apiUrl, setApiUrl] = useState(API_URL);
   const { login, isAuthenticated, isLoading: isAuthLoading, user } = useAuth();
   const router = useRouter();
 
@@ -27,6 +27,10 @@ export default function SignupPage() {
       else router.push("/interviewer/dashboard");
     }
   }, [isAuthLoading, isAuthenticated, user, router]);
+
+  useEffect(() => {
+    setApiUrl(getApiUrl());
+  }, []);
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -63,8 +67,9 @@ export default function SignupPage() {
       login(loginData.token, loginData.role);
 
       router.push("/interviewer/dashboard");
-    } catch (err: any) {
-      setError(err.message || "Failed to create account");
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Failed to create account";
+      setError(message);
     } finally {
       setIsLoading(false);
     }
@@ -246,7 +251,7 @@ export default function SignupPage() {
 
             <div className="mt-6 flex justify-center">
               <a
-                href={`${API_URL}/auth/google/login?role=${role}`}
+                href={`${apiUrl}/auth/google/login?role=${role}`}
                 className="w-full inline-flex justify-center py-3 px-4 border border-gray-200 rounded-xl shadow-sm bg-white text-sm font-medium text-gray-500 hover:bg-gray-50 transition-colors"
               >
                 <svg className="h-5 w-5 mr-2" viewBox="0 0 24 24">
@@ -268,4 +273,3 @@ export default function SignupPage() {
     </div>
   );
 }
-

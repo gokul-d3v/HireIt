@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useRouter, useParams } from "next/navigation";
 import { useAuth } from "@/context/AuthContext";
 import { apiRequest } from "@/lib/api";
@@ -15,8 +15,37 @@ interface DifficultyRule {
 
 interface RuleGroup {
     category: string;
+    display_order: number;
     sub_category?: string;
     difficulties: DifficultyRule[];
+}
+
+function sanitizeDisplayOrder(value: unknown, fallback: number) {
+    const parsed = Number(value);
+    if (!Number.isFinite(parsed) || parsed < 1) {
+        return fallback;
+    }
+
+    return Math.floor(parsed);
+}
+
+function normalizeRuleGroups(groups: RuleGroup[]) {
+    return groups
+        .map((group, index) => ({
+            group: {
+                ...group,
+                display_order: sanitizeDisplayOrder(group.display_order, index + 1),
+            },
+            index,
+        }))
+        .sort((left, right) => {
+            if (left.group.display_order === right.group.display_order) {
+                return left.index - right.index;
+            }
+
+            return left.group.display_order - right.group.display_order;
+        })
+        .map(({ group }) => group);
 }
 
 interface QuestionBankConfig {
@@ -62,18 +91,7 @@ export default function EditAssessmentPage() {
             .catch(() => { /* non-fatal */ });
     }, []);
 
-    useEffect(() => {
-        if (!isLoading && (!isAuthenticated || user?.role !== "interviewer")) {
-            router.push("/login");
-            return;
-        }
-
-        if (isAuthenticated && params.id) {
-            fetchAssessment(params.id as string);
-        }
-    }, [isAuthenticated, isLoading, params.id, router, user]);
-
-    const fetchAssessment = async (id: string) => {
+    const fetchAssessment = useCallback(async (id: string) => {
         try {
             const data = await apiRequest(`/api/assessments/${id}`, "GET");
             setTitle(data.title);
@@ -83,14 +101,28 @@ export default function EditAssessmentPage() {
             setPassingScore(data.passing_score || 50);
             
             // Group the flat rules back into RuleGroups
-            const flatRules: any[] = data.question_rules || [];
+            const flatRules: Array<{
+                category: string;
+                sub_category?: string;
+                difficulty: string;
+                count: number;
+                points_per_question: number;
+                display_order?: number;
+            }> = data.question_rules || [];
             const groups: RuleGroup[] = [];
             
-            flatRules.forEach(rule => {
-                let group = groups.find(g => g.category === rule.category && g.sub_category === rule.sub_category);
+            flatRules.forEach((rule, index) => {
+                const displayOrder = sanitizeDisplayOrder(rule.display_order, index + 1);
+                let group = groups.find(
+                    (existingGroup) =>
+                        existingGroup.category === rule.category &&
+                        existingGroup.sub_category === rule.sub_category &&
+                        existingGroup.display_order === displayOrder
+                );
                 if (!group) {
                     group = {
                         category: rule.category,
+                        display_order: displayOrder,
                         sub_category: rule.sub_category,
                         difficulties: []
                     };
@@ -103,7 +135,7 @@ export default function EditAssessmentPage() {
                 });
             });
             
-            setRuleGroups(groups);
+            setRuleGroups(normalizeRuleGroups(groups));
         } catch (err) {
             console.error("Failed to fetch assessment", err);
             showToast("Failed to load assessment details", "error");
@@ -111,7 +143,18 @@ export default function EditAssessmentPage() {
         } finally {
             setLoading(false);
         }
-    };
+    }, [router, showToast]);
+
+    useEffect(() => {
+        if (!isLoading && (!isAuthenticated || user?.role !== "interviewer")) {
+            router.push("/login");
+            return;
+        }
+
+        if (isAuthenticated && params.id) {
+            fetchAssessment(params.id as string);
+        }
+    }, [fetchAssessment, isAuthenticated, isLoading, params.id, router, user]);
 
     // Derive category options from bankConfig
     const categoryOptions = Array.from(new Set([
@@ -139,14 +182,16 @@ export default function EditAssessmentPage() {
         const catCfg = getCatCfg(catName);
         const defaultSub = catCfg?.has_sub_categories ? (catCfg.sub_categories[0]?.name || "") : undefined;
         const diffs = getDifficultyOptions(catName, defaultSub || "");
-        setRuleGroups([
+        const nextDisplayOrder = ruleGroups.length > 0 ? Math.max(...ruleGroups.map(group => group.display_order || 0)) + 1 : 1;
+        setRuleGroups(normalizeRuleGroups([
             ...ruleGroups,
             {
                 category: catName,
+                display_order: nextDisplayOrder,
                 sub_category: defaultSub,
                 difficulties: [{ difficulty: diffs[0] || "Easy", count: 1, points_per_question: 10 }]
             }
-        ]);
+        ]));
     };
 
     const updateGroup = (gIndex: number, field: keyof RuleGroup, value: string) => {
@@ -167,10 +212,21 @@ export default function EditAssessmentPage() {
         setRuleGroups(newGroups);
     };
 
+    const updateGroupDisplayOrder = (gIndex: number, value: string) => {
+        if (!/^\d*$/.test(value)) return;
+
+        const newGroups = [...ruleGroups];
+        newGroups[gIndex] = {
+            ...newGroups[gIndex],
+            display_order: sanitizeDisplayOrder(value, newGroups[gIndex].display_order),
+        };
+        setRuleGroups(normalizeRuleGroups(newGroups));
+    };
+
     const removeGroup = (gIndex: number) => {
         const newGroups = [...ruleGroups];
         newGroups.splice(gIndex, 1);
-        setRuleGroups(newGroups);
+        setRuleGroups(normalizeRuleGroups(newGroups));
     };
 
     const addDifficulty = (gIndex: number) => {
@@ -183,7 +239,7 @@ export default function EditAssessmentPage() {
 
     const updateDifficulty = (gIndex: number, dIndex: number, field: keyof DifficultyRule, value: string) => {
         const newGroups = [...ruleGroups];
-        let finalValue: any = value;
+        let finalValue: string | number = value;
         if (field === 'count' || field === 'points_per_question') {
             if (!/^\d*$/.test(value)) return;
             finalValue = parseInt(value) || 0;
@@ -208,7 +264,8 @@ export default function EditAssessmentPage() {
             sub_category: g.sub_category,
             difficulty: d.difficulty,
             count: Number(d.count),
-            points_per_question: Number(d.points_per_question)
+            points_per_question: Number(d.points_per_question),
+            display_order: g.display_order,
         }))
     );
 
@@ -236,8 +293,9 @@ export default function EditAssessmentPage() {
             });
             showToast("Assessment updated successfully!", "success");
             router.push("/interviewer/assessments");
-        } catch (err: any) {
-            showToast(err.message || "Failed to update assessment", "error");
+        } catch (err) {
+            const message = err instanceof Error ? err.message : "Failed to update assessment";
+            showToast(message, "error");
         } finally {
             setSubmitting(false);
         }
@@ -382,6 +440,17 @@ export default function EditAssessmentPage() {
                                                 </select>
                                             </div>
 
+                                            <div className="w-28">
+                                                <label className="block text-xs font-bold text-gray-600 uppercase tracking-wider mb-2">Show Order</label>
+                                                <input
+                                                    type="number"
+                                                    min={1}
+                                                    value={group.display_order}
+                                                    onChange={(e) => updateGroupDisplayOrder(gIdx, e.target.value)}
+                                                    className="w-full p-2.5 text-center font-bold text-gray-900 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-100 focus:border-indigo-500 focus:outline-none bg-white transition-all"
+                                                />
+                                            </div>
+
                                             {/* Sub-category — only shown if category has sub-categories */}
                                             {hasSubCats && (
                                                 <div className="flex-1 min-w-[150px]">
@@ -467,7 +536,7 @@ export default function EditAssessmentPage() {
                                         </div>
 
                                         <div className="flex-none w-full bg-indigo-50 rounded-lg p-3 border border-indigo-100 text-sm text-indigo-900 flex justify-between items-center mt-2">
-                                            <span>Total for {group.category} {group.sub_category ? ` → ${group.sub_category}` : ''}</span>
+                                            <span>#{group.display_order} Total for {group.category} {group.sub_category ? ` → ${group.sub_category}` : ''}</span>
                                             <span className="font-bold text-indigo-700">
                                                 Pts: {group.difficulties.reduce((sum, d) => sum + (Number(d.count) * Number(d.points_per_question)), 0)} 
                                             </span>

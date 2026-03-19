@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"hireit-backend/models"
 	"hireit-backend/repositories"
-	"math/rand"
 	"strings"
 	"time"
 
@@ -30,6 +29,31 @@ type submissionService struct {
 	assessmentRepo repositories.AssessmentRepository
 	userRepo       repositories.UserRepository
 	qbRepo         repositories.QuestionBankRepository
+}
+
+func shouldReuseGeneratedQuestions(submission *models.Submission, assessment *models.Assessment) bool {
+	if submission == nil || len(submission.GeneratedQuestions) == 0 {
+		return false
+	}
+
+	questionSetVersion := submission.QuestionSetVersion
+	if questionSetVersion.IsZero() {
+		questionSetVersion = submission.QuestionSetGeneratedAt
+	}
+	if questionSetVersion.IsZero() {
+		questionSetVersion = submission.CreatedAt
+	}
+
+	if assessment == nil || assessment.UpdatedAt.IsZero() || !assessment.UpdatedAt.After(questionSetVersion) {
+		return true
+	}
+
+	// If the candidate has already started answering, keep the locked question set.
+	if len(submission.Answers) > 0 || submission.Status == "completed" {
+		return true
+	}
+
+	return false
 }
 
 func NewSubmissionService(repo repositories.SubmissionRepository, assessmentRepo repositories.AssessmentRepository, userRepo repositories.UserRepository, qbRepo repositories.QuestionBankRepository) SubmissionService {
@@ -100,6 +124,7 @@ func (s *submissionService) SaveProgress(ctx context.Context, assessmentID, cand
 			submission.CandidateName = user.Name
 			submission.CandidateEmail = user.Email
 			submission.CandidatePhone = user.Phone
+			submission.IsDemo = user.IsDemo
 		}
 		_, err = s.repo.Create(ctx, submission)
 		return err
@@ -262,8 +287,11 @@ func (s *submissionService) GetSubmissionsByInterviewer(ctx context.Context, int
 		assessmentIDs = append(assessmentIDs, a.ID)
 	}
 
-	// 2. Fetch submissions for these assessments
-	subs, err := s.repo.FindAll(ctx, bson.M{"assessment_id": bson.M{"$in": assessmentIDs}}, options.Find().SetSort(bson.D{{Key: "submitted_at", Value: -1}}))
+	// 2. Fetch submissions for these assessments (excluding demo/mock submissions)
+	subs, err := s.repo.FindAll(ctx, bson.M{
+		"assessment_id": bson.M{"$in": assessmentIDs},
+		"is_demo":       bson.M{"$ne": true},
+	}, options.Find().SetSort(bson.D{{Key: "submitted_at", Value: -1}}))
 	if err != nil {
 		return nil, err
 	}
@@ -285,121 +313,52 @@ func (s *submissionService) GetOrGenerateQuestions(ctx context.Context, assessme
 	aID, _ := primitive.ObjectIDFromHex(assessmentID)
 	cID, _ := primitive.ObjectIDFromHex(candidateID)
 
-	// 1. Check if submission already has generated questions
+	// 1. Check if submission already exists
 	submission, err := s.repo.FindOne(ctx, bson.M{"assessment_id": aID, "candidate_id": cID})
-	if err == nil && len(submission.GeneratedQuestions) > 0 {
-		return submission.GeneratedQuestions, nil
-	}
 
-	// 2. Fetch Assessment Rules
+	// 2. Fetch assessment rules
 	assessment, err := s.assessmentRepo.FindByID(ctx, aID)
 	if err != nil {
 		return nil, errors.New("assessment not found")
 	}
 
-	// 3. Sample Questions based on Rules
-	config, _ := s.qbRepo.GetBankConfig(ctx)
-
-	var generatedQuestions []models.Question
-	for _, rule := range assessment.QuestionRules {
-		filter := bson.M{
-			"category":   rule.Category,
-			"difficulty": rule.Difficulty,
-		}
-		if rule.SubCategory != "" {
-			filter["sub_category"] = rule.SubCategory
-		}
-
-		bankEntries, err := s.qbRepo.Sample(ctx, filter, rule.Count)
-		if err != nil {
-			return nil, fmt.Errorf("failed to sample questions: %v", err)
-		}
-
-		for _, entry := range bankEntries {
-			// Resolve Audio URL: Rule > Bank Config > Question Entry
-			finalAudio := rule.AudioURL
-			if finalAudio == "" && config != nil {
-				for _, c := range config.Categories {
-					if c.Name == rule.Category {
-						if rule.SubCategory == "" {
-							// Check difficulty level in CategoryConfig
-							for _, d := range c.Difficulties {
-								if d.Difficulty == rule.Difficulty {
-									finalAudio = d.AudioURL
-									break
-								}
-							}
-							if finalAudio == "" {
-								finalAudio = c.AudioURL // Fallback to category level
-							}
-						} else {
-							for _, su := range c.SubCategories {
-								if su.Name == rule.SubCategory {
-									// Check difficulty level in SubCategoryConfig
-									for _, d := range su.Difficulties {
-										if d.Difficulty == rule.Difficulty {
-											finalAudio = d.AudioURL
-											break
-										}
-									}
-									if finalAudio == "" {
-										finalAudio = su.AudioURL // Fallback to sub-category level
-									}
-									break
-								}
-							}
-						}
-						break
-					}
-				}
-			}
-			if finalAudio == "" {
-				finalAudio = entry.AudioURL
-			}
-
-			generatedQuestions = append(generatedQuestions, models.Question{
-				ID:            entry.ID,
-				Text:          entry.Text,
-				Type:          entry.Type,
-				PassageTitle:  entry.PassageTitle,
-				PassageText:   entry.PassageText,
-				Options:       entry.Options,
-				CorrectAnswer: entry.CorrectAnswer,
-				Points:        rule.PointsPerQuestion,
-				AudioURL:      finalAudio,
-			})
-		}
+	// Reuse the locked question set unless the assessment changed before the candidate started.
+	if shouldReuseGeneratedQuestions(submission, assessment) {
+		return submission.GeneratedQuestions, nil
 	}
 
-	// Shuffle by passage groups so reading-comprehension sets stay together.
-	rand.Seed(time.Now().UnixNano())
-	groups := groupQuestionsByPassage(generatedQuestions)
-	rand.Shuffle(len(groups), func(i, j int) {
-		groups[i], groups[j] = groups[j], groups[i]
-	})
-	generatedQuestions = flattenQuestionGroups(groups)
+	// 3. Sample questions in the configured display order.
+	generatedQuestions, err := sampleQuestionsForRules(ctx, s.qbRepo, assessment.QuestionRules)
+	if err != nil {
+		return nil, fmt.Errorf("failed to sample questions: %v", err)
+	}
 
 	// 4. Save/Update Submission with Locked Questions
 	if submission == nil {
 		// Create placeholder submission to lock questions
 		user, _ := s.userRepo.FindByID(ctx, cID)
 		submission = &models.Submission{
-			AssessmentID:       aID,
-			CandidateID:        cID,
-			GeneratedQuestions: generatedQuestions,
-			Status:             "in_progress",
-			CreatedAt:          time.Now(),
-			StartedAt:          time.Now(),
-			UpdatedAt:          time.Now(),
+			AssessmentID:           aID,
+			CandidateID:            cID,
+			GeneratedQuestions:     generatedQuestions,
+			QuestionSetGeneratedAt: time.Now(),
+			QuestionSetVersion:     assessment.UpdatedAt,
+			Status:                 "in_progress",
+			CreatedAt:              time.Now(),
+			StartedAt:              time.Now(),
+			UpdatedAt:              time.Now(),
 		}
 		if user != nil {
 			submission.CandidateName = user.Name
 			submission.CandidateEmail = user.Email
 			submission.CandidatePhone = user.Phone
+			submission.IsDemo = user.IsDemo
 		}
 		_, err = s.repo.Create(ctx, submission)
 	} else {
 		submission.GeneratedQuestions = generatedQuestions
+		submission.QuestionSetGeneratedAt = time.Now()
+		submission.QuestionSetVersion = assessment.UpdatedAt
 		if submission.StartedAt.IsZero() {
 			submission.StartedAt = time.Now()
 		}

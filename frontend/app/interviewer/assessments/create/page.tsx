@@ -1,11 +1,11 @@
 "use client";
 
-import { useState, useRef, useEffect } from "react";
+import { useState, useEffect } from "react";
 
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/context/AuthContext";
 import { apiRequest } from "@/lib/api";
-import { Plus, Trash2, Save, ArrowLeft, ArrowRight, Clock, Award, Target, RefreshCw, FileText, CheckCircle, Music, Upload, X, AlertTriangle } from "lucide-react";
+import { Plus, Trash2, Save, ArrowLeft, ArrowRight, Clock, Award, Target, FileText, CheckCircle, AlertTriangle } from "lucide-react";
 import { useToast } from "@/components/ui/Toast";
 import { Modal } from "@/components/ui/Modal";
 
@@ -25,7 +25,39 @@ interface SubGroup {
 
 interface RuleGroup {
     category: string;
+    display_order: number;
     sub_groups: SubGroup[];
+}
+
+function sanitizeDisplayOrder(value: unknown, fallback: number) {
+    const parsed = Number(value);
+    if (!Number.isFinite(parsed) || parsed < 1) {
+        return fallback;
+    }
+
+    return Math.floor(parsed);
+}
+
+function normalizeRuleGroups(groups: RuleGroup[]) {
+    return groups
+        .map((group, index) => ({
+            group: {
+                ...group,
+                display_order: sanitizeDisplayOrder(group.display_order, index + 1),
+            },
+            index,
+        }))
+        .sort((left, right) => {
+            if (left.group.display_order === right.group.display_order) {
+                return left.index - right.index;
+            }
+
+            return left.group.display_order - right.group.display_order;
+        })
+        .map(({ group }, index) => ({
+            ...group,
+            display_order: index + 1,
+        }));
 }
 
 interface QuestionBankConfig {
@@ -48,7 +80,6 @@ export default function CreateAssessmentPage() {
     const router = useRouter();
     const { user, isAuthenticated, isLoading } = useAuth();
     const { showToast } = useToast();
-    const audioInputRefs = useRef<Record<string, HTMLInputElement | null>>({});
     const [bankConfig, setBankConfig] = useState<BankConfig>({ categories: [], sub_categories: {}, difficulties: [] });
 
     useEffect(() => {
@@ -73,7 +104,7 @@ export default function CreateAssessmentPage() {
                 if (parsed.duration) setDuration(parsed.duration);
                 if (parsed.totalMarks) setTotalMarks(parsed.totalMarks);
                 if (parsed.passingScore) setPassingScore(parsed.passingScore);
-                if (parsed.ruleGroups) setRuleGroups(parsed.ruleGroups);
+                if (parsed.ruleGroups) setRuleGroups(normalizeRuleGroups(parsed.ruleGroups));
             } catch (e) {
                 console.error("Failed to parse assessment draft", e);
             }
@@ -95,11 +126,8 @@ export default function CreateAssessmentPage() {
     const [isConfirmModalOpen, setIsConfirmModalOpen] = useState(false);
     
     // Preview questions state
-    const [previewQuestions, setPreviewQuestions] = useState<any[]>([]);
-    const [fetchingPreview, setFetchingPreview] = useState(false);
     // Bank count warnings per slot (key: "category|||sub|||difficulty")
     const [bankCounts, setBankCounts] = useState<Record<string, number>>({});
-    const [fetchingCounts, setFetchingCounts] = useState(false);
 
     // Save draft to localStorage whenever fields change
     useEffect(() => {
@@ -145,10 +173,11 @@ export default function CreateAssessmentPage() {
             ? (typeof firstSubDiff === "string" ? firstSubDiff : firstSubDiff?.difficulty || "Easy")
             : (typeof firstCatDiff === "string" ? firstCatDiff : firstCatDiff?.difficulty || "Easy");
 
-        setRuleGroups([
+        setRuleGroups(normalizeRuleGroups([
             ...ruleGroups,
             {
                 category: catName,
+                display_order: ruleGroups.length + 1,
                 sub_groups: [
                     {
                         sub_category: defaultSub,
@@ -156,7 +185,7 @@ export default function CreateAssessmentPage() {
                     }
                 ]
             }
-        ]);
+        ]));
     };
 
     const updateGroup = (gIndex: number, field: keyof RuleGroup, value: string) => {
@@ -177,10 +206,21 @@ export default function CreateAssessmentPage() {
         setRuleGroups(newGroups);
     };
 
+    const updateGroupDisplayOrder = (gIndex: number, value: string) => {
+        if (!/^\d*$/.test(value)) return;
+
+        const newGroups = [...ruleGroups];
+        newGroups[gIndex] = {
+            ...newGroups[gIndex],
+            display_order: sanitizeDisplayOrder(value, newGroups[gIndex].display_order),
+        };
+        setRuleGroups(normalizeRuleGroups(newGroups));
+    };
+
     const removeGroup = (gIndex: number) => {
         const newGroups = [...ruleGroups];
         newGroups.splice(gIndex, 1);
-        setRuleGroups(newGroups);
+        setRuleGroups(normalizeRuleGroups(newGroups));
     };
 
     const addSubGroup = (gIndex: number) => {
@@ -205,39 +245,6 @@ export default function CreateAssessmentPage() {
     const updateSubGroup = (gIndex: number, sIndex: number, value: string) => {
         const newGroups = [...ruleGroups];
         newGroups[gIndex].sub_groups[sIndex].sub_category = value;
-        setRuleGroups(newGroups);
-    };
-
-    const uploadSubGroupAudio = async (gIndex: number, sIndex: number, file: File) => {
-        const newGroups = [...ruleGroups];
-        newGroups[gIndex].sub_groups[sIndex].audio_uploading = true;
-        setRuleGroups([...newGroups]);
-
-        try {
-            const formData = new FormData();
-            formData.append("audio", file);
-            const token = localStorage.getItem("token");
-            const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || "http://localhost:8080"}/api/admin/audio-upload`, {
-                method: "POST",
-                headers: token ? { "Authorization": `Bearer ${token}` } : {},
-                body: formData,
-            });
-            if (!res.ok) throw new Error("Upload failed");
-            const data = await res.json();
-            newGroups[gIndex].sub_groups[sIndex].audio_url = data.url;
-            showToast("Audio uploaded successfully!", "success");
-        } catch {
-            showToast("Failed to upload audio file", "error");
-        } finally {
-            newGroups[gIndex].sub_groups[sIndex].audio_uploading = false;
-            setRuleGroups([...newGroups]);
-        }
-    };
-
-
-    const toggleAudio = (gIdx: number, sIdx: number) => {
-        const newGroups = [...ruleGroups];
-        newGroups[gIdx].sub_groups[sIdx].show_audio_upload = !newGroups[gIdx].sub_groups[sIdx].show_audio_upload;
         setRuleGroups(newGroups);
     };
 
@@ -274,7 +281,7 @@ export default function CreateAssessmentPage() {
 
     const updateDifficulty = (gIndex: number, sIndex: number, dIndex: number, field: keyof DifficultyRule, value: string) => {
         const newGroups = [...ruleGroups];
-        let finalValue: any = value;
+        let finalValue: string | number = value;
         if (field === 'count' || field === 'points_per_question') {
             if (!/^\d*$/.test(value)) return;
             finalValue = parseInt(value) || 0;
@@ -307,6 +314,7 @@ export default function CreateAssessmentPage() {
                 difficulty: d.difficulty,
                 count: Number(d.count),
                 points_per_question: Number(d.points_per_question),
+                display_order: g.display_order,
                 audio_url: sg.audio_url
             }))
         )
@@ -341,7 +349,6 @@ export default function CreateAssessmentPage() {
                 return;
             }
             // Fetch bank counts for warnings before moving to review
-            setFetchingCounts(true);
             try {
                 const token = localStorage.getItem("token");
                 const headers: Record<string, string> = token ? { Authorization: `Bearer ${token}` } : {};
@@ -356,25 +363,19 @@ export default function CreateAssessmentPage() {
                     counts[key] = data.count || 0;
                 }));
                 setBankCounts(counts);
-            } catch { /* non-fatal */ } finally {
-                setFetchingCounts(false);
-            }
+            } catch { /* non-fatal */ }
             setStep(3);
             fetchPreview();
         }
     };
 
     const fetchPreview = async () => {
-        setFetchingPreview(true);
         try {
-            const res = await apiRequest("/api/assessments/preview", "POST", {
+            await apiRequest("/api/assessments/preview", "POST", {
                 question_rules: flattenedRules
             });
-            setPreviewQuestions(res || []);
-        } catch (err: any) {
+        } catch {
             showToast("Failed to fetch question preview", "error");
-        } finally {
-            setFetchingPreview(false);
         }
     };
 
@@ -412,8 +413,9 @@ export default function CreateAssessmentPage() {
             
             showToast(`Successfully created assessment!`, "success");
             router.push("/interviewer/assessments");
-        } catch (err: any) {
-            showToast(err.message || "Failed to create assessment", "error");
+        } catch (err) {
+            const message = err instanceof Error ? err.message : "Failed to create assessment";
+            showToast(message, "error");
         } finally {
             setSubmitting(false);
         }
@@ -586,15 +588,28 @@ export default function CreateAssessmentPage() {
                                                     <Trash2 size={20} />
                                                 </button>
 
-                                                <div className="max-w-sm">
-                                                    <label className="block text-xs font-bold text-indigo-600 uppercase tracking-widest mb-2">Category</label>
-                                                    <select
-                                                        value={group.category}
-                                                        onChange={(e) => updateGroup(gIdx, 'category', e.target.value)}
-                                                        className="w-full p-3 font-bold text-gray-900 border-2 border-gray-200 rounded-xl focus:border-indigo-500 focus:outline-none bg-gray-50/50 appearance-none cursor-pointer"
-                                                    >
-                                                        {categoryOptions.map(c => <option key={c} value={c}>{c}</option>)}
-                                                    </select>
+                                                <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
+                                                    <div className="max-w-sm flex-1">
+                                                        <label className="block text-xs font-bold text-indigo-600 uppercase tracking-widest mb-2">Category</label>
+                                                        <select
+                                                            value={group.category}
+                                                            onChange={(e) => updateGroup(gIdx, 'category', e.target.value)}
+                                                            className="w-full p-3 font-bold text-gray-900 border-2 border-gray-200 rounded-xl focus:border-indigo-500 focus:outline-none bg-gray-50/50 appearance-none cursor-pointer"
+                                                        >
+                                                            {categoryOptions.map(c => <option key={c} value={c}>{c}</option>)}
+                                                        </select>
+                                                    </div>
+
+                                                    <div className="w-full md:w-36">
+                                                        <label className="block text-xs font-bold text-indigo-600 uppercase tracking-widest mb-2">Show Order</label>
+                                                        <input
+                                                            type="number"
+                                                            min={1}
+                                                            value={group.display_order}
+                                                            onChange={(e) => updateGroupDisplayOrder(gIdx, e.target.value)}
+                                                            className="w-full p-3 text-center font-bold text-gray-900 border-2 border-gray-200 rounded-xl focus:border-indigo-500 focus:outline-none bg-white"
+                                                        />
+                                                    </div>
                                                 </div>
 
                                                 <div className="space-y-4">
@@ -730,7 +745,7 @@ export default function CreateAssessmentPage() {
                                                         </div>
                                                         <div>
                                                             <div className="text-[10px] font-bold uppercase tracking-widest opacity-70">Category Summary</div>
-                                                            <div className="font-bold">{group.category}</div>
+                                                            <div className="font-bold">{group.display_order}. {group.category}</div>
                                                         </div>
                                                     </div>
                                                     <div className="text-right">
@@ -795,6 +810,26 @@ export default function CreateAssessmentPage() {
                                             <span className="block text-xs font-semibold text-gray-400 uppercase tracking-widest mb-1">Passing</span>
                                             <span className="text-xl font-black text-green-600">{passingScore}</span>
                                         </div>
+                                    </div>
+                                </div>
+
+                                <div className="bg-white rounded-xl border border-gray-200 p-5">
+                                    <div className="flex items-center justify-between mb-3">
+                                        <h4 className="text-sm font-bold text-gray-900 uppercase tracking-wider">Category Display Order</h4>
+                                        <span className="text-xs font-medium text-gray-500">Candidates will see categories in this sequence</span>
+                                    </div>
+                                    <div className="grid gap-2 sm:grid-cols-2">
+                                        {ruleGroups.map((group) => (
+                                            <div
+                                                key={`${group.display_order}-${group.category}`}
+                                                className="flex items-center justify-between rounded-lg border border-indigo-100 bg-indigo-50 px-4 py-3"
+                                            >
+                                                <span className="text-sm font-semibold text-gray-900">{group.category}</span>
+                                                <span className="rounded-full bg-white px-2.5 py-1 text-xs font-bold text-indigo-700 shadow-sm">
+                                                    #{group.display_order}
+                                                </span>
+                                            </div>
+                                        ))}
                                     </div>
                                 </div>
 

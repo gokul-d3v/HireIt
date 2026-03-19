@@ -1,7 +1,28 @@
-export const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8080";
+const DEFAULT_API_PORT = process.env.NEXT_PUBLIC_API_PORT || "8080";
+
+function trimTrailingSlash(value: string) {
+    return value.replace(/\/+$/, "");
+}
+
+export function getApiUrl() {
+    const configuredUrl = process.env.NEXT_PUBLIC_API_URL?.trim();
+    if (configuredUrl) {
+        return trimTrailingSlash(configuredUrl);
+    }
+
+    if (typeof window !== "undefined") {
+        const { hostname, protocol } = window.location;
+        return `${protocol}//${hostname}:${DEFAULT_API_PORT}`;
+    }
+
+    return `http://localhost:${DEFAULT_API_PORT}`;
+}
+
+export const API_URL = trimTrailingSlash(process.env.NEXT_PUBLIC_API_URL?.trim() || `http://localhost:${DEFAULT_API_PORT}`);
 
 export async function apiRequest(endpoint: string, method: string, body?: unknown) {
     const token = localStorage.getItem("token");
+    const apiUrl = getApiUrl();
 
     const headers: HeadersInit = {
         "Content-Type": "application/json",
@@ -12,7 +33,7 @@ export async function apiRequest(endpoint: string, method: string, body?: unknow
     }
 
     try {
-        const response = await fetch(`${API_URL}${endpoint}`, {
+        const response = await fetch(`${apiUrl}${endpoint}`, {
             method,
             headers,
             body: body ? JSON.stringify(body) : undefined,
@@ -57,6 +78,11 @@ export async function apiRequest(endpoint: string, method: string, body?: unknow
         return data;
     } catch (error) {
         console.error("API Request Error:", error);
+
+        if (error instanceof TypeError) {
+            throw new Error(`Could not reach the backend at ${apiUrl}. Check NEXT_PUBLIC_API_URL, your backend server, and local CORS settings.`);
+        }
+
         throw error;
     }
 }

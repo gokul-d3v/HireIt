@@ -8,9 +8,12 @@ import (
 	"hireit-backend/routes"
 	"hireit-backend/services"
 	"hireit-backend/utils"
+	"net"
 	"net/http"
+	"net/url"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 
@@ -23,6 +26,49 @@ import (
 )
 
 var client *mongo.Client
+
+func normalizeOrigin(origin string) string {
+	return strings.TrimRight(strings.TrimSpace(origin), "/")
+}
+
+func isAllowedOrigin(origin string, frontendURL string) bool {
+	origin = normalizeOrigin(origin)
+	if origin == "" {
+		return false
+	}
+
+	allowedOrigins := map[string]struct{}{
+		"http://localhost:3000":          {},
+		"http://127.0.0.1:3000":          {},
+		"https://hire-it.vercel.app":     {},
+		"https://hireit-nine.vercel.app": {},
+	}
+
+	if normalizedFrontendURL := normalizeOrigin(frontendURL); normalizedFrontendURL != "" {
+		allowedOrigins[normalizedFrontendURL] = struct{}{}
+	}
+
+	if _, ok := allowedOrigins[origin]; ok {
+		return true
+	}
+
+	parsedOrigin, err := url.Parse(origin)
+	if err != nil {
+		return false
+	}
+
+	if parsedOrigin.Scheme != "http" && parsedOrigin.Scheme != "https" {
+		return false
+	}
+
+	hostname := parsedOrigin.Hostname()
+	if hostname == "localhost" {
+		return true
+	}
+
+	ip := net.ParseIP(hostname)
+	return ip != nil && (ip.IsLoopback() || ip.IsPrivate())
+}
 
 func main() {
 	utils.InitLogger()
@@ -130,9 +176,13 @@ func main() {
 	router.Use(gin.Recovery())
 	router.Use(gin.Logger()) // Add logger
 
+	frontendURL := os.Getenv("FRONTEND_URL")
+
 	// CORS Configuration
 	router.Use(cors.New(cors.Config{
-		AllowOrigins:     []string{"http://localhost:3000", "http://127.0.0.1:3000", "https://hire-it.vercel.app", "https://hireit-nine.vercel.app"},
+		AllowOriginFunc: func(origin string) bool {
+			return isAllowedOrigin(origin, frontendURL)
+		},
 		AllowMethods:     []string{"GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"},
 		AllowHeaders:     []string{"Origin", "Content-Type", "Accept", "Authorization", "X-Requested-With"},
 		ExposeHeaders:    []string{"Content-Length"},
