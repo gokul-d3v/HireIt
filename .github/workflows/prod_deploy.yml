@@ -61,6 +61,9 @@ jobs:
       - name: Lowercase Repository Name
         run: echo "REPO_LOWER=${GITHUB_REPOSITORY,,}" >> ${GITHUB_ENV}
 
+      - name: Create HireIt Network
+        run: docker network create hireit-network || true
+
       - name: Log in to GHCR
         run: echo ${{ secrets.GITHUB_TOKEN }} | docker login ghcr.io -u ${{ github.actor }} --password-stdin
 
@@ -100,7 +103,7 @@ jobs:
 
       - name: Deploy Monitoring Stack
         run: |
-          docker compose -f docker-compose.monitoring.yml up -d || docker-compose -f docker-compose.monitoring.yml up -d
+          docker-compose -f docker-compose.monitoring.yml up -d
 
       - name: Prune Dangling Images
         run: docker image prune -f
