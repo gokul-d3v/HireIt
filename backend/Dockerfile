@@ -9,8 +9,9 @@ RUN apk add --no-cache git
 # Copy source code
 COPY . .
 
-# Aggressive Fix: Force 1.24 and reset dependencies inside the container AFTER copying source
+# Force compatibility inside the container AFTER copying source
 RUN sed -i 's/go 1.25.0/go 1.24.0/' go.mod && \
+    go mod edit -droprequire=google.golang.org/genproto/googleapis/rpc && \
     rm -f go.sum && \
     go mod tidy
 
