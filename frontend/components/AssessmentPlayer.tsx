@@ -329,7 +329,7 @@ export default function AssessmentPlayer({ assessmentId, onComplete }: Assessmen
 
                     try {
                         const token = localStorage.getItem("token");
-                        const res = await fetch(`${process.env.DEV_DEV_NEXT_PUBLIC_API_URL || "http://localhost:8080"}/api/assessments/${assessmentId}/upload-evidence`, {
+                        const res = await fetch(`${process.env.DEV_NEXT_PUBLIC_API_URL || "http://localhost:8080"}/api/assessments/${assessmentId}/upload-evidence`, {
                             method: "POST",
                             headers: token ? { "Authorization": `Bearer ${token}` } : {},
                             body: formData
@@ -988,7 +988,7 @@ export default function AssessmentPlayer({ assessmentId, onComplete }: Assessmen
                                             <span className="text-xs font-bold text-indigo-700 uppercase tracking-wider">Listening Passage — Play before answering</span>
                                         </div>
                                         <div className="p-3 bg-indigo-50/50 rounded-xl border border-indigo-100 flex items-center gap-3">
-                                            {currentQuestion.audio_url ? <audio ref={questionAudioRef} src={currentQuestion.audio_url.startsWith("http") ? currentQuestion.audio_url : `${process.env.DEV_DEV_NEXT_PUBLIC_API_URL || "http://localhost:8080"}${currentQuestion.audio_url}`} controls className="h-8 flex-1" /> : <span className="text-xs text-gray-600 font-medium">No Audio Configured for this Level</span>}
+                                            {currentQuestion.audio_url ? <audio ref={questionAudioRef} src={currentQuestion.audio_url.startsWith("http") ? currentQuestion.audio_url : `${process.env.DEV_NEXT_PUBLIC_API_URL || "http://localhost:8080"}${currentQuestion.audio_url}`} controls className="h-8 flex-1" /> : <span className="text-xs text-gray-600 font-medium">No Audio Configured for this Level</span>}
                                         </div>
                                     </div>
                                 )}

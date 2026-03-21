@@ -294,7 +294,7 @@ export default function SubmissionsPage() {
                                                                         ) : (
                                                                             <>
                                                                                 <video
-                                                                                    src={v.evidence.startsWith('/') ? `${process.env.DEV_DEV_NEXT_PUBLIC_API_URL || "http://localhost:8080"}${v.evidence}` : v.evidence}
+                                                                                    src={v.evidence.startsWith('/') ? `${process.env.DEV_NEXT_PUBLIC_API_URL || "http://localhost:8080"}${v.evidence}` : v.evidence}
                                                                                     className="w-full h-full object-cover"
                                                                                     muted
                                                                                     playsInline

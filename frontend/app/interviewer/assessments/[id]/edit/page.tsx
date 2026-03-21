@@ -85,8 +85,8 @@ export default function EditAssessmentPage() {
         // Fetch dynamic bank config
         const token = localStorage.getItem("token");
         const headers: Record<string, string> = token ? { Authorization: `Bearer ${token}` } : {};
-        const base = process.env.DEV_DEV_NEXT_PUBLIC_API_URL || "http://localhost:8080";
-        fetch(`${base}/api/admin/questions/config`, { headers })
+        const base = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8080";
+        fetch(`${base}/admin/questions/config`, { headers })
             .then(r => r.json())
             .then(d => setBankConfig(d))
             .catch(() => { /* non-fatal */ });
@@ -94,7 +94,7 @@ export default function EditAssessmentPage() {
 
     const fetchAssessment = useCallback(async (id: string) => {
         try {
-            const data = await apiRequest(`/api/assessments/${id}`, "GET");
+            const data = await apiRequest(`/assessments/${id}`, "GET");
             setTitle(data.title);
             setDescription(data.description);
             setDuration(data.duration);
