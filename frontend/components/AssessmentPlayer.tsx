@@ -775,11 +775,6 @@ export default function AssessmentPlayer({ assessmentId, onComplete }: Assessmen
                 }
             }
 
-            console.log("DEBUG: Submitting Assessment", { 
-                assessment_id: assessment.id,
-                answers_count: formattedAnswers.length,
-                answers: formattedAnswers 
-            });
 
             await apiRequest(`/api/assessments/${assessment.id}/submit`, "POST", {
                 answers: formattedAnswers,
