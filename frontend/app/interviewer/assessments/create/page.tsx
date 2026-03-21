@@ -104,6 +104,7 @@ export default function CreateAssessmentPage() {
                 if (parsed.duration) setDuration(parsed.duration);
                 if (parsed.totalMarks) setTotalMarks(parsed.totalMarks);
                 if (parsed.passingScore) setPassingScore(parsed.passingScore);
+                if (parsed.isMock !== undefined) setIsMock(parsed.isMock);
                 if (parsed.ruleGroups) setRuleGroups(normalizeRuleGroups(parsed.ruleGroups));
             } catch (e) {
                 console.error("Failed to parse assessment draft", e);
@@ -120,6 +121,7 @@ export default function CreateAssessmentPage() {
     const [duration, setDuration] = useState<number | string>("");
     const [totalMarks, setTotalMarks] = useState<number | string>("");
     const [passingScore, setPassingScore] = useState<number | string>("");
+    const [isMock, setIsMock] = useState(false);
     const [ruleGroups, setRuleGroups] = useState<RuleGroup[]>([]);
     
     const [submitting, setSubmitting] = useState(false);
@@ -138,10 +140,11 @@ export default function CreateAssessmentPage() {
             duration,
             totalMarks,
             passingScore,
+            isMock,
             ruleGroups
         };
         localStorage.setItem("assessmentDraft", JSON.stringify(draft));
-    }, [step, title, description, duration, totalMarks, passingScore, ruleGroups]);
+    }, [step, title, description, duration, totalMarks, passingScore, isMock, ruleGroups]);
 
     // Auth protection
     if (isLoading) return <div className="min-h-screen flex items-center justify-center bg-gray-50 text-gray-600">Loading...</div>;
@@ -403,6 +406,7 @@ export default function CreateAssessmentPage() {
                 duration: Number(duration),
                 passing_score: Number(passingScore),
                 total_marks: Number(totalMarks),
+                is_mock: isMock,
                 question_rules: flattenedRules
             };
 
@@ -530,6 +534,25 @@ export default function CreateAssessmentPage() {
                                     min={1}
                                 />
                             </div>
+                        </div>
+
+                        <div className="pt-4 border-t border-gray-100">
+                            <label className="flex items-center gap-3 cursor-pointer">
+                                <div className="relative">
+                                    <input 
+                                        type="checkbox" 
+                                        className="sr-only"
+                                        checked={isMock}
+                                        onChange={(e) => setIsMock(e.target.checked)}
+                                    />
+                                    <div className={`block w-14 h-8 rounded-full transition-colors ${isMock ? 'bg-indigo-600' : 'bg-gray-300'}`}></div>
+                                    <div className={`dot absolute left-1 top-1 bg-white w-6 h-6 rounded-full transition-transform ${isMock ? 'transform translate-x-6' : ''}`}></div>
+                                </div>
+                                <div>
+                                    <div className="text-sm font-semibold text-gray-900">Public Mock Exam</div>
+                                    <div className="text-xs text-gray-500">Enable this to allow anyone to take the exam without OTP verification.</div>
+                                </div>
+                            </label>
                         </div>
 
                         <div className="flex justify-end pt-6 border-t border-gray-100">

@@ -11,11 +11,15 @@ import (
 )
 
 type PublicController struct {
-	authService services.AuthService
+	authService   services.AuthService
+	assessService services.AssessmentService
 }
 
-func NewPublicController(authService services.AuthService) *PublicController {
-	return &PublicController{authService: authService}
+func NewPublicController(authService services.AuthService, assessService services.AssessmentService) *PublicController {
+	return &PublicController{
+		authService:   authService,
+		assessService: assessService,
+	}
 }
 
 // StartPublicAssessment handles guest login/signup for taking a test
@@ -110,5 +114,50 @@ func (ctrl *PublicController) StartAssessmentOTP(c *gin.Context) {
 			"email": user.Email,
 			"role":  user.Role,
 		},
+	})
+}
+
+// SendOTP triggers MSG91 to send an OTP to the candidate
+func (ctrl *PublicController) SendOTP(c *gin.Context) {
+	var input struct {
+		Phone string `json:"phone" binding:"required"`
+	}
+
+	if err := c.ShouldBindJSON(&input); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	if err := ctrl.authService.SendOTP(ctx, input.Phone); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to send OTP: " + err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"message": "OTP sent successfully"})
+}
+
+// GetAssessmentMetadata fetches public details about an assessment without requiring authentication
+func (ctrl *PublicController) GetAssessmentMetadata(c *gin.Context) {
+	id := c.Param("id")
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	// Use "public" role to indicate this is an unauthenticated request
+	assessment, err := ctrl.assessService.GetAssessmentByID(ctx, id, "public")
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "Assessment not found"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"id":          assessment.ID.Hex(),
+		"title":       assessment.Title,
+		"duration":    assessment.Duration,
+		"is_mock":     assessment.IsMock,
+		"total_marks": assessment.TotalMarks,
 	})
 }

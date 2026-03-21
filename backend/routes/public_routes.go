@@ -12,5 +12,7 @@ func SetupPublicRoutes(router *gin.Engine, publicCtrl *controllers.PublicControl
 		public.POST("/start", publicCtrl.StartPublicAssessment)
 		public.POST("/demo", publicCtrl.StartDemoAssessment)
 		public.POST("/start-otp", publicCtrl.StartAssessmentOTP)
+		public.POST("/send-otp", publicCtrl.SendOTP)
+		public.GET("/assessments/:id/metadata", publicCtrl.GetAssessmentMetadata)
 	}
 }

@@ -5,17 +5,16 @@ import { useRouter, useParams } from "next/navigation";
 import { useToast } from "@/components/ui/Toast";
 import { Phone, ShieldCheck, ArrowRight, BookOpen, Loader2, CheckCircle, ShieldAlert } from "lucide-react";
 
-const MOCK_ASSESSMENT_IDS = new Set(["69ba9948d20afc20b4ee066b"]);
-
 export default function PublicAssessmentLanding() {
     const router = useRouter();
     const params = useParams();
     const { showToast } = useToast();
 
     const assessmentId = Array.isArray(params.id) ? params.id[0] : params.id;
-    const isMockAssessment = !!assessmentId && MOCK_ASSESSMENT_IDS.has(assessmentId);
 
     const [loading, setLoading] = useState(true);
+    const [isMockAssessment, setIsMockAssessment] = useState(false);
+    const [assessmentTitle, setAssessmentTitle] = useState("");
     const [phone, setPhone] = useState("");
     const [otp, setOtp] = useState(["", "", "", ""]);
     const [step, setStep] = useState<"phone" | "otp">("phone");
@@ -48,12 +47,26 @@ export default function PublicAssessmentLanding() {
         }
 
         if (assessmentId) {
-            const token = localStorage.getItem("token");
-            const storedUser = localStorage.getItem("user");
-            if (token && storedUser) {
-                router.replace(`/public/assessments/${assessmentId}/take`);
-                return;
-            }
+            const base = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8080";
+            fetch(`${base}/api/public/assessments/${assessmentId}/metadata`)
+                .then(res => res.json())
+                .then(data => {
+                    setIsMockAssessment(data.is_mock === true);
+                    if (data.title) setAssessmentTitle(data.title);
+
+                    const token = localStorage.getItem("token");
+                    const storedUser = localStorage.getItem("user");
+                    if (token && storedUser) {
+                        router.replace(`/public/assessments/${assessmentId}/take`);
+                        return;
+                    }
+                    setLoading(false);
+                })
+                .catch(err => {
+                    console.error("Failed to fetch metadata", err);
+                    setLoading(false);
+                });
+            return;
         }
 
         setLoading(false);
@@ -132,11 +145,24 @@ export default function PublicAssessmentLanding() {
         }
 
         setSendingOtp(true);
-        await new Promise(res => setTimeout(res, 800));
-        setSendingOtp(false);
-        setStep("otp");
-        showToast("OTP sent to your phone!", "success");
-        setTimeout(() => otpRefs[0].current?.focus(), 100);
+        try {
+            const base = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8080";
+            const res = await fetch(`${base}/api/public/send-otp`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ phone: cleaned }),
+            });
+            const data = await res.json();
+            if (!res.ok) throw new Error(data.error || "Failed to send OTP");
+
+            showToast("OTP sent to your phone!", "success");
+            setStep("otp");
+            setTimeout(() => otpRefs[0].current?.focus(), 100);
+        } catch (err: any) {
+            showToast(err.message || "Failed to send OTP", "error");
+        } finally {
+            setSendingOtp(false);
+        }
     };
 
     const handleOtpChange = (index: number, value: string) => {
@@ -247,8 +273,11 @@ export default function PublicAssessmentLanding() {
                             <BookOpen size={32} />
                         </div>
                         <h1 className="text-2xl font-bold text-gray-900 mb-1">
-                            {isMockAssessment ? "Start Your Mock Assessment" : (step === "phone" ? "Verify Your Identity" : "Enter OTP")}
+                            {isMockAssessment ? "Start Mock Assessment" : (step === "phone" ? "Verify Your Identity" : "Enter OTP")}
                         </h1>
+                        {assessmentTitle && (
+                            <div className="text-indigo-600 font-bold mb-3">{assessmentTitle}</div>
+                        )}
                         <p className="text-gray-500 text-sm">
                             {isMockAssessment
                                 ? "This public mock assessment does not require phone verification. Start when you are ready."

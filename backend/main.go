@@ -123,7 +123,8 @@ func main() {
 	auditLogRepo := repositories.NewAuditLogRepository(auditLogCollection)
 
 	// Initialize Services
-	authService := services.NewAuthService(userRepo)
+	otpService := services.NewOTPService()
+	authService := services.NewAuthService(userRepo, otpService)
 	assessService := services.NewAssessmentService(assessRepo, qbRepo)
 	auditLogService := services.NewAuditLogService(auditLogRepo)
 	submissionService := services.NewSubmissionService(subRepo, assessRepo, userRepo, qbRepo, auditLogService)
@@ -134,7 +135,7 @@ func main() {
 	authCtrl := controllers.NewAuthController(authService)
 	googleCtrl := controllers.NewGoogleAuthController(authService)
 	youtubeCtrl := controllers.NewYouTubeController(userRepo, assessRepo, subRepo)
-	publicCtrl := controllers.NewPublicController(authService)
+	publicCtrl := controllers.NewPublicController(authService, assessService)
 	assessCtrl := controllers.NewAssessmentController(assessService, submissionService)
 	interviewCtrl := controllers.NewInterviewController(interviewService)
 	teleProxyCtrl := controllers.NewTelegramProxyController()

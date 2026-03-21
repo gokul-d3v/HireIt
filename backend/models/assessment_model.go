@@ -41,6 +41,7 @@ type Assessment struct {
 	Title         string             `bson:"title" json:"title" binding:"required"`
 	Description   string             `bson:"description" json:"description"`
 	Duration      int                `bson:"duration" json:"duration"` // In minutes
+	IsMock        bool               `bson:"is_mock" json:"is_mock"`
 	QuestionRules []QuestionRule     `bson:"question_rules" json:"question_rules"`
 	Questions     []Question         `json:"questions,omitempty" bson:"-"` // Virtual field for API response
 	CreatedBy     primitive.ObjectID `bson:"created_by" json:"created_by"`

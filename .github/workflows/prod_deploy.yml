@@ -20,7 +20,7 @@ jobs:
         run: echo "REPO_LOWER=${GITHUB_REPOSITORY,,}" >> ${GITHUB_ENV}
 
       - name: Log in to GHCR
-        run: echo ${{ secrets.GITHUB_TOKEN }} | docker login ghcr.io -u ${{ github.actor }} --password-stdin
+        run: echo ${{ secrets.GITHUB_TOKEN  }} | docker login ghcr.io -u ${{ github.actor }} --password-stdin
 
       - name: Build and Push Backend Image
         run: |
@@ -54,7 +54,7 @@ jobs:
     runs-on: [self-hosted, prod]
     steps:
       - name: Checkout Repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v4 
         with:
           ref: main
 

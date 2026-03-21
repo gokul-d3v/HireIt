@@ -23,15 +23,20 @@ type AuthService interface {
 	StartPublicAssessment(ctx context.Context, name, email, phone string) (string, *models.User, error)
 	StartDemoAssessment(ctx context.Context) (string, *models.User, error)
 	StartAssessmentWithOTP(ctx context.Context, phone, otp string) (string, *models.User, error)
+	SendOTP(ctx context.Context, phone string) error
 }
 
 type authService struct {
-	userRepo repositories.UserRepository
+	userRepo   repositories.UserRepository
+	otpService OTPService
 }
 
 // NewAuthService creates a new implementation of AuthService
-func NewAuthService(repo repositories.UserRepository) AuthService {
-	return &authService{userRepo: repo}
+func NewAuthService(repo repositories.UserRepository, otpService OTPService) AuthService {
+	return &authService{
+		userRepo:   repo,
+		otpService: otpService,
+	}
 }
 
 func (s *authService) Signup(ctx context.Context, user *models.User) (string, error) {
@@ -193,16 +198,13 @@ func (s *authService) StartDemoAssessment(ctx context.Context) (string, *models.
 }
 
 func (s *authService) StartAssessmentWithOTP(ctx context.Context, phone, otp string) (string, *models.User, error) {
-	// Validate OTP against environment variable
-	expectedOTP := os.Getenv("DEVELOPMENT_OTP")
-	if expectedOTP == "" {
-		return "", nil, errors.New("OTP not configured")
-	}
-	if otp != expectedOTP {
+	phone = utils.NormalizePhone(phone)
+
+	// Verify OTP via MSG91
+	ok, err := s.otpService.VerifyOTP(phone, otp)
+	if err != nil || !ok {
 		return "", nil, errors.New("invalid OTP")
 	}
-
-	phone = utils.NormalizePhone(phone)
 
 	// Look up candidate by phone number (they must be pre-registered)
 	user, err := s.userRepo.FindByPhone(ctx, phone)
@@ -216,6 +218,11 @@ func (s *authService) StartAssessmentWithOTP(ctx context.Context, phone, otp str
 	}
 
 	return tokenString, user, nil
+}
+
+func (s *authService) SendOTP(ctx context.Context, phone string) error {
+	phone = utils.NormalizePhone(phone)
+	return s.otpService.SendOTP(phone)
 }
 
 func (s *authService) generateJWT(user *models.User) (string, error) {

@@ -75,6 +75,7 @@ export default function EditAssessmentPage() {
     const [duration, setDuration] = useState<number | string>(60);
     const [totalMarks, setTotalMarks] = useState<number | string>(100);
     const [passingScore, setPassingScore] = useState<number | string>(50);
+    const [isMock, setIsMock] = useState(false);
     const [ruleGroups, setRuleGroups] = useState<RuleGroup[]>([]);
     const [loading, setLoading] = useState(true);
     const [submitting, setSubmitting] = useState(false);
@@ -99,6 +100,7 @@ export default function EditAssessmentPage() {
             setDuration(data.duration);
             setTotalMarks(data.total_marks || 100);
             setPassingScore(data.passing_score || 50);
+            setIsMock(data.is_mock || false);
             
             // Group the flat rules back into RuleGroups
             const flatRules: Array<{
@@ -289,6 +291,7 @@ export default function EditAssessmentPage() {
                 duration: Number(duration),
                 total_marks: Number(totalMarks),
                 passing_score: Number(passingScore),
+                is_mock: isMock,
                 question_rules: flattenedRules,
             });
             showToast("Assessment updated successfully!", "success");
@@ -384,6 +387,25 @@ export default function EditAssessmentPage() {
                                     className="w-full p-3 font-bold text-gray-900 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-100 focus:border-indigo-600 focus:outline-none transition-all"
                                 />
                             </div>
+                        </div>
+
+                        <div className="pt-4 border-t border-gray-100">
+                            <label className="flex items-center gap-3 cursor-pointer">
+                                <div className="relative">
+                                    <input 
+                                        type="checkbox" 
+                                        className="sr-only"
+                                        checked={isMock}
+                                        onChange={(e) => setIsMock(e.target.checked)}
+                                    />
+                                    <div className={`block w-14 h-8 rounded-full transition-colors ${isMock ? 'bg-indigo-600' : 'bg-gray-300'}`}></div>
+                                    <div className={`dot absolute left-1 top-1 bg-white w-6 h-6 rounded-full transition-transform ${isMock ? 'transform translate-x-6' : ''}`}></div>
+                                </div>
+                                <div>
+                                    <div className="text-sm font-semibold text-gray-900">Public Mock Exam</div>
+                                    <div className="text-xs text-gray-500">Enable this to allow anyone to take the exam without OTP verification.</div>
+                                </div>
+                            </label>
                         </div>
                     </div>
                 </div>
