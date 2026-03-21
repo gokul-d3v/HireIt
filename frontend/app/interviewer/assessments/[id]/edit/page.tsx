@@ -94,7 +94,7 @@ export default function EditAssessmentPage() {
 
     const fetchAssessment = useCallback(async (id: string) => {
         try {
-            const data = await apiRequest(`/assessments/${id}`, "GET");
+            const data = await apiRequest(`/api/assessments/${id}`, "GET");
             setTitle(data.title);
             setDescription(data.description);
             setDuration(data.duration);

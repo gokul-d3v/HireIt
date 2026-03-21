@@ -48,18 +48,22 @@ export default function PublicAssessmentLanding() {
 
         if (assessmentId) {
             const base = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8080";
-            fetch(`${base}/public/assessments/${assessmentId}/metadata`)
+            console.log(base);
+            fetch(`${base}/api/public/assessments/${assessmentId}/metadata`)
                 .then(res => res.json())
                 .then(data => {
+                    console.log("metadata", data);
                     setIsMockAssessment(data.is_mock === true);
                     if (data.title) setAssessmentTitle(data.title);
-
+                    console.log("metadata title", data);
                     const token = localStorage.getItem("token");
                     const storedUser = localStorage.getItem("user");
                     if (token && storedUser) {
                         router.replace(`/public/assessments/${assessmentId}/take`);
                         return;
                     }
+                    console.log("metadata token", token);
+                    console.log("metadata storedUser", storedUser);
                     setLoading(false);
                 })
                 .catch(err => {
@@ -84,7 +88,7 @@ export default function PublicAssessmentLanding() {
         setSubmitting(true);
         try {
             const base = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8080";
-            const res = await fetch(`${base}/public/start-otp`, {
+            const res = await fetch(`${base}/api/public/start-otp`, {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({ phone: phone.trim(), otp: otpStr }),
@@ -113,7 +117,7 @@ export default function PublicAssessmentLanding() {
 
         try {
             const base = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8080";
-            const res = await fetch(`${base}/public/demo`, { method: "POST" });
+            const res = await fetch(`${base}/api/public/demo`, { method: "POST" });
             const data = await res.json();
 
             if (!res.ok || !data.token || !data.user) {
@@ -147,7 +151,7 @@ export default function PublicAssessmentLanding() {
         setSendingOtp(true);
         try {
             const base = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8080";
-            const res = await fetch(`${base}/public/send-otp`, {
+            const res = await fetch(`${base}/api/public/send-otp`, {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({ phone: cleaned }),
@@ -201,7 +205,7 @@ export default function PublicAssessmentLanding() {
         setSubmitting(true);
         try {
             const base = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8080";
-            const res = await fetch(`${base}/public/start-otp`, {
+            const res = await fetch(`${base}/api/public/start-otp`, {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({ phone: phone.trim(), otp: otpStr }),
