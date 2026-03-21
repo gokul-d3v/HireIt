@@ -85,7 +85,7 @@ export default function EditAssessmentPage() {
         // Fetch dynamic bank config
         const token = localStorage.getItem("token");
         const headers: Record<string, string> = token ? { Authorization: `Bearer ${token}` } : {};
-        const base = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8080";
+        const base = process.env.DEV_NEXT_PUBLIC_API_URL || "http://localhost:8080";
         fetch(`${base}/api/admin/questions/config`, { headers })
             .then(r => r.json())
             .then(d => setBankConfig(d))
@@ -101,7 +101,7 @@ export default function EditAssessmentPage() {
             setTotalMarks(data.total_marks || 100);
             setPassingScore(data.passing_score || 50);
             setIsMock(data.is_mock || false);
-            
+
             // Group the flat rules back into RuleGroups
             const flatRules: Array<{
                 category: string;
@@ -112,7 +112,7 @@ export default function EditAssessmentPage() {
                 display_order?: number;
             }> = data.question_rules || [];
             const groups: RuleGroup[] = [];
-            
+
             flatRules.forEach((rule, index) => {
                 const displayOrder = sanitizeDisplayOrder(rule.display_order, index + 1);
                 let group = groups.find(
@@ -136,7 +136,7 @@ export default function EditAssessmentPage() {
                     points_per_question: rule.points_per_question
                 });
             });
-            
+
             setRuleGroups(normalizeRuleGroups(groups));
         } catch (err) {
             console.error("Failed to fetch assessment", err);
@@ -246,7 +246,7 @@ export default function EditAssessmentPage() {
             if (!/^\d*$/.test(value)) return;
             finalValue = parseInt(value) || 0;
         }
-        
+
         newGroups[gIndex].difficulties[dIndex] = { ...newGroups[gIndex].difficulties[dIndex], [field]: finalValue };
         setRuleGroups(newGroups);
     };
@@ -260,7 +260,7 @@ export default function EditAssessmentPage() {
         setRuleGroups(newGroups);
     };
 
-    const flattenedRules = ruleGroups.flatMap(g => 
+    const flattenedRules = ruleGroups.flatMap(g =>
         g.difficulties.map(d => ({
             category: g.category,
             sub_category: g.sub_category,
@@ -276,7 +276,7 @@ export default function EditAssessmentPage() {
             showToast("Please enter a title", "error");
             return;
         }
-        
+
         const currentPointsTotal = flattenedRules.reduce((sum, r) => sum + (r.count * r.points_per_question), 0);
         if (currentPointsTotal !== Number(totalMarks)) {
             showToast(`Configured Question Points (${currentPointsTotal}) must exactly match Total Marks (${totalMarks})`, "error");
@@ -327,8 +327,8 @@ export default function EditAssessmentPage() {
                             <p className="text-gray-700 font-medium">Update configuration and question sampling rules.</p>
                         </div>
                         <div className="text-right">
-                             <div className="text-xs font-bold text-gray-600 uppercase tracking-widest mb-1">Status</div>
-                             <span className="px-3 py-1 bg-indigo-100 text-indigo-700 rounded-full text-xs font-bold tracking-wide">DRAFT</span>
+                            <div className="text-xs font-bold text-gray-600 uppercase tracking-widest mb-1">Status</div>
+                            <span className="px-3 py-1 bg-indigo-100 text-indigo-700 rounded-full text-xs font-bold tracking-wide">DRAFT</span>
                         </div>
                     </div>
 
@@ -392,8 +392,8 @@ export default function EditAssessmentPage() {
                         <div className="pt-4 border-t border-gray-100">
                             <label className="flex items-center gap-3 cursor-pointer">
                                 <div className="relative">
-                                    <input 
-                                        type="checkbox" 
+                                    <input
+                                        type="checkbox"
                                         className="sr-only"
                                         checked={isMock}
                                         onChange={(e) => setIsMock(e.target.checked)}
@@ -427,8 +427,8 @@ export default function EditAssessmentPage() {
                     <div className="space-y-6">
                         {ruleGroups.length === 0 ? (
                             <div className="text-center py-12 bg-gray-50 rounded-xl border-2 border-dashed border-gray-200">
-                                 <Plus size={32} className="mx-auto text-gray-400 mb-2" />
-                                 <p className="text-gray-700 font-bold">No sampling rules defined yet.</p>
+                                <Plus size={32} className="mx-auto text-gray-400 mb-2" />
+                                <p className="text-gray-700 font-bold">No sampling rules defined yet.</p>
                             </div>
                         ) : (
                             ruleGroups.map((group, gIdx) => {
@@ -537,7 +537,7 @@ export default function EditAssessmentPage() {
                                                                 className="w-full p-2.5 text-center font-bold text-gray-900 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-100 focus:border-indigo-500 focus:outline-none bg-white transition-all"
                                                             />
                                                         </div>
-                                                        
+
                                                         <button
                                                             onClick={() => removeDifficulty(gIdx, dIdx)}
                                                             className="p-2.5 text-red-400 hover:text-red-600 hover:bg-white rounded-lg transition-all mb-[1px]"
@@ -548,7 +548,7 @@ export default function EditAssessmentPage() {
                                                     </div>
                                                 ))}
                                             </div>
-                                            
+
                                             <button
                                                 onClick={() => addDifficulty(gIdx)}
                                                 className="mt-4 flex items-center gap-2 text-sm text-indigo-600 font-semibold hover:text-indigo-800 transition-colors"
@@ -560,7 +560,7 @@ export default function EditAssessmentPage() {
                                         <div className="flex-none w-full bg-indigo-50 rounded-lg p-3 border border-indigo-100 text-sm text-indigo-900 flex justify-between items-center mt-2">
                                             <span>#{group.display_order} Total for {group.category} {group.sub_category ? ` → ${group.sub_category}` : ''}</span>
                                             <span className="font-bold text-indigo-700">
-                                                Pts: {group.difficulties.reduce((sum, d) => sum + (Number(d.count) * Number(d.points_per_question)), 0)} 
+                                                Pts: {group.difficulties.reduce((sum, d) => sum + (Number(d.count) * Number(d.points_per_question)), 0)}
                                             </span>
                                         </div>
                                     </div>

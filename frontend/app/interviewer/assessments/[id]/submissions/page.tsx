@@ -70,11 +70,11 @@ export default function SubmissionsPage() {
         if (!start || !end) return "-";
         const diffMs = new Date(end).getTime() - new Date(start).getTime();
         if (diffMs < 0) return "0s";
-        
+
         const totalSeconds = Math.floor(diffMs / 1000);
         const mins = Math.floor(totalSeconds / 60);
         const secs = totalSeconds % 60;
-        
+
         if (mins === 0) return `${secs}s`;
         return `${mins}m ${secs}s`;
     };
@@ -122,7 +122,7 @@ export default function SubmissionsPage() {
                                     submissions.map((sub) => (
                                         <tr key={sub.id} className="hover:bg-gray-50 transition">
                                             <td className="p-4">
-                                                <button 
+                                                <button
                                                     onClick={() => setSelectedSubmission(sub)}
                                                     className="text-left group/name"
                                                 >
@@ -145,9 +145,9 @@ export default function SubmissionsPage() {
                                             <td className="p-4 text-gray-800 font-medium">
                                                 {new Date(sub.submitted_at).toLocaleString()}
                                             </td>
-                                             <td className="p-4 text-gray-800 text-right font-bold">
+                                            <td className="p-4 text-gray-800 text-right font-bold">
                                                 {formatDuration(sub.started_at, sub.submitted_at)}
-                                             </td>
+                                            </td>
                                         </tr>
                                     ))
                                 )}
@@ -233,7 +233,7 @@ export default function SubmissionsPage() {
                                     );
                                 })
                             )}
-                            
+
                             {activeTab === 'monitoring' && (
                                 <div className="space-y-6">
                                     <div className="bg-white border border-gray-200 rounded-xl p-4 shadow-sm">
@@ -242,9 +242,9 @@ export default function SubmissionsPage() {
                                             <table className="w-full text-left text-xs whitespace-nowrap">
                                                 <thead className="text-gray-500 border-b border-gray-200 font-semibold bg-gray-50 uppercase tracking-wider">
                                                     <tr>
-                                                        <th className="py-4 px-4 align-top w-12">Sr.<br/>No.</th>
+                                                        <th className="py-4 px-4 align-top w-12">Sr.<br />No.</th>
                                                         <th className="py-4 pr-4 align-top"><span className="flex items-center gap-1 text-indigo-500">📷 Snapshot</span></th>
-                                                        <th className="py-4 pr-4 align-top"><span className="flex items-center gap-1 text-green-500">📅 Date &<br/>Time</span></th>
+                                                        <th className="py-4 pr-4 align-top"><span className="flex items-center gap-1 text-green-500">📅 Date &<br />Time</span></th>
                                                         <th className="py-4 pr-4 align-top">Description</th>
                                                         <th className="py-4 px-2 align-top text-center"><span className="flex items-center gap-1 text-purple-600 justify-center">👁️ Faces</span></th>
                                                         <th className="py-4 px-2 align-top text-center"><span className="flex items-center gap-1 text-orange-500 justify-center">📦 Objects</span></th>
@@ -262,7 +262,7 @@ export default function SubmissionsPage() {
                                                                 </div>
                                                             </td>
                                                             <td className="py-4 pr-4 text-gray-700 font-medium">
-                                                                {new Date(selectedSubmission.started_at).toLocaleDateString()}<br/>
+                                                                {new Date(selectedSubmission.started_at).toLocaleDateString()}<br />
                                                                 {new Date(selectedSubmission.started_at).toLocaleTimeString()}
                                                             </td>
                                                             <td className="py-4 pr-4 text-gray-800">Exam Started (Initial Face Verify). Candidate present on screen.</td>
@@ -272,7 +272,7 @@ export default function SubmissionsPage() {
                                                             <td className="py-4 px-2 text-center text-gray-600">Straight ahead</td>
                                                         </tr>
                                                     )}
-                                                    
+
                                                     {(selectedSubmission.violations || []).map((v, i) => (
                                                         <tr key={i} className={`hover:bg-gray-50 border-b border-gray-100 ${v.type !== 'info' ? 'bg-red-50/50' : ''}`}>
                                                             <td className="py-4 px-4 text-gray-500 font-medium">{i + 2}</td>
@@ -282,9 +282,9 @@ export default function SubmissionsPage() {
                                                                         v.evidence.startsWith('data:') ? (
                                                                             <img src={v.evidence} alt="Violation" className="w-full h-full object-cover" />
                                                                         ) : v.evidence.startsWith('https://youtu.be/') ? (
-                                                                            <a 
-                                                                                href={v.evidence} 
-                                                                                target="_blank" 
+                                                                            <a
+                                                                                href={v.evidence}
+                                                                                target="_blank"
                                                                                 rel="noopener noreferrer"
                                                                                 className="w-full h-full flex flex-col items-center justify-center bg-gray-900 border border-indigo-500/30 text-[10px] text-indigo-400 hover:text-white transition-colors"
                                                                             >
@@ -293,8 +293,8 @@ export default function SubmissionsPage() {
                                                                             </a>
                                                                         ) : (
                                                                             <>
-                                                                                <video 
-                                                                                    src={v.evidence.startsWith('/') ? `${process.env.NEXT_PUBLIC_API_URL || "http://localhost:8080"}${v.evidence}` : v.evidence} 
+                                                                                <video
+                                                                                    src={v.evidence.startsWith('/') ? `${process.env.DEV_NEXT_PUBLIC_API_URL || "http://localhost:8080"}${v.evidence}` : v.evidence}
                                                                                     className="w-full h-full object-cover"
                                                                                     muted
                                                                                     playsInline
@@ -315,7 +315,7 @@ export default function SubmissionsPage() {
                                                                 </div>
                                                             </td>
                                                             <td className="py-4 pr-4 text-gray-700 font-medium">
-                                                                {new Date(v.timestamp || selectedSubmission.started_at).toLocaleDateString()}<br/>
+                                                                {new Date(v.timestamp || selectedSubmission.started_at).toLocaleDateString()}<br />
                                                                 {new Date(v.timestamp || selectedSubmission.started_at).toLocaleTimeString()}
                                                             </td>
                                                             <td className={`py-4 pr-4 ${v.type !== 'info' ? 'text-red-700 font-medium' : 'text-gray-800'}`}>
@@ -337,7 +337,7 @@ export default function SubmissionsPage() {
                                                                 </div>
                                                             </td>
                                                             <td className="py-4 pr-4 text-gray-700 font-medium">
-                                                                {new Date(selectedSubmission.submitted_at).toLocaleDateString()}<br/>
+                                                                {new Date(selectedSubmission.submitted_at).toLocaleDateString()}<br />
                                                                 {new Date(selectedSubmission.submitted_at).toLocaleTimeString()}
                                                             </td>
                                                             <td className="py-4 pr-4 text-gray-800">Exam Submitted. Candidate present on screen.</td>
@@ -351,7 +351,7 @@ export default function SubmissionsPage() {
                                             </table>
                                         </div>
                                     </div>
-                                    
+
                                     <div className="grid grid-cols-2 gap-6">
                                         <div className="bg-white border border-gray-200 rounded-xl p-6 shadow-sm">
                                             <h4 className="text-sm font-bold text-gray-900 mb-4 tracking-wide uppercase">Session Details</h4>
@@ -359,9 +359,9 @@ export default function SubmissionsPage() {
                                                 <div className="w-8 h-8 rounded-full bg-blue-50 text-blue-600 flex items-center justify-center"><Clock size={16} /></div>
                                                 <div>
                                                     <p className="text-gray-500 text-xs">Total Duration</p>
-                                                     <p className="font-medium text-gray-900 text-sm">
+                                                    <p className="font-medium text-gray-900 text-sm">
                                                         {formatDuration(selectedSubmission.started_at, selectedSubmission.submitted_at)}
-                                                     </p>
+                                                    </p>
                                                 </div>
                                             </div>
                                         </div>
@@ -369,7 +369,7 @@ export default function SubmissionsPage() {
                                             <h4 className="text-sm font-bold text-gray-900 mb-4 tracking-wide uppercase">Face Auth Status</h4>
                                             <div className="flex gap-4">
                                                 <div className="w-16 h-16 rounded overflow-hidden shadow-sm bg-black">
-                                                     <img src={selectedSubmission.face_snapshots?.initial_image} className="w-full h-full object-cover" />
+                                                    <img src={selectedSubmission.face_snapshots?.initial_image} className="w-full h-full object-cover" />
                                                 </div>
                                                 <div className="flex-1 space-y-1">
                                                     <div className="flex justify-between text-xs">

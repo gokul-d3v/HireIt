@@ -50,16 +50,16 @@ export default function AssessmentPlayer({ assessmentId, onComplete }: Assessmen
             try {
                 const user = JSON.parse(storedUser);
                 isDemoUser.current = !!user.is_demo;
-            } catch (e) {}
+            } catch (e) { }
         }
 
         // Device Restriction Check
         const ua = navigator.userAgent;
         const mobileRegex = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i;
         const tabletRegex = /(ipad|tablet|(android(?!.*mobile))|(windows(?!.*phone)(.*touch))|kindle|playbook|silk|(puffin(?!.*(IP|AP|WP))))/;
-        
+
         const isMobileOrTablet = mobileRegex.test(ua) || tabletRegex.test(ua.toLowerCase()) || (navigator.maxTouchPoints > 0 && window.innerWidth < 1024);
-        
+
         if (isMobileOrTablet) {
             setIsRestrictedDevice(true);
         }
@@ -175,7 +175,7 @@ export default function AssessmentPlayer({ assessmentId, onComplete }: Assessmen
             }
 
             const snapshotData = { image: imageBase64, descriptor };
-            
+
             // Update ref to avoid stale closures in submit function
             snapshotsRef.current[type] = snapshotData;
 
@@ -275,10 +275,10 @@ export default function AssessmentPlayer({ assessmentId, onComplete }: Assessmen
             handleViolation(reason, evidenceBase64);
         } else {
             showHeaderWarning(reason);
-            
+
             const now = Date.now();
             const lastTime = lastViolationTimeRef.current[type] || 0;
-            
+
             // Apply a 60-second cooldown per non-fatal violation type for BACKEND logging only
             if (now - lastTime < 60000) {
                 return;
@@ -300,17 +300,17 @@ export default function AssessmentPlayer({ assessmentId, onComplete }: Assessmen
             // Start 7-second Video Evidence Recording
             if (stream && !isRecordingRef.current && !isDemoUser.current) {
                 isRecordingRef.current = true;
-                
+
                 if (typeof MediaRecorder === 'undefined') {
                     console.warn("MediaRecorder is not supported in this browser or context.");
                     return;
                 }
 
                 // Determine supported mime type
-                const mimeType = MediaRecorder.isTypeSupported('video/webm;codecs=vp8') 
-                    ? 'video/webm;codecs=vp8' 
-                    : MediaRecorder.isTypeSupported('video/webm') 
-                        ? 'video/webm' 
+                const mimeType = MediaRecorder.isTypeSupported('video/webm;codecs=vp8')
+                    ? 'video/webm;codecs=vp8'
+                    : MediaRecorder.isTypeSupported('video/webm')
+                        ? 'video/webm'
                         : 'video/mp4';
 
                 const mediaRecorder = new MediaRecorder(stream, { mimeType });
@@ -329,7 +329,7 @@ export default function AssessmentPlayer({ assessmentId, onComplete }: Assessmen
 
                     try {
                         const token = localStorage.getItem("token");
-                        const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || "http://localhost:8080"}/api/assessments/${assessmentId}/upload-evidence`, {
+                        const res = await fetch(`${process.env.DEV_NEXT_PUBLIC_API_URL || "http://localhost:8080"}/api/assessments/${assessmentId}/upload-evidence`, {
                             method: "POST",
                             headers: token ? { "Authorization": `Bearer ${token}` } : {},
                             body: formData
@@ -459,7 +459,7 @@ export default function AssessmentPlayer({ assessmentId, onComplete }: Assessmen
             }
 
             setExamStarted(true);
-            
+
             // Notify backend that exam has started to initialize started_at
             apiRequest(`/api/assessments/${assessmentId}/progress`, "POST", {
                 answers: [],
@@ -473,7 +473,7 @@ export default function AssessmentPlayer({ assessmentId, onComplete }: Assessmen
             detectionInterval.current = setInterval(async () => {
                 if (videoRef.current && videoRef.current.readyState === 4) {
                     const predictions = await model.estimateFaces(videoRef.current, false);
-                    
+
                     if (predictions.length === 0) {
                         captureEvidenceAndViolate("Camera blocked or no face detected", false, "camera_blockage");
                     } else {
@@ -638,7 +638,7 @@ export default function AssessmentPlayer({ assessmentId, onComplete }: Assessmen
             saveProgress();
         }, 2000); // Auto-save every 2s after last change
 
-         return () => clearTimeout(timer);
+        return () => clearTimeout(timer);
     }, [answers, assessment, loggedViolations]);
 
     // Pause audio clip when navigating to a different question
@@ -654,27 +654,27 @@ export default function AssessmentPlayer({ assessmentId, onComplete }: Assessmen
         const violationsToSave = overrideViolations || loggedViolations;
 
         try {
-           const formattedAnswers = assessment.questions.map(q => {
-               let value = answers[q.id] || "";
-               // If MCQ, mapping index back to text
-               if (q.type === "MCQ" && value !== "") {
-                   const idx = parseInt(value);
-                   if (!isNaN(idx) && q.options[idx]) {
-                       value = q.options[idx];
-                   }
-               }
-               return {
-                   question_id: q.id,
-                   value: value
-               };
-           }).filter(a => a.value !== ""); // Only save what we have
+            const formattedAnswers = assessment.questions.map(q => {
+                let value = answers[q.id] || "";
+                // If MCQ, mapping index back to text
+                if (q.type === "MCQ" && value !== "") {
+                    const idx = parseInt(value);
+                    if (!isNaN(idx) && q.options[idx]) {
+                        value = q.options[idx];
+                    }
+                }
+                return {
+                    question_id: q.id,
+                    value: value
+                };
+            }).filter(a => a.value !== ""); // Only save what we have
 
             if (formattedAnswers.length === 0) return;
 
-             await apiRequest(`/api/assessments/${assessment.id}/progress`, "POST", {
-                 answers: formattedAnswers,
-                 violations: violationsToSave
-             });
+            await apiRequest(`/api/assessments/${assessment.id}/progress`, "POST", {
+                answers: formattedAnswers,
+                violations: violationsToSave
+            });
             // Quietly save, no toast needed for background save
         } catch (err) {
             console.error("Failed to auto-save progress", err);
@@ -693,7 +693,7 @@ export default function AssessmentPlayer({ assessmentId, onComplete }: Assessmen
         timerRef.current = setInterval(() => {
             setTimeLeft((prev) => {
                 if (prev === null) return null;
-                
+
                 const next = prev - 1;
 
                 if (next === halfDuration && !middleSnapshotTaken) {
@@ -836,7 +836,7 @@ export default function AssessmentPlayer({ assessmentId, onComplete }: Assessmen
                             </li>
                         </ul>
                     </div>
-                    <button 
+                    <button
                         onClick={() => router.push('/candidate/assessments')}
                         className="w-full bg-indigo-600 text-white py-4 rounded-xl font-bold hover:bg-indigo-700 shadow-lg shadow-indigo-600/20 transition-all active:scale-[0.98]"
                     >
@@ -973,111 +973,111 @@ export default function AssessmentPlayer({ assessmentId, onComplete }: Assessmen
             <div className="flex-1 p-8 max-w-[1400px] mx-auto w-full flex gap-8">
                 {/* Left Column: Question Area */}
                 <div className="flex-1">
-                <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-8 min-h-[400px] flex flex-col">
-                    <div className="flex-1">
-                        <div className="mb-6">
-                            <span className="inline-block px-2 py-1 text-xs font-semibold bg-indigo-50 text-indigo-700 rounded mb-2">
-                                {currentQuestion.type} &bull; {currentQuestion.points} Points
-                            </span>
+                    <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-8 min-h-[400px] flex flex-col">
+                        <div className="flex-1">
+                            <div className="mb-6">
+                                <span className="inline-block px-2 py-1 text-xs font-semibold bg-indigo-50 text-indigo-700 rounded mb-2">
+                                    {currentQuestion.type} &bull; {currentQuestion.points} Points
+                                </span>
 
-                            {/* Audio Player for Listening questions */}
-                            {currentQuestion.audio_url && (
-                                <div className="mb-5 p-4 bg-gradient-to-r from-indigo-50 to-purple-50 border border-indigo-100 rounded-xl shadow-sm">
-                                    <div className="flex items-center gap-2 mb-2">
-                                        <Mic size={15} className="text-indigo-500" />
-                                        <span className="text-xs font-bold text-indigo-700 uppercase tracking-wider">Listening Passage — Play before answering</span>
+                                {/* Audio Player for Listening questions */}
+                                {currentQuestion.audio_url && (
+                                    <div className="mb-5 p-4 bg-gradient-to-r from-indigo-50 to-purple-50 border border-indigo-100 rounded-xl shadow-sm">
+                                        <div className="flex items-center gap-2 mb-2">
+                                            <Mic size={15} className="text-indigo-500" />
+                                            <span className="text-xs font-bold text-indigo-700 uppercase tracking-wider">Listening Passage — Play before answering</span>
+                                        </div>
+                                        <div className="p-3 bg-indigo-50/50 rounded-xl border border-indigo-100 flex items-center gap-3">
+                                            {currentQuestion.audio_url ? <audio ref={questionAudioRef} src={currentQuestion.audio_url.startsWith("http") ? currentQuestion.audio_url : `${process.env.DEV_NEXT_PUBLIC_API_URL || "http://localhost:8080"}${currentQuestion.audio_url}`} controls className="h-8 flex-1" /> : <span className="text-xs text-gray-600 font-medium">No Audio Configured for this Level</span>}
+                                        </div>
                                     </div>
-                                    <div className="p-3 bg-indigo-50/50 rounded-xl border border-indigo-100 flex items-center gap-3">
-                                        {currentQuestion.audio_url ? <audio ref={questionAudioRef} src={currentQuestion.audio_url.startsWith("http") ? currentQuestion.audio_url : `${process.env.NEXT_PUBLIC_API_URL || "http://localhost:8080"}${currentQuestion.audio_url}`} controls className="h-8 flex-1" /> : <span className="text-xs text-gray-600 font-medium">No Audio Configured for this Level</span>}
-                                    </div>
-                                </div>
-                            )}
-
-                            {currentQuestion.passage_text && (
-                                <div className="mb-5 p-5 bg-amber-50 border border-amber-200 rounded-xl shadow-sm">
-                                    <div className="flex items-center gap-2 mb-3">
-                                        <div className="w-2 h-2 rounded-full bg-amber-500"></div>
-                                        <span className="text-xs font-bold text-amber-700 uppercase tracking-wider">
-                                            {currentQuestion.passage_title || "Reading Passage"}
-                                        </span>
-                                    </div>
-                                    <div className="max-h-72 overflow-y-auto pr-2">
-                                        <p className="text-sm leading-relaxed text-slate-700 whitespace-pre-wrap">
-                                            {currentQuestion.passage_text}
-                                        </p>
-                                    </div>
-                                </div>
-                            )}
-
-                            <h2 className="text-2xl font-medium text-gray-900">
-                                {currentQuestionIndex + 1}. {currentQuestion.text.replace(/^\d+\.\s*/, '')}
-                            </h2>
-                        </div>
-
-                        <div className="space-y-4">
-                            {currentQuestion.type === "MCQ" && currentQuestion.options.map((opt, idx) => (
-                                <button
-                                    type="button"
-                                    key={idx}
-                                    onClick={() => handleAnswerChange(idx.toString())}
-                                    className={`w-full flex items-center gap-4 p-4 border-2 rounded-xl cursor-pointer transition text-left ${answers[currentQuestion.id] === idx.toString()
-                                        ? "border-indigo-500 bg-indigo-50 ring-1 ring-indigo-500"
-                                        : "border-gray-200 hover:bg-gray-50 hover:border-gray-300"
-                                        }`}
-                                >
-                                    <span className={`flex-none w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold transition ${answers[currentQuestion.id] === idx.toString()
-                                        ? "bg-indigo-600 text-white"
-                                        : "bg-gray-100 text-gray-500"
-                                        }`}>
-                                        {idx + 1}
-                                    </span>
-                                    <span className="text-gray-800 font-medium">{opt}</span>
-                                </button>
-                            ))}
-
-                            {(currentQuestion.type === "SUBJECTIVE" || currentQuestion.type === "CODING") && (
-                                <textarea
-                                    value={answers[currentQuestion.id] || ""}
-                                    onChange={(e) => handleAnswerChange(e.target.value)}
-                                    className="w-full h-64 p-4 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 font-mono text-sm leading-relaxed text-gray-900"
-                                    placeholder="Type your answer here..."
-                                />
-                            )}
-                        </div>
-                    </div>
-
-                    {/* Navigation */}
-                    <div className="mt-8 pt-6 border-t border-gray-100 flex justify-between items-center">
-                        <button
-                            onClick={() => setCurrentQuestionIndex(prev => Math.max(0, prev - 1))}
-                            disabled={currentQuestionIndex === 0}
-                            className="flex items-center gap-2 px-4 py-2 text-gray-700 hover:text-gray-900 font-bold disabled:opacity-50 disabled:cursor-not-allowed"
-                        >
-                            <ChevronLeft size={20} /> Previous
-                        </button>
-
-                        {isLastQuestion ? (
-                            <button
-                                onClick={confirmSubmit}
-                                disabled={submitting}
-                                className="flex items-center gap-2 px-6 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 shadow-sm disabled:opacity-70"
-                            >
-                                {submitting ? "Submitting..." : (
-                                    <>
-                                        Submit Assessment <CheckCircle size={18} />
-                                    </>
                                 )}
-                            </button>
-                        ) : (
+
+                                {currentQuestion.passage_text && (
+                                    <div className="mb-5 p-5 bg-amber-50 border border-amber-200 rounded-xl shadow-sm">
+                                        <div className="flex items-center gap-2 mb-3">
+                                            <div className="w-2 h-2 rounded-full bg-amber-500"></div>
+                                            <span className="text-xs font-bold text-amber-700 uppercase tracking-wider">
+                                                {currentQuestion.passage_title || "Reading Passage"}
+                                            </span>
+                                        </div>
+                                        <div className="max-h-72 overflow-y-auto pr-2">
+                                            <p className="text-sm leading-relaxed text-slate-700 whitespace-pre-wrap">
+                                                {currentQuestion.passage_text}
+                                            </p>
+                                        </div>
+                                    </div>
+                                )}
+
+                                <h2 className="text-2xl font-medium text-gray-900">
+                                    {currentQuestionIndex + 1}. {currentQuestion.text.replace(/^\d+\.\s*/, '')}
+                                </h2>
+                            </div>
+
+                            <div className="space-y-4">
+                                {currentQuestion.type === "MCQ" && currentQuestion.options.map((opt, idx) => (
+                                    <button
+                                        type="button"
+                                        key={idx}
+                                        onClick={() => handleAnswerChange(idx.toString())}
+                                        className={`w-full flex items-center gap-4 p-4 border-2 rounded-xl cursor-pointer transition text-left ${answers[currentQuestion.id] === idx.toString()
+                                            ? "border-indigo-500 bg-indigo-50 ring-1 ring-indigo-500"
+                                            : "border-gray-200 hover:bg-gray-50 hover:border-gray-300"
+                                            }`}
+                                    >
+                                        <span className={`flex-none w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold transition ${answers[currentQuestion.id] === idx.toString()
+                                            ? "bg-indigo-600 text-white"
+                                            : "bg-gray-100 text-gray-500"
+                                            }`}>
+                                            {idx + 1}
+                                        </span>
+                                        <span className="text-gray-800 font-medium">{opt}</span>
+                                    </button>
+                                ))}
+
+                                {(currentQuestion.type === "SUBJECTIVE" || currentQuestion.type === "CODING") && (
+                                    <textarea
+                                        value={answers[currentQuestion.id] || ""}
+                                        onChange={(e) => handleAnswerChange(e.target.value)}
+                                        className="w-full h-64 p-4 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 font-mono text-sm leading-relaxed text-gray-900"
+                                        placeholder="Type your answer here..."
+                                    />
+                                )}
+                            </div>
+                        </div>
+
+                        {/* Navigation */}
+                        <div className="mt-8 pt-6 border-t border-gray-100 flex justify-between items-center">
                             <button
-                                onClick={() => setCurrentQuestionIndex(prev => Math.min(assessment.questions.length - 1, prev + 1))}
-                                className="flex items-center gap-2 px-6 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 shadow-sm"
+                                onClick={() => setCurrentQuestionIndex(prev => Math.max(0, prev - 1))}
+                                disabled={currentQuestionIndex === 0}
+                                className="flex items-center gap-2 px-4 py-2 text-gray-700 hover:text-gray-900 font-bold disabled:opacity-50 disabled:cursor-not-allowed"
                             >
-                                Next <ChevronRight size={20} />
+                                <ChevronLeft size={20} /> Previous
                             </button>
-                        )}
+
+                            {isLastQuestion ? (
+                                <button
+                                    onClick={confirmSubmit}
+                                    disabled={submitting}
+                                    className="flex items-center gap-2 px-6 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 shadow-sm disabled:opacity-70"
+                                >
+                                    {submitting ? "Submitting..." : (
+                                        <>
+                                            Submit Assessment <CheckCircle size={18} />
+                                        </>
+                                    )}
+                                </button>
+                            ) : (
+                                <button
+                                    onClick={() => setCurrentQuestionIndex(prev => Math.min(assessment.questions.length - 1, prev + 1))}
+                                    className="flex items-center gap-2 px-6 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 shadow-sm"
+                                >
+                                    Next <ChevronRight size={20} />
+                                </button>
+                            )}
+                        </div>
                     </div>
-                </div>
                 </div>
 
                 {/* Right Column: Sidebar */}

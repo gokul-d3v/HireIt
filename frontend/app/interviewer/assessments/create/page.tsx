@@ -87,7 +87,7 @@ export default function CreateAssessmentPage() {
         const token = localStorage.getItem("token");
         const headers: Record<string, string> = token ? { Authorization: `Bearer ${token}` } : {};
 
-        const base = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8080";
+        const base = process.env.DEV_NEXT_PUBLIC_API_URL || "http://localhost:8080";
         fetch(`${base}/api/admin/questions/config`, { headers })
             .then(r => r.json())
             .then(d => setBankConfig(d))
@@ -114,7 +114,7 @@ export default function CreateAssessmentPage() {
 
     // Wizard state
     const [step, setStep] = useState(1);
-    
+
     // Assessment configuration state
     const [title, setTitle] = useState("");
     const [description, setDescription] = useState("");
@@ -123,10 +123,10 @@ export default function CreateAssessmentPage() {
     const [passingScore, setPassingScore] = useState<number | string>("");
     const [isMock, setIsMock] = useState(false);
     const [ruleGroups, setRuleGroups] = useState<RuleGroup[]>([]);
-    
+
     const [submitting, setSubmitting] = useState(false);
     const [isConfirmModalOpen, setIsConfirmModalOpen] = useState(false);
-    
+
     // Preview questions state
     // Bank count warnings per slot (key: "category|||sub|||difficulty")
     const [bankCounts, setBankCounts] = useState<Record<string, number>>({});
@@ -167,12 +167,12 @@ export default function CreateAssessmentPage() {
 
         const catName = categoryOptions[0];
         const catCfg = bankConfig.structure?.categories.find(c => c.name === catName);
-        
+
         const defaultSub = catCfg?.has_sub_categories ? (catCfg.sub_categories[0]?.name || "") : "";
         const firstSubDiff = catCfg?.sub_categories[0]?.difficulties[0];
         const firstCatDiff = catCfg?.difficulties[0];
-        
-        const defaultDiff = catCfg?.has_sub_categories 
+
+        const defaultDiff = catCfg?.has_sub_categories
             ? (typeof firstSubDiff === "string" ? firstSubDiff : firstSubDiff?.difficulty || "Easy")
             : (typeof firstCatDiff === "string" ? firstCatDiff : firstCatDiff?.difficulty || "Easy");
 
@@ -194,7 +194,7 @@ export default function CreateAssessmentPage() {
     const updateGroup = (gIndex: number, field: keyof RuleGroup, value: string) => {
         const newGroups = [...ruleGroups];
         newGroups[gIndex] = { ...newGroups[gIndex], [field]: value };
-        
+
         // If category changed, check if it has sub-categories
         if (field === 'category') {
             const catCfg = bankConfig.structure?.categories.find(c => c.name === value);
@@ -233,7 +233,7 @@ export default function CreateAssessmentPage() {
         const firstSubDiff = catCfg?.sub_categories[0]?.difficulties[0];
         const firstCatDiff = catCfg?.difficulties[0];
 
-        const defaultDiff = catCfg?.has_sub_categories 
+        const defaultDiff = catCfg?.has_sub_categories
             ? (typeof firstSubDiff === "string" ? firstSubDiff : firstSubDiff?.difficulty || "Easy")
             : (typeof firstCatDiff === "string" ? firstCatDiff : firstCatDiff?.difficulty || "Easy");
 
@@ -289,10 +289,10 @@ export default function CreateAssessmentPage() {
             if (!/^\d*$/.test(value)) return;
             finalValue = parseInt(value) || 0;
         }
-        
-        newGroups[gIndex].sub_groups[sIndex].difficulties[dIndex] = { 
-            ...newGroups[gIndex].sub_groups[sIndex].difficulties[dIndex], 
-            [field]: finalValue 
+
+        newGroups[gIndex].sub_groups[sIndex].difficulties[dIndex] = {
+            ...newGroups[gIndex].sub_groups[sIndex].difficulties[dIndex],
+            [field]: finalValue
         };
         setRuleGroups(newGroups);
     };
@@ -309,8 +309,8 @@ export default function CreateAssessmentPage() {
         setRuleGroups(newGroups);
     };
 
-    const flattenedRules = ruleGroups.flatMap(g => 
-        g.sub_groups.flatMap(sg => 
+    const flattenedRules = ruleGroups.flatMap(g =>
+        g.sub_groups.flatMap(sg =>
             sg.difficulties.map(d => ({
                 category: g.category,
                 sub_category: sg.sub_category,
@@ -355,7 +355,7 @@ export default function CreateAssessmentPage() {
             try {
                 const token = localStorage.getItem("token");
                 const headers: Record<string, string> = token ? { Authorization: `Bearer ${token}` } : {};
-                const apiBase = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8080";
+                const apiBase = process.env.DEV_NEXT_PUBLIC_API_URL || "http://localhost:8080";
                 const counts: Record<string, number> = {};
                 await Promise.all(flattenedRules.map(async rule => {
                     const params = new URLSearchParams({ category: rule.category, difficulty: rule.difficulty });
@@ -414,7 +414,7 @@ export default function CreateAssessmentPage() {
 
             // Clear the draft after successful submission
             localStorage.removeItem("assessmentDraft");
-            
+
             showToast(`Successfully created assessment!`, "success");
             router.push("/interviewer/assessments");
         } catch (err) {
@@ -461,460 +461,460 @@ export default function CreateAssessmentPage() {
                     </div>
                 </div>
             </div>
- 
+
             <main className={`max-w-6xl mx-auto px-4 py-8 ${step > 1 ? 'flex flex-col lg:flex-row gap-8' : ''}`}>
                 <div className={step > 1 ? 'flex-1' : 'max-w-4xl mx-auto w-full'}>
-                {/* Step 1: Basic Info & Configuration */}
-                {step === 1 && (
-                    <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-8 space-y-6">
-                        <div>
-                            <h2 className="text-2xl font-bold text-gray-900 mb-2">Assessment Information</h2>
-                            <p className="text-gray-600">Enter the basic details and configuration for this assessment.</p>
-                        </div>
-
-                        <div>
-                            <label className="block text-sm font-semibold text-gray-700 mb-2">Assessment Title *</label>
-                            <input
-                                type="text"
-                                value={title}
-                                onChange={(e) => setTitle(e.target.value)}
-                                className="w-full text-xl font-bold text-gray-900 p-3 border-2 border-gray-200 rounded-lg focus:border-indigo-600 focus:ring-0 focus:outline-none placeholder:text-gray-500"
-                                placeholder="e.g., Senior Frontend Developer Test"
-                            />
-                        </div>
-
-                        <div>
-                            <label className="block text-sm font-semibold text-gray-700 mb-2">Description</label>
-                            <textarea
-                                value={description}
-                                onChange={(e) => setDescription(e.target.value)}
-                                className="w-full p-3 text-gray-900 border-2 border-gray-200 rounded-lg focus:border-indigo-600 focus:outline-none resize-none placeholder:text-gray-500 font-medium"
-                                rows={4}
-                                placeholder="Add instructions, context, or notes for candidates..."
-                            />
-                        </div>
-
-                        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 pt-4 border-t border-gray-100">
+                    {/* Step 1: Basic Info & Configuration */}
+                    {step === 1 && (
+                        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-8 space-y-6">
                             <div>
-                                <label className="block text-sm font-medium text-gray-700 mb-2">
-                                    <Clock size={16} className="inline mr-1 text-gray-400" /> Duration (min) *
-                                </label>
+                                <h2 className="text-2xl font-bold text-gray-900 mb-2">Assessment Information</h2>
+                                <p className="text-gray-600">Enter the basic details and configuration for this assessment.</p>
+                            </div>
+
+                            <div>
+                                <label className="block text-sm font-semibold text-gray-700 mb-2">Assessment Title *</label>
                                 <input
-                                    type="number"
-                                    value={duration}
-                                    onChange={(e) => setDuration(e.target.value)}
-                                    className="w-full p-3 font-medium text-gray-900 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-100 focus:border-indigo-600 focus:outline-none"
-                                    placeholder="e.g. 60"
-                                    min={1}
+                                    type="text"
+                                    value={title}
+                                    onChange={(e) => setTitle(e.target.value)}
+                                    className="w-full text-xl font-bold text-gray-900 p-3 border-2 border-gray-200 rounded-lg focus:border-indigo-600 focus:ring-0 focus:outline-none placeholder:text-gray-500"
+                                    placeholder="e.g., Senior Frontend Developer Test"
                                 />
                             </div>
-                            <div>
-                                <label className="block text-sm font-medium text-gray-700 mb-2">
-                                    <Award size={16} className="inline mr-1 text-gray-400" /> Total Marks *
-                                </label>
-                                <input
-                                    type="number"
-                                    value={totalMarks}
-                                    onChange={(e) => setTotalMarks(e.target.value)}
-                                    className="w-full p-3 font-medium text-gray-900 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-100 focus:border-indigo-600 focus:outline-none"
-                                    placeholder="e.g. 100"
-                                    min={1}
-                                />
-                            </div>
-                            <div>
-                                <label className="block text-sm font-medium text-gray-700 mb-2">
-                                    <Target size={16} className="inline mr-1 text-gray-500" /> Passing Score *
-                                </label>
-                                <input
-                                    type="number"
-                                    value={passingScore}
-                                    onChange={(e) => setPassingScore(e.target.value)}
-                                    className="w-full p-3 font-medium text-gray-900 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-100 focus:border-indigo-600 focus:outline-none placeholder:text-gray-500"
-                                    placeholder="e.g. 50"
-                                    min={1}
-                                />
-                            </div>
-                        </div>
 
-                        <div className="pt-4 border-t border-gray-100">
-                            <label className="flex items-center gap-3 cursor-pointer">
-                                <div className="relative">
-                                    <input 
-                                        type="checkbox" 
-                                        className="sr-only"
-                                        checked={isMock}
-                                        onChange={(e) => setIsMock(e.target.checked)}
+                            <div>
+                                <label className="block text-sm font-semibold text-gray-700 mb-2">Description</label>
+                                <textarea
+                                    value={description}
+                                    onChange={(e) => setDescription(e.target.value)}
+                                    className="w-full p-3 text-gray-900 border-2 border-gray-200 rounded-lg focus:border-indigo-600 focus:outline-none resize-none placeholder:text-gray-500 font-medium"
+                                    rows={4}
+                                    placeholder="Add instructions, context, or notes for candidates..."
+                                />
+                            </div>
+
+                            <div className="grid grid-cols-1 md:grid-cols-3 gap-6 pt-4 border-t border-gray-100">
+                                <div>
+                                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                                        <Clock size={16} className="inline mr-1 text-gray-400" /> Duration (min) *
+                                    </label>
+                                    <input
+                                        type="number"
+                                        value={duration}
+                                        onChange={(e) => setDuration(e.target.value)}
+                                        className="w-full p-3 font-medium text-gray-900 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-100 focus:border-indigo-600 focus:outline-none"
+                                        placeholder="e.g. 60"
+                                        min={1}
                                     />
-                                    <div className={`block w-14 h-8 rounded-full transition-colors ${isMock ? 'bg-indigo-600' : 'bg-gray-300'}`}></div>
-                                    <div className={`dot absolute left-1 top-1 bg-white w-6 h-6 rounded-full transition-transform ${isMock ? 'transform translate-x-6' : ''}`}></div>
                                 </div>
                                 <div>
-                                    <div className="text-sm font-semibold text-gray-900">Public Mock Exam</div>
-                                    <div className="text-xs text-gray-500">Enable this to allow anyone to take the exam without OTP verification.</div>
+                                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                                        <Award size={16} className="inline mr-1 text-gray-400" /> Total Marks *
+                                    </label>
+                                    <input
+                                        type="number"
+                                        value={totalMarks}
+                                        onChange={(e) => setTotalMarks(e.target.value)}
+                                        className="w-full p-3 font-medium text-gray-900 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-100 focus:border-indigo-600 focus:outline-none"
+                                        placeholder="e.g. 100"
+                                        min={1}
+                                    />
                                 </div>
-                            </label>
-                        </div>
-
-                        <div className="flex justify-end pt-6 border-t border-gray-100">
-                            <button
-                                onClick={handleNext}
-                                className="flex items-center gap-2 px-6 py-3 bg-indigo-600 text-white rounded-lg font-semibold hover:bg-indigo-700 transition"
-                            >
-                                Next: Format Questions <ArrowRight size={18} />
-                            </button>
-                        </div>
-                    </div>
-                )}
-
-                {/* Step 2: Add Questions */}
-                {step === 2 && (
-                    <div className="space-y-6">
-                        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-8">
-                            <div className="flex items-center justify-between mb-6">
                                 <div>
-                                    <h2 className="text-2xl font-bold text-gray-900">Define Question Bank Rules</h2>
-                                    <p className="text-gray-600">Select which categories and difficulties to include in this assessment.</p>
+                                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                                        <Target size={16} className="inline mr-1 text-gray-500" /> Passing Score *
+                                    </label>
+                                    <input
+                                        type="number"
+                                        value={passingScore}
+                                        onChange={(e) => setPassingScore(e.target.value)}
+                                        className="w-full p-3 font-medium text-gray-900 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-100 focus:border-indigo-600 focus:outline-none placeholder:text-gray-500"
+                                        placeholder="e.g. 50"
+                                        min={1}
+                                    />
                                 </div>
+                            </div>
+
+                            <div className="pt-4 border-t border-gray-100">
+                                <label className="flex items-center gap-3 cursor-pointer">
+                                    <div className="relative">
+                                        <input
+                                            type="checkbox"
+                                            className="sr-only"
+                                            checked={isMock}
+                                            onChange={(e) => setIsMock(e.target.checked)}
+                                        />
+                                        <div className={`block w-14 h-8 rounded-full transition-colors ${isMock ? 'bg-indigo-600' : 'bg-gray-300'}`}></div>
+                                        <div className={`dot absolute left-1 top-1 bg-white w-6 h-6 rounded-full transition-transform ${isMock ? 'transform translate-x-6' : ''}`}></div>
+                                    </div>
+                                    <div>
+                                        <div className="text-sm font-semibold text-gray-900">Public Mock Exam</div>
+                                        <div className="text-xs text-gray-500">Enable this to allow anyone to take the exam without OTP verification.</div>
+                                    </div>
+                                </label>
+                            </div>
+
+                            <div className="flex justify-end pt-6 border-t border-gray-100">
                                 <button
-                                    onClick={addGroup}
-                                    className="flex items-center gap-2 px-5 py-2.5 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition shadow-sm text-sm font-medium"
+                                    onClick={handleNext}
+                                    className="flex items-center gap-2 px-6 py-3 bg-indigo-600 text-white rounded-lg font-semibold hover:bg-indigo-700 transition"
                                 >
-                                    <Plus size={16} /> Add Rule Group
+                                    Next: Format Questions <ArrowRight size={18} />
                                 </button>
                             </div>
+                        </div>
+                    )}
 
-                            {/* Rules List */}
-                            <div className="space-y-6">
-                                {ruleGroups.length === 0 ? (
-                                    <div className="text-center py-16 bg-gray-50 rounded-xl border-2 border-dashed border-gray-200">
-                                        <div className="w-16 h-16 bg-white rounded-full border border-gray-100 flex items-center justify-center mx-auto mb-4 text-gray-400 shadow-sm">
-                                            <Plus size={32} />
-                                        </div>
-                                        <h3 className="text-lg font-medium text-gray-900 mb-2">No rules yet</h3>
-                                        <p className="text-gray-600 max-w-sm mx-auto mb-6 font-medium">Start building your assessment by defining what questions to fetch.</p>
-                                        <button
-                                            onClick={addGroup}
-                                            className="px-4 py-2 bg-white border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 font-bold transition"
-                                        >
-                                            Add First Rule Group
-                                        </button>
+                    {/* Step 2: Add Questions */}
+                    {step === 2 && (
+                        <div className="space-y-6">
+                            <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-8">
+                                <div className="flex items-center justify-between mb-6">
+                                    <div>
+                                        <h2 className="text-2xl font-bold text-gray-900">Define Question Bank Rules</h2>
+                                        <p className="text-gray-600">Select which categories and difficulties to include in this assessment.</p>
                                     </div>
-                                ) : (
-                                    <div className="space-y-8">
-                                        {ruleGroups.map((group, gIdx) => (
-                                            <div key={gIdx} className="bg-white rounded-2xl shadow-sm border-2 border-gray-100 p-8 flex flex-col gap-6 relative group hover:border-indigo-200 transition-all">
-                                                <button
-                                                    onClick={() => removeGroup(gIdx)}
-                                                    className="absolute top-6 right-6 p-2 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors opacity-0 group-hover:opacity-100"
-                                                    title="Remove Category"
-                                                >
-                                                    <Trash2 size={20} />
-                                                </button>
+                                    <button
+                                        onClick={addGroup}
+                                        className="flex items-center gap-2 px-5 py-2.5 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition shadow-sm text-sm font-medium"
+                                    >
+                                        <Plus size={16} /> Add Rule Group
+                                    </button>
+                                </div>
 
-                                                <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
-                                                    <div className="max-w-sm flex-1">
-                                                        <label className="block text-xs font-bold text-indigo-600 uppercase tracking-widest mb-2">Category</label>
-                                                        <select
-                                                            value={group.category}
-                                                            onChange={(e) => updateGroup(gIdx, 'category', e.target.value)}
-                                                            className="w-full p-3 font-bold text-gray-900 border-2 border-gray-200 rounded-xl focus:border-indigo-500 focus:outline-none bg-gray-50/50 appearance-none cursor-pointer"
-                                                        >
-                                                            {categoryOptions.map(c => <option key={c} value={c}>{c}</option>)}
-                                                        </select>
-                                                    </div>
+                                {/* Rules List */}
+                                <div className="space-y-6">
+                                    {ruleGroups.length === 0 ? (
+                                        <div className="text-center py-16 bg-gray-50 rounded-xl border-2 border-dashed border-gray-200">
+                                            <div className="w-16 h-16 bg-white rounded-full border border-gray-100 flex items-center justify-center mx-auto mb-4 text-gray-400 shadow-sm">
+                                                <Plus size={32} />
+                                            </div>
+                                            <h3 className="text-lg font-medium text-gray-900 mb-2">No rules yet</h3>
+                                            <p className="text-gray-600 max-w-sm mx-auto mb-6 font-medium">Start building your assessment by defining what questions to fetch.</p>
+                                            <button
+                                                onClick={addGroup}
+                                                className="px-4 py-2 bg-white border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 font-bold transition"
+                                            >
+                                                Add First Rule Group
+                                            </button>
+                                        </div>
+                                    ) : (
+                                        <div className="space-y-8">
+                                            {ruleGroups.map((group, gIdx) => (
+                                                <div key={gIdx} className="bg-white rounded-2xl shadow-sm border-2 border-gray-100 p-8 flex flex-col gap-6 relative group hover:border-indigo-200 transition-all">
+                                                    <button
+                                                        onClick={() => removeGroup(gIdx)}
+                                                        className="absolute top-6 right-6 p-2 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors opacity-0 group-hover:opacity-100"
+                                                        title="Remove Category"
+                                                    >
+                                                        <Trash2 size={20} />
+                                                    </button>
 
-                                                    <div className="w-full md:w-36">
-                                                        <label className="block text-xs font-bold text-indigo-600 uppercase tracking-widest mb-2">Show Order</label>
-                                                        <input
-                                                            type="number"
-                                                            min={1}
-                                                            value={group.display_order}
-                                                            onChange={(e) => updateGroupDisplayOrder(gIdx, e.target.value)}
-                                                            className="w-full p-3 text-center font-bold text-gray-900 border-2 border-gray-200 rounded-xl focus:border-indigo-500 focus:outline-none bg-white"
-                                                        />
-                                                    </div>
-                                                </div>
-
-                                                <div className="space-y-4">
-                                                    {group.sub_groups.map((sub, sIdx) => (
-                                                        <div key={sIdx} className="bg-gray-50/50 rounded-2xl p-6 border border-gray-200 relative group/sub">
-                                                            <button 
-                                                                onClick={() => removeSubGroup(gIdx, sIdx)}
-                                                                className="absolute top-4 right-4 text-gray-400 hover:text-red-500 opacity-0 group-hover/sub:opacity-100 transition-opacity"
+                                                    <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
+                                                        <div className="max-w-sm flex-1">
+                                                            <label className="block text-xs font-bold text-indigo-600 uppercase tracking-widest mb-2">Category</label>
+                                                            <select
+                                                                value={group.category}
+                                                                onChange={(e) => updateGroup(gIdx, 'category', e.target.value)}
+                                                                className="w-full p-3 font-bold text-gray-900 border-2 border-gray-200 rounded-xl focus:border-indigo-500 focus:outline-none bg-gray-50/50 appearance-none cursor-pointer"
                                                             >
-                                                                <Trash2 size={16} />
-                                                            </button>
+                                                                {categoryOptions.map(c => <option key={c} value={c}>{c}</option>)}
+                                                            </select>
+                                                        </div>
 
-                                                            {(() => {
-                                                                const catCfg = bankConfig.structure?.categories.find(c => c.name === group.category);
-                                                                if (catCfg?.has_sub_categories) {
-                                                                    return (
-                                                                        <div className="flex items-center gap-4 mb-4">
-                                                                            <div className="flex-1 max-w-[200px]">
-                                                                                <label className="block text-[10px] font-bold text-gray-600 uppercase tracking-wider mb-1.5">Sub Category</label>
-                                                                                <div className="flex items-center gap-2">
-                                                                                    <input
-                                                                                        type="text"
-                                                                                        list={`sub-list-${gIdx}-${sIdx}`}
-                                                                                        value={sub.sub_category}
-                                                                                        onChange={(e) => updateSubGroup(gIdx, sIdx, e.target.value)}
-                                                                                        className="w-full p-2 text-sm font-semibold text-gray-900 border border-gray-300 rounded-lg focus:border-indigo-500 focus:outline-none bg-white"
-                                                                                        placeholder="Select sub-category…"
-                                                                                    />
+                                                        <div className="w-full md:w-36">
+                                                            <label className="block text-xs font-bold text-indigo-600 uppercase tracking-widest mb-2">Show Order</label>
+                                                            <input
+                                                                type="number"
+                                                                min={1}
+                                                                value={group.display_order}
+                                                                onChange={(e) => updateGroupDisplayOrder(gIdx, e.target.value)}
+                                                                className="w-full p-3 text-center font-bold text-gray-900 border-2 border-gray-200 rounded-xl focus:border-indigo-500 focus:outline-none bg-white"
+                                                            />
+                                                        </div>
+                                                    </div>
+
+                                                    <div className="space-y-4">
+                                                        {group.sub_groups.map((sub, sIdx) => (
+                                                            <div key={sIdx} className="bg-gray-50/50 rounded-2xl p-6 border border-gray-200 relative group/sub">
+                                                                <button
+                                                                    onClick={() => removeSubGroup(gIdx, sIdx)}
+                                                                    className="absolute top-4 right-4 text-gray-400 hover:text-red-500 opacity-0 group-hover/sub:opacity-100 transition-opacity"
+                                                                >
+                                                                    <Trash2 size={16} />
+                                                                </button>
+
+                                                                {(() => {
+                                                                    const catCfg = bankConfig.structure?.categories.find(c => c.name === group.category);
+                                                                    if (catCfg?.has_sub_categories) {
+                                                                        return (
+                                                                            <div className="flex items-center gap-4 mb-4">
+                                                                                <div className="flex-1 max-w-[200px]">
+                                                                                    <label className="block text-[10px] font-bold text-gray-600 uppercase tracking-wider mb-1.5">Sub Category</label>
+                                                                                    <div className="flex items-center gap-2">
+                                                                                        <input
+                                                                                            type="text"
+                                                                                            list={`sub-list-${gIdx}-${sIdx}`}
+                                                                                            value={sub.sub_category}
+                                                                                            onChange={(e) => updateSubGroup(gIdx, sIdx, e.target.value)}
+                                                                                            className="w-full p-2 text-sm font-semibold text-gray-900 border border-gray-300 rounded-lg focus:border-indigo-500 focus:outline-none bg-white"
+                                                                                            placeholder="Select sub-category…"
+                                                                                        />
+                                                                                    </div>
+                                                                                    <datalist id={`sub-list-${gIdx}-${sIdx}`}>
+                                                                                        {catCfg.sub_categories.map(s => <option key={s.name} value={s.name} />)}
+                                                                                    </datalist>
                                                                                 </div>
-                                                                                <datalist id={`sub-list-${gIdx}-${sIdx}`}>
-                                                                                    {catCfg.sub_categories.map(s => <option key={s.name} value={s.name} />)}
-                                                                                </datalist>
+                                                                                <div className="h-px bg-gray-200 flex-1 mt-5"></div>
                                                                             </div>
-                                                                            <div className="h-px bg-gray-200 flex-1 mt-5"></div>
-                                                                        </div>
-                                                                    );
-                                                                }
-                                                                return null;
-                                                            })()}
+                                                                        );
+                                                                    }
+                                                                    return null;
+                                                                })()}
 
-                                                            <div className="space-y-3">
-                                                                {sub.difficulties.map((diff, dIdx) => (
-                                                                    <div key={dIdx} className="flex flex-wrap gap-4 items-end">
-                                                                        <div className="w-32">
-                                                                            <label className="block text-[10px] font-bold text-gray-600 uppercase tracking-wider mb-1.5">Difficulty</label>
-                                                                            <select
-                                                                                value={diff.difficulty}
-                                                                                onChange={(e) => updateDifficulty(gIdx, sIdx, dIdx, 'difficulty', e.target.value)}
-                                                                                className="w-full p-2.5 text-sm font-medium text-gray-900 border border-gray-300 rounded-lg focus:border-indigo-500 focus:outline-none bg-white"
-                                                                            >
-                                                                                {(() => {
-                                                                                    const catCfg = bankConfig.structure?.categories.find(c => c.name === group.category);
-                                                                                    if (!catCfg) return [
-                                                                                        <option key="Easy" value="Easy">Easy</option>,
-                                                                                        <option key="Medium" value="Medium">Medium</option>,
-                                                                                        <option key="Hard" value="Hard">Hard</option>
-                                                                                    ];
-                                                                                    if (catCfg.has_sub_categories) {
-                                                                                        const subCfg = catCfg.sub_categories.find(s => s.name === sub.sub_category);
-                                                                                        return (subCfg?.difficulties || []).map(d => {
+                                                                <div className="space-y-3">
+                                                                    {sub.difficulties.map((diff, dIdx) => (
+                                                                        <div key={dIdx} className="flex flex-wrap gap-4 items-end">
+                                                                            <div className="w-32">
+                                                                                <label className="block text-[10px] font-bold text-gray-600 uppercase tracking-wider mb-1.5">Difficulty</label>
+                                                                                <select
+                                                                                    value={diff.difficulty}
+                                                                                    onChange={(e) => updateDifficulty(gIdx, sIdx, dIdx, 'difficulty', e.target.value)}
+                                                                                    className="w-full p-2.5 text-sm font-medium text-gray-900 border border-gray-300 rounded-lg focus:border-indigo-500 focus:outline-none bg-white"
+                                                                                >
+                                                                                    {(() => {
+                                                                                        const catCfg = bankConfig.structure?.categories.find(c => c.name === group.category);
+                                                                                        if (!catCfg) return [
+                                                                                            <option key="Easy" value="Easy">Easy</option>,
+                                                                                            <option key="Medium" value="Medium">Medium</option>,
+                                                                                            <option key="Hard" value="Hard">Hard</option>
+                                                                                        ];
+                                                                                        if (catCfg.has_sub_categories) {
+                                                                                            const subCfg = catCfg.sub_categories.find(s => s.name === sub.sub_category);
+                                                                                            return (subCfg?.difficulties || []).map(d => {
+                                                                                                const val = typeof d === "string" ? d : d.difficulty;
+                                                                                                return <option key={val} value={val}>{val}</option>;
+                                                                                            });
+                                                                                        }
+                                                                                        return catCfg.difficulties.map(d => {
                                                                                             const val = typeof d === "string" ? d : d.difficulty;
                                                                                             return <option key={val} value={val}>{val}</option>;
                                                                                         });
-                                                                                    }
-                                                                                    return catCfg.difficulties.map(d => {
-                                                                                        const val = typeof d === "string" ? d : d.difficulty;
-                                                                                        return <option key={val} value={val}>{val}</option>;
-                                                                                    });
-                                                                                })()}
-                                                                            </select>
-                                                                        </div>
+                                                                                    })()}
+                                                                                </select>
+                                                                            </div>
 
-                                                                        <div className="w-24">
-                                                                            <label className="block text-[10px] font-bold text-gray-600 uppercase tracking-wider mb-1.5">Count</label>
-                                                                            <input
-                                                                                type="text"
-                                                                                value={diff.count}
-                                                                                onChange={(e) => updateDifficulty(gIdx, sIdx, dIdx, 'count', e.target.value)}
-                                                                                className="w-full p-2.5 text-center font-bold text-gray-900 border border-gray-300 rounded-lg focus:border-indigo-500 focus:outline-none bg-white"
-                                                                            />
-                                                                        </div>
+                                                                            <div className="w-24">
+                                                                                <label className="block text-[10px] font-bold text-gray-600 uppercase tracking-wider mb-1.5">Count</label>
+                                                                                <input
+                                                                                    type="text"
+                                                                                    value={diff.count}
+                                                                                    onChange={(e) => updateDifficulty(gIdx, sIdx, dIdx, 'count', e.target.value)}
+                                                                                    className="w-full p-2.5 text-center font-bold text-gray-900 border border-gray-300 rounded-lg focus:border-indigo-500 focus:outline-none bg-white"
+                                                                                />
+                                                                            </div>
 
-                                                                        <div className="w-24">
-                                                                            <label className="block text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-1.5">Pts / Q</label>
-                                                                            <input
-                                                                                type="text"
-                                                                                value={diff.points_per_question}
-                                                                                onChange={(e) => updateDifficulty(gIdx, sIdx, dIdx, 'points_per_question', e.target.value)}
-                                                                                className="w-full p-2.5 text-center font-bold text-gray-900 border border-gray-300 rounded-lg focus:border-indigo-500 focus:outline-none bg-white"
-                                                                            />
-                                                                        </div>
-                                                                        
-                                                                        <button
-                                                                            onClick={() => removeDifficulty(gIdx, sIdx, dIdx)}
-                                                                            className="p-2.5 text-gray-400 hover:text-red-500 transition-colors mb-[2px]"
-                                                                            title="Remove Rule"
-                                                                        >
-                                                                            <Trash2 size={16} />
-                                                                        </button>
-                                                                    </div>
-                                                                ))}
+                                                                            <div className="w-24">
+                                                                                <label className="block text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-1.5">Pts / Q</label>
+                                                                                <input
+                                                                                    type="text"
+                                                                                    value={diff.points_per_question}
+                                                                                    onChange={(e) => updateDifficulty(gIdx, sIdx, dIdx, 'points_per_question', e.target.value)}
+                                                                                    className="w-full p-2.5 text-center font-bold text-gray-900 border border-gray-300 rounded-lg focus:border-indigo-500 focus:outline-none bg-white"
+                                                                                />
+                                                                            </div>
 
-                                                                <button
-                                                                    onClick={() => addDifficulty(gIdx, sIdx)}
-                                                                    className="flex items-center gap-1.5 text-xs text-indigo-600 font-bold hover:text-indigo-800 transition-colors py-1"
-                                                                >
-                                                                    <Plus size={14} /> Add Difficulty Level
-                                                                </button>
+                                                                            <button
+                                                                                onClick={() => removeDifficulty(gIdx, sIdx, dIdx)}
+                                                                                className="p-2.5 text-gray-400 hover:text-red-500 transition-colors mb-[2px]"
+                                                                                title="Remove Rule"
+                                                                            >
+                                                                                <Trash2 size={16} />
+                                                                            </button>
+                                                                        </div>
+                                                                    ))}
+
+                                                                    <button
+                                                                        onClick={() => addDifficulty(gIdx, sIdx)}
+                                                                        className="flex items-center gap-1.5 text-xs text-indigo-600 font-bold hover:text-indigo-800 transition-colors py-1"
+                                                                    >
+                                                                        <Plus size={14} /> Add Difficulty Level
+                                                                    </button>
+                                                                </div>
+                                                            </div>
+                                                        ))}
+
+                                                        {(() => {
+                                                            const catCfg = bankConfig.structure?.categories.find(c => c.name === group.category);
+                                                            if (catCfg?.has_sub_categories) {
+                                                                return (
+                                                                    <button
+                                                                        onClick={() => addSubGroup(gIdx)}
+                                                                        className="mt-2 flex items-center gap-2 text-sm text-gray-500 font-bold hover:text-gray-900 transition-colors bg-white border-2 border-dashed border-gray-200 rounded-xl p-4 w-full justify-center hover:border-gray-300"
+                                                                    >
+                                                                        <Plus size={18} /> Add Another Sub-Category inside {group.category}
+                                                                    </button>
+                                                                );
+                                                            }
+                                                            return null;
+                                                        })()}
+                                                    </div>
+
+                                                    <div className="bg-indigo-600 rounded-xl p-4 text-white flex justify-between items-center shadow-lg shadow-indigo-100">
+                                                        <div className="flex items-center gap-3">
+                                                            <div className="p-2 bg-indigo-500 rounded-lg">
+                                                                <FileText size={18} />
+                                                            </div>
+                                                            <div>
+                                                                <div className="text-[10px] font-bold uppercase tracking-widest opacity-70">Category Summary</div>
+                                                                <div className="font-bold">{group.display_order}. {group.category}</div>
                                                             </div>
                                                         </div>
-                                                    ))}
-
-                                                    {(() => {
-                                                        const catCfg = bankConfig.structure?.categories.find(c => c.name === group.category);
-                                                        if (catCfg?.has_sub_categories) {
-                                                            return (
-                                                                <button
-                                                                    onClick={() => addSubGroup(gIdx)}
-                                                                    className="mt-2 flex items-center gap-2 text-sm text-gray-500 font-bold hover:text-gray-900 transition-colors bg-white border-2 border-dashed border-gray-200 rounded-xl p-4 w-full justify-center hover:border-gray-300"
-                                                                >
-                                                                    <Plus size={18} /> Add Another Sub-Category inside {group.category}
-                                                                </button>
-                                                            );
-                                                        }
-                                                        return null;
-                                                    })()}
-                                                </div>
-
-                                                <div className="bg-indigo-600 rounded-xl p-4 text-white flex justify-between items-center shadow-lg shadow-indigo-100">
-                                                    <div className="flex items-center gap-3">
-                                                        <div className="p-2 bg-indigo-500 rounded-lg">
-                                                            <FileText size={18} />
-                                                        </div>
-                                                        <div>
-                                                            <div className="text-[10px] font-bold uppercase tracking-widest opacity-70">Category Summary</div>
-                                                            <div className="font-bold">{group.display_order}. {group.category}</div>
-                                                        </div>
-                                                    </div>
-                                                    <div className="text-right">
-                                                        <div className="text-2xl font-black">
-                                                            {group.sub_groups.reduce((sum, sg) => sum + sg.difficulties.reduce((s, d) => s + (Number(d.count) * Number(d.points_per_question)), 0), 0)}
-                                                            <span className="text-xs ml-1 opacity-70">pts</span>
+                                                        <div className="text-right">
+                                                            <div className="text-2xl font-black">
+                                                                {group.sub_groups.reduce((sum, sg) => sum + sg.difficulties.reduce((s, d) => s + (Number(d.count) * Number(d.points_per_question)), 0), 0)}
+                                                                <span className="text-xs ml-1 opacity-70">pts</span>
+                                                            </div>
                                                         </div>
                                                     </div>
                                                 </div>
-                                            </div>
-                                        ))}
-                                        
-                                    </div>
-                                )}
+                                            ))}
+
+                                        </div>
+                                    )}
+                                </div>
+                            </div>
+
+                            <div className="flex justify-between pt-6">
+                                <button
+                                    onClick={handlePrevious}
+                                    className="flex items-center gap-2 px-6 py-3 bg-white border border-gray-300 text-gray-700 rounded-lg font-semibold hover:bg-gray-50 transition"
+                                >
+                                    <ArrowLeft size={18} /> Previous
+                                </button>
+                                <button
+                                    onClick={handleNext}
+                                    className="flex items-center gap-2 px-6 py-3 bg-indigo-600 text-white rounded-lg font-semibold hover:bg-indigo-700 transition"
+                                >
+                                    Review & Submit <ArrowRight size={18} />
+                                </button>
                             </div>
                         </div>
+                    )}
 
-                        <div className="flex justify-between pt-6">
-                            <button
-                                onClick={handlePrevious}
-                                className="flex items-center gap-2 px-6 py-3 bg-white border border-gray-300 text-gray-700 rounded-lg font-semibold hover:bg-gray-50 transition"
-                            >
-                                <ArrowLeft size={18} /> Previous
-                            </button>
-                            <button
-                                onClick={handleNext}
-                                className="flex items-center gap-2 px-6 py-3 bg-indigo-600 text-white rounded-lg font-semibold hover:bg-indigo-700 transition"
-                            >
-                                Review & Submit <ArrowRight size={18} />
-                            </button>
-                        </div>
-                    </div>
-                )}
+                    {/* Step 3: Review */}
+                    {step === 3 && (
+                        <div className="space-y-6">
+                            <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-8">
+                                <h2 className="text-2xl font-bold text-gray-900 mb-2">Review Your Assessment</h2>
+                                <p className="text-gray-600 mb-6">Review all settings before creating the assessment.</p>
 
-                {/* Step 3: Review */}
-                {step === 3 && (
-                    <div className="space-y-6">
-                        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-8">
-                            <h2 className="text-2xl font-bold text-gray-900 mb-2">Review Your Assessment</h2>
-                            <p className="text-gray-600 mb-6">Review all settings before creating the assessment.</p>
+                                <div className="space-y-6">
+                                    <div className="bg-gray-50 rounded-lg p-6 border border-gray-200 relative overflow-hidden">
+                                        <div className="absolute top-0 right-0 w-32 h-32 bg-indigo-50 rounded-full -mr-10 -mt-10 pointer-events-none"></div>
+                                        <h3 className="text-xl font-black text-gray-900 mb-2 relative z-10">{title}</h3>
+                                        <p className="text-gray-700 mb-6 relative z-10">{description || "No description provided."}</p>
 
-                            <div className="space-y-6">
-                                <div className="bg-gray-50 rounded-lg p-6 border border-gray-200 relative overflow-hidden">
-                                    <div className="absolute top-0 right-0 w-32 h-32 bg-indigo-50 rounded-full -mr-10 -mt-10 pointer-events-none"></div>
-                                    <h3 className="text-xl font-black text-gray-900 mb-2 relative z-10">{title}</h3>
-                                    <p className="text-gray-700 mb-6 relative z-10">{description || "No description provided."}</p>
-                                    
-                                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4 relative z-10">
-                                        <div className="bg-white p-3 rounded-lg border border-gray-100 shadow-sm">
-                                            <span className="block text-xs font-semibold text-gray-400 uppercase tracking-widest mb-1">Questions</span>
-                                            <span className="text-xl font-black text-gray-900">{totalQuestions}</span>
-                                        </div>
-                                        <div className="bg-white p-3 rounded-lg border border-gray-100 shadow-sm">
-                                            <span className="block text-xs font-semibold text-gray-400 uppercase tracking-widest mb-1">Duration</span>
-                                            <span className="text-xl font-black text-gray-900">{duration}m</span>
-                                        </div>
-                                        <div className="bg-white p-3 rounded-lg border border-gray-100 shadow-sm">
-                                            <span className="block text-xs font-semibold text-gray-400 uppercase tracking-widest mb-1">Total Marks</span>
-                                            <span className="text-xl font-black text-indigo-700">{totalMarks}</span>
-                                        </div>
-                                        <div className="bg-white p-3 rounded-lg border border-gray-100 shadow-sm">
-                                            <span className="block text-xs font-semibold text-gray-400 uppercase tracking-widest mb-1">Passing</span>
-                                            <span className="text-xl font-black text-green-600">{passingScore}</span>
+                                        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 relative z-10">
+                                            <div className="bg-white p-3 rounded-lg border border-gray-100 shadow-sm">
+                                                <span className="block text-xs font-semibold text-gray-400 uppercase tracking-widest mb-1">Questions</span>
+                                                <span className="text-xl font-black text-gray-900">{totalQuestions}</span>
+                                            </div>
+                                            <div className="bg-white p-3 rounded-lg border border-gray-100 shadow-sm">
+                                                <span className="block text-xs font-semibold text-gray-400 uppercase tracking-widest mb-1">Duration</span>
+                                                <span className="text-xl font-black text-gray-900">{duration}m</span>
+                                            </div>
+                                            <div className="bg-white p-3 rounded-lg border border-gray-100 shadow-sm">
+                                                <span className="block text-xs font-semibold text-gray-400 uppercase tracking-widest mb-1">Total Marks</span>
+                                                <span className="text-xl font-black text-indigo-700">{totalMarks}</span>
+                                            </div>
+                                            <div className="bg-white p-3 rounded-lg border border-gray-100 shadow-sm">
+                                                <span className="block text-xs font-semibold text-gray-400 uppercase tracking-widest mb-1">Passing</span>
+                                                <span className="text-xl font-black text-green-600">{passingScore}</span>
+                                            </div>
                                         </div>
                                     </div>
+
+                                    <div className="bg-white rounded-xl border border-gray-200 p-5">
+                                        <div className="flex items-center justify-between mb-3">
+                                            <h4 className="text-sm font-bold text-gray-900 uppercase tracking-wider">Category Display Order</h4>
+                                            <span className="text-xs font-medium text-gray-500">Candidates will see categories in this sequence</span>
+                                        </div>
+                                        <div className="grid gap-2 sm:grid-cols-2">
+                                            {ruleGroups.map((group) => (
+                                                <div
+                                                    key={`${group.display_order}-${group.category}`}
+                                                    className="flex items-center justify-between rounded-lg border border-indigo-100 bg-indigo-50 px-4 py-3"
+                                                >
+                                                    <span className="text-sm font-semibold text-gray-900">{group.category}</span>
+                                                    <span className="rounded-full bg-white px-2.5 py-1 text-xs font-bold text-indigo-700 shadow-sm">
+                                                        #{group.display_order}
+                                                    </span>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    </div>
+
+                                    {/* Bank count warnings */}
+                                    {Object.keys(bankCounts).length > 0 && (() => {
+                                        const warnings = flattenedRules.filter(r => {
+                                            const key = `${r.category}|||${r.sub_category || ""}|||${r.difficulty}`;
+                                            return (bankCounts[key] ?? Infinity) < r.count;
+                                        });
+                                        if (warnings.length === 0) return null;
+                                        return (
+                                            <div className="bg-amber-50 border border-amber-200 rounded-xl p-5">
+                                                <div className="flex items-center gap-2 mb-3">
+                                                    <AlertTriangle size={16} className="text-amber-600" />
+                                                    <span className="text-sm font-bold text-amber-800">Question Bank Shortage Warning</span>
+                                                </div>
+                                                <div className="space-y-2">
+                                                    {warnings.map((r, i) => {
+                                                        const key = `${r.category}|||${r.sub_category || ""}|||${r.difficulty}`;
+                                                        const available = bankCounts[key] ?? 0;
+                                                        return (
+                                                            <div key={i} className="flex items-center justify-between bg-white rounded-lg px-4 py-2 border border-amber-100 text-sm">
+                                                                <span className="font-medium text-gray-800">
+                                                                    {r.category}{r.sub_category ? ` / ${r.sub_category}` : ""} — {r.difficulty}
+                                                                </span>
+                                                                <span className="text-amber-700 font-bold">
+                                                                    {available} available / {r.count} needed
+                                                                </span>
+                                                            </div>
+                                                        );
+                                                    })}
+                                                </div>
+                                                <p className="text-xs text-amber-600 mt-3">
+                                                    Go to <button onClick={() => router.push("/interviewer/exam-sheet")} className="underline font-bold">Exam Sheet</button> to add more questions.
+                                                </p>
+                                            </div>
+                                        );
+                                    })()}
                                 </div>
+                            </div>
 
-                                <div className="bg-white rounded-xl border border-gray-200 p-5">
-                                    <div className="flex items-center justify-between mb-3">
-                                        <h4 className="text-sm font-bold text-gray-900 uppercase tracking-wider">Category Display Order</h4>
-                                        <span className="text-xs font-medium text-gray-500">Candidates will see categories in this sequence</span>
-                                    </div>
-                                    <div className="grid gap-2 sm:grid-cols-2">
-                                        {ruleGroups.map((group) => (
-                                            <div
-                                                key={`${group.display_order}-${group.category}`}
-                                                className="flex items-center justify-between rounded-lg border border-indigo-100 bg-indigo-50 px-4 py-3"
-                                            >
-                                                <span className="text-sm font-semibold text-gray-900">{group.category}</span>
-                                                <span className="rounded-full bg-white px-2.5 py-1 text-xs font-bold text-indigo-700 shadow-sm">
-                                                    #{group.display_order}
-                                                </span>
-                                            </div>
-                                        ))}
-                                    </div>
-                                </div>
-
-                                {/* Bank count warnings */}
-                                {Object.keys(bankCounts).length > 0 && (() => {
-                                    const warnings = flattenedRules.filter(r => {
-                                        const key = `${r.category}|||${r.sub_category || ""}|||${r.difficulty}`;
-                                        return (bankCounts[key] ?? Infinity) < r.count;
-                                    });
-                                    if (warnings.length === 0) return null;
-                                    return (
-                                        <div className="bg-amber-50 border border-amber-200 rounded-xl p-5">
-                                            <div className="flex items-center gap-2 mb-3">
-                                                <AlertTriangle size={16} className="text-amber-600" />
-                                                <span className="text-sm font-bold text-amber-800">Question Bank Shortage Warning</span>
-                                            </div>
-                                            <div className="space-y-2">
-                                                {warnings.map((r, i) => {
-                                                    const key = `${r.category}|||${r.sub_category || ""}|||${r.difficulty}`;
-                                                    const available = bankCounts[key] ?? 0;
-                                                    return (
-                                                        <div key={i} className="flex items-center justify-between bg-white rounded-lg px-4 py-2 border border-amber-100 text-sm">
-                                                            <span className="font-medium text-gray-800">
-                                                                {r.category}{r.sub_category ? ` / ${r.sub_category}` : ""} — {r.difficulty}
-                                                            </span>
-                                                            <span className="text-amber-700 font-bold">
-                                                                {available} available / {r.count} needed
-                                                            </span>
-                                                        </div>
-                                                    );
-                                                })}
-                                            </div>
-                                            <p className="text-xs text-amber-600 mt-3">
-                                                Go to <button onClick={() => router.push("/interviewer/exam-sheet")} className="underline font-bold">Exam Sheet</button> to add more questions.
-                                            </p>
-                                        </div>
-                                    );
-                                })()}
+                            <div className="flex justify-between pt-6 border-t border-gray-100">
+                                <button
+                                    onClick={handlePrevious}
+                                    className="flex items-center gap-2 px-6 py-3 bg-white border border-gray-300 text-gray-700 rounded-lg font-semibold hover:bg-gray-50 transition"
+                                >
+                                    <ArrowLeft size={18} /> Previous
+                                </button>
+                                <button
+                                    onClick={confirmSubmit}
+                                    disabled={submitting}
+                                    className="flex items-center gap-2 px-8 py-3 bg-green-600 text-white rounded-lg font-semibold hover:bg-green-700 transition disabled:opacity-50"
+                                >
+                                    {submitting ? 'Creating...' : (
+                                        <>
+                                            <Save size={18} /> Create Final Assessment
+                                        </>
+                                    )}
+                                </button>
                             </div>
                         </div>
- 
-                        <div className="flex justify-between pt-6 border-t border-gray-100">
-                            <button
-                                onClick={handlePrevious}
-                                className="flex items-center gap-2 px-6 py-3 bg-white border border-gray-300 text-gray-700 rounded-lg font-semibold hover:bg-gray-50 transition"
-                            >
-                                <ArrowLeft size={18} /> Previous
-                            </button>
-                            <button
-                                onClick={confirmSubmit}
-                                disabled={submitting}
-                                className="flex items-center gap-2 px-8 py-3 bg-green-600 text-white rounded-lg font-semibold hover:bg-green-700 transition disabled:opacity-50"
-                            >
-                                {submitting ? 'Creating...' : (
-                                    <>
-                                        <Save size={18} /> Create Final Assessment
-                                    </>
-                                )}
-                            </button>
-                        </div>
-                    </div>
-                )}
+                    )}
                 </div>
 
                 {/* Sticky Sidebar for Steps 2 & 3 */}
@@ -941,7 +941,7 @@ export default function CreateAssessmentPage() {
                                             <div className="text-[10px] font-bold opacity-60 uppercase tracking-widest">Total Questions</div>
                                             <span className="text-xl font-black">{totalQuestions}</span>
                                         </div>
-                                        
+
                                         {currentPointsTotal !== Number(totalMarks) ? (
                                             <div className="text-xs font-bold py-2 px-3 bg-orange-100 text-orange-700 rounded-lg animate-pulse">
                                                 Needs {Math.abs(Number(totalMarks) - currentPointsTotal)} more pts
@@ -954,7 +954,7 @@ export default function CreateAssessmentPage() {
                                     </div>
                                 </div>
                             </div>
-                            
+
                             {step === 2 && ruleGroups.length > 0 && (
                                 <div className="bg-indigo-50 border border-indigo-100 rounded-2xl p-4 text-xs text-indigo-700">
                                     <h4 className="font-bold mb-2 uppercase tracking-tighter flex items-center gap-1">

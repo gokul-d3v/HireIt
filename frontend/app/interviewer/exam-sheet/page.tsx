@@ -14,15 +14,15 @@ import {
 import { useSelector, useDispatch } from "react-redux";
 import { RootState } from "@/lib/redux/store";
 import { Modal } from "@/components/ui/Modal";
-import { 
+import {
     CategoryNode,
     SubNode,
     ActiveSlot,
-    setTree, 
-    setExpanded, 
+    setTree,
+    setExpanded,
     setSubExpanded,
-    setActiveSlot, 
-    removeDifficulty as removeDifficultyAction, 
+    setActiveSlot,
+    removeDifficulty as removeDifficultyAction,
     removeCategory as removeCategoryAction,
     renameCategory as renameCategoryAction,
     toggleHasSub as toggleHasSubAction,
@@ -34,7 +34,7 @@ import {
     toggleAudioUpload as toggleAudioUploadAction
 } from "@/lib/redux/slices/questionBankSlice";
 
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8080";
+const API_BASE = process.env.DEV_NEXT_PUBLIC_API_URL || "http://localhost:8080";
 
 /* ─── Data types ────────────────────────────────── */
 interface Question {
@@ -303,19 +303,19 @@ export default function ExamSheetPage() {
                     difficulties: cat.difficulties || [],
                     subGroups: cat.has_sub_categories ? cat.sub_categories.map((sub: any) => ({
                         name: sub.name,
-                        difficulties: (sub.difficulties || []).map((d: any) => ({ 
-                            difficulty: typeof d === "string" ? d : d.difficulty, 
+                        difficulties: (sub.difficulties || []).map((d: any) => ({
+                            difficulty: typeof d === "string" ? d : d.difficulty,
                             count: 0,
-                            audio_url: d.audio_url 
+                            audio_url: d.audio_url
                         })),
                         audio_url: sub.audio_url,
                         expanded: sub.expanded !== undefined ? sub.expanded : true
-                    })) : [{ 
-                        name: "", 
-                        difficulties: (cat.difficulties || []).map((d: any) => ({ 
-                            difficulty: typeof d === "string" ? d : d.difficulty, 
+                    })) : [{
+                        name: "",
+                        difficulties: (cat.difficulties || []).map((d: any) => ({
+                            difficulty: typeof d === "string" ? d : d.difficulty,
                             count: 0,
-                            audio_url: d.audio_url 
+                            audio_url: d.audio_url
                         })),
                         audio_url: cat.audio_url,
                         expanded: true
@@ -517,18 +517,18 @@ export default function ExamSheetPage() {
 
     const loadMore = useCallback(async () => {
         if (!active || loadingMore || !hasMore) return;
-        
+
         setLoadingMore(true);
         const nextPage = page + 1;
         try {
-            const p = new URLSearchParams({ 
-                category: active.category, 
-                difficulty: active.difficulty, 
-                page: nextPage.toString(), 
-                limit: "20" 
+            const p = new URLSearchParams({
+                category: active.category,
+                difficulty: active.difficulty,
+                page: nextPage.toString(),
+                limit: "20"
             });
             if (active.sub_category) p.set("sub_category", active.sub_category);
-            
+
             const res = await fetch(`${API_BASE}/api/admin/questions?${p}`, { headers: authHeaders() });
             const d = await res.json();
             const newQs = d.questions || [];
@@ -539,15 +539,15 @@ export default function ExamSheetPage() {
                 setQuestions(mergedQuestions);
                 setPage(nextPage);
             }
-            
+
             // Check if we have more based on total items
             setHasMore(appendedCount > 0 && mergedQuestions.length < (d.total || 0));
-            
-        } catch (err) { 
+
+        } catch (err) {
             console.error("Load more failed:", err);
-            showToast("Failed to load more questions", "error"); 
-        } finally { 
-            setLoadingMore(false); 
+            showToast("Failed to load more questions", "error");
+        } finally {
+            setLoadingMore(false);
         }
     }, [active, hasMore, loadingMore, page, questions, showToast]);
 
@@ -978,13 +978,13 @@ export default function ExamSheetPage() {
                                 </div>
 
                                 <div className="flex bg-white  p-1.5 rounded-2xl border border-slate-200 shadow-sm">
-                                    <button 
+                                    <button
                                         onClick={() => setViewMode("upload")}
                                         className={`px-6 py-3 rounded-xl text-xs font-black transition-all flex items-center gap-3 ${viewMode === "upload" ? "bg-indigo-600 text-white shadow-lg" : "text-slate-400 hover:text-slate-200"}`}
                                     >
                                         <Upload size={16} /> Upload Hub
                                     </button>
-                                    <button 
+                                    <button
                                         onClick={() => setViewMode("list")}
                                         className={`px-6 py-3 rounded-xl text-xs font-black transition-all flex items-center gap-3 ${viewMode === "list" ? "bg-indigo-600 text-white shadow-lg" : "text-slate-400 hover:text-slate-200"}`}
                                     >
@@ -1044,29 +1044,29 @@ export default function ExamSheetPage() {
                                 <div className="space-y-12">
                                     <div className="relative group">
                                         <Search size={20} className="absolute left-6 top-1/2 -translate-y-1/2 text-slate-600 group-focus-within:text-indigo-400 transition-colors" />
-                                        <input 
-                                            type="text" 
-                                            value={search} 
-                                            onChange={e => setSearch(e.target.value)} 
+                                        <input
+                                            type="text"
+                                            value={search}
+                                            onChange={e => setSearch(e.target.value)}
                                             placeholder="Explore questions in this bank..."
-                                            className="w-full pl-16 pr-8 py-5 text-lg font-bold bg-white border border-slate-100 rounded-[32px] focus:outline-none focus:border-indigo-500/50 transition-all text-slate-900 placeholder:text-slate-400 shadow-sm" 
+                                            className="w-full pl-16 pr-8 py-5 text-lg font-bold bg-white border border-slate-100 rounded-[32px] focus:outline-none focus:border-indigo-500/50 transition-all text-slate-900 placeholder:text-slate-400 shadow-sm"
                                         />
                                     </div>
                                     <div className="space-y-6">
                                         {/* Audio Config */}
-                                        <AudioConfiguration 
+                                        <AudioConfiguration
                                             cat={tree.find(c => c.name === active.category)}
                                             onSaveAudio={(url) => {
                                                 const ci = tree.findIndex(c => c.name === active.category);
                                                 const si = active.sub_category ? tree[ci].subGroups.findIndex(s => s.name === active.sub_category) : undefined;
                                                 const sub = si !== undefined && si !== -1 ? tree[ci].subGroups[si] : (si === -1 ? undefined : tree[ci].subGroups[0]);
                                                 const di = sub?.difficulties.findIndex(d => d.difficulty === active.difficulty);
-                                                
-                                                dispatch(setAudioAction({ 
-                                                    catIdx: ci, 
-                                                    subIdx: si === -1 ? undefined : si, 
+
+                                                dispatch(setAudioAction({
+                                                    catIdx: ci,
+                                                    subIdx: si === -1 ? undefined : si,
                                                     diffIdx: di === -1 ? undefined : di,
-                                                    url 
+                                                    url
                                                 }));
                                             }}
                                         />
@@ -1096,63 +1096,63 @@ export default function ExamSheetPage() {
                                                 </div>
                                             ) : (
                                                 filtered.map((q, idx) => (
-                                                <div key={q.id} className="group bg-white  border border-slate-200 rounded-[32px] p-8 hover:border-indigo-500/30 transition-all shadow-sm">
-                                                    <div className="flex justify-between items-start gap-10">
-                                                        <div className="space-y-4 flex-1">
-                                                            <div className="flex items-center gap-3">
-                                                                <div className="px-3 py-1 bg-indigo-500/10 text-indigo-400 border border-indigo-500/20 rounded-full text-[10px] font-bold uppercase tracking-widest leading-none">
-                                                                    {q.type}
-                                                                </div>
-                                                                <span className="text-xs font-bold text-slate-600">ID: {q.id.slice(-8)}</span>
-                                                            </div>
-                                                            {q.passage_text && (
-                                                                <div className="p-5 rounded-[24px] border border-amber-500/15 bg-amber-500/5">
-                                                                    <p className="text-[10px] font-black uppercase tracking-widest text-amber-500 mb-2">
-                                                                        {q.passage_title || "Reading Passage"}
-                                                                    </p>
-                                                                    <p className="text-sm font-medium text-slate-600 whitespace-pre-wrap leading-relaxed">
-                                                                        {q.passage_text}
-                                                                    </p>
-                                                                </div>
-                                                            )}
-                                                            <p className="text-xl font-bold text-foreground leading-snug">{q.text}</p>
-                                                            {(() => {
-                                                                const visibleOptions = getVisibleMcqOptions(q.options);
-                                                                const correctAnswerText = resolveMcqAnswerText(q.correct_answer, trimTrailingEmptyOptions(q.options));
-
-                                                                if (visibleOptions.length === 0) {
-                                                                    return null;
-                                                                }
-
-                                                                return (
-                                                                    <div className="grid grid-cols-2 gap-3 mt-4">
-                                                                        {visibleOptions.map((opt, i) => {
-                                                                            const isCorrect = opt === correctAnswerText;
-                                                                            return (
-                                                                                <div key={i} className={`p-4 rounded-xl border text-sm font-bold flex items-center gap-3 ${isCorrect ? "bg-emerald-500/5 border-emerald-500/20 text-emerald-400" : "bg-white  border-slate-200  text-slate-500"}`}>
-                                                                                    <div className={`w-6 h-6 rounded-lg flex items-center justify-center text-[10px] ${isCorrect ? "bg-emerald-500 text-white" : "bg-slate-50  text-slate-600"}`}>
-                                                                                        {optionLetters[i]}
-                                                                                    </div>
-                                                                                    {opt}
-                                                                                </div>
-                                                                            );
-                                                                        })}
+                                                    <div key={q.id} className="group bg-white  border border-slate-200 rounded-[32px] p-8 hover:border-indigo-500/30 transition-all shadow-sm">
+                                                        <div className="flex justify-between items-start gap-10">
+                                                            <div className="space-y-4 flex-1">
+                                                                <div className="flex items-center gap-3">
+                                                                    <div className="px-3 py-1 bg-indigo-500/10 text-indigo-400 border border-indigo-500/20 rounded-full text-[10px] font-bold uppercase tracking-widest leading-none">
+                                                                        {q.type}
                                                                     </div>
-                                                                );
-                                                            })()}
-                                                            {q.type !== "MCQ" && q.correct_answer && (
-                                                                <div className="mt-4 p-4 rounded-2xl border border-indigo-500/15 bg-indigo-500/5">
-                                                                    <p className="text-[10px] font-black uppercase tracking-widest text-indigo-400 mb-2">Correct Answer</p>
-                                                                    <p className="text-sm font-bold text-slate-700 whitespace-pre-wrap">{q.correct_answer}</p>
+                                                                    <span className="text-xs font-bold text-slate-600">ID: {q.id.slice(-8)}</span>
                                                                 </div>
-                                                            )}
-                                                        </div>
-                                                        <div className="flex flex-col gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                                                            <button onClick={() => setEditingQ(createEditableQuestion(q))} className="p-3 bg-white  text-slate-400 hover:text-white hover:bg-slate-800 border border-slate-200  rounded-xl transition-all"><Edit2 size={16} /></button>
-                                                            <button onClick={() => { setQuestionToDelete(q.id); setShowDeleteQuestionModal(true); }} className="p-3 bg-white  text-slate-400 hover:text-red-400 hover:bg-red-500/10 border border-slate-200  rounded-xl transition-all"><Trash2 size={16} /></button>
+                                                                {q.passage_text && (
+                                                                    <div className="p-5 rounded-[24px] border border-amber-500/15 bg-amber-500/5">
+                                                                        <p className="text-[10px] font-black uppercase tracking-widest text-amber-500 mb-2">
+                                                                            {q.passage_title || "Reading Passage"}
+                                                                        </p>
+                                                                        <p className="text-sm font-medium text-slate-600 whitespace-pre-wrap leading-relaxed">
+                                                                            {q.passage_text}
+                                                                        </p>
+                                                                    </div>
+                                                                )}
+                                                                <p className="text-xl font-bold text-foreground leading-snug">{q.text}</p>
+                                                                {(() => {
+                                                                    const visibleOptions = getVisibleMcqOptions(q.options);
+                                                                    const correctAnswerText = resolveMcqAnswerText(q.correct_answer, trimTrailingEmptyOptions(q.options));
+
+                                                                    if (visibleOptions.length === 0) {
+                                                                        return null;
+                                                                    }
+
+                                                                    return (
+                                                                        <div className="grid grid-cols-2 gap-3 mt-4">
+                                                                            {visibleOptions.map((opt, i) => {
+                                                                                const isCorrect = opt === correctAnswerText;
+                                                                                return (
+                                                                                    <div key={i} className={`p-4 rounded-xl border text-sm font-bold flex items-center gap-3 ${isCorrect ? "bg-emerald-500/5 border-emerald-500/20 text-emerald-400" : "bg-white  border-slate-200  text-slate-500"}`}>
+                                                                                        <div className={`w-6 h-6 rounded-lg flex items-center justify-center text-[10px] ${isCorrect ? "bg-emerald-500 text-white" : "bg-slate-50  text-slate-600"}`}>
+                                                                                            {optionLetters[i]}
+                                                                                        </div>
+                                                                                        {opt}
+                                                                                    </div>
+                                                                                );
+                                                                            })}
+                                                                        </div>
+                                                                    );
+                                                                })()}
+                                                                {q.type !== "MCQ" && q.correct_answer && (
+                                                                    <div className="mt-4 p-4 rounded-2xl border border-indigo-500/15 bg-indigo-500/5">
+                                                                        <p className="text-[10px] font-black uppercase tracking-widest text-indigo-400 mb-2">Correct Answer</p>
+                                                                        <p className="text-sm font-bold text-slate-700 whitespace-pre-wrap">{q.correct_answer}</p>
+                                                                    </div>
+                                                                )}
+                                                            </div>
+                                                            <div className="flex flex-col gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                                                                <button onClick={() => setEditingQ(createEditableQuestion(q))} className="p-3 bg-white  text-slate-400 hover:text-white hover:bg-slate-800 border border-slate-200  rounded-xl transition-all"><Edit2 size={16} /></button>
+                                                                <button onClick={() => { setQuestionToDelete(q.id); setShowDeleteQuestionModal(true); }} className="p-3 bg-white  text-slate-400 hover:text-red-400 hover:bg-red-500/10 border border-slate-200  rounded-xl transition-all"><Trash2 size={16} /></button>
+                                                            </div>
                                                         </div>
                                                     </div>
-                                                </div>
                                                 ))
                                             )}
                                             {hasMore && <div className="py-10 text-center"><RefreshCw className="animate-spin mx-auto text-indigo-600" /></div>}
@@ -1169,7 +1169,7 @@ export default function ExamSheetPage() {
             {showImport && (
                 <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/10 backdrop-blur-md">
                     <div className="bg-white rounded-[40px] shadow-2xl w-full max-w-2xl overflow-hidden border border-slate-100">
-                         <div className="flex items-center justify-between bg-white border-slate-100 shadow-sm p-8 border-b border-slate-100">
+                        <div className="flex items-center justify-between bg-white border-slate-100 shadow-sm p-8 border-b border-slate-100">
                             <h2 className="text-xl font-black text-slate-900">{importMode === "form" ? "Manual Question Entry" : "Bulk JSON Import"}</h2>
                             <button onClick={() => setShowImport(false)} className="p-3 hover:bg-slate-50 rounded-2xl text-slate-400 transition-colors"><X size={24} /></button>
                         </div>
@@ -1302,15 +1302,15 @@ export default function ExamSheetPage() {
             {editingQ && (
                 <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/10 backdrop-blur-md">
                     <div className="bg-white rounded-[40px] shadow-sm w-full max-w-2xl overflow-hidden border border-slate-100">
-                         <div className="flex items-center justify-between p-8 border-b border-slate-100 bg-white">
+                        <div className="flex items-center justify-between p-8 border-b border-slate-100 bg-white">
                             <h2 className="text-xl font-black text-slate-900">Refine Question</h2>
                             <button onClick={() => setEditingQ(null)} className="p-3 hover:bg-slate-50 rounded-2xl text-slate-400 transition-colors"><X size={24} /></button>
                         </div>
                         <div className="p-10 max-h-[80vh] overflow-y-auto space-y-8">
                             <div className="space-y-2">
                                 <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1">Question Type</label>
-                                <select 
-                                    value={editingQ.type} 
+                                <select
+                                    value={editingQ.type}
                                     onChange={e => {
                                         const nextType = e.target.value;
                                         if (nextType === "MCQ") {
@@ -1332,7 +1332,7 @@ export default function ExamSheetPage() {
                                                 ? resolveMcqAnswerText(editingQ.correct_answer, editingQ.options)
                                                 : (editingQ.correct_answer || ""),
                                         });
-                                    }} 
+                                    }}
                                     className="w-full p-4 bg-white border border-slate-200 rounded-2xl font-bold text-foreground focus:ring-4 focus:ring-indigo-500/10 transition-all outline-none appearance-none"
                                 >
                                     <option value="MCQ">Multiple Choice (MCQ)</option>
@@ -1343,11 +1343,11 @@ export default function ExamSheetPage() {
 
                             <div className="space-y-2">
                                 <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1">Question content</label>
-                                <textarea 
-                                    value={editingQ.text} 
-                                    onChange={e => setEditingQ({ ...editingQ, text: e.target.value })} 
-                                    rows={4} 
-                                    className="w-full p-6 bg-white border border-slate-200 rounded-3xl font-bold text-foreground placeholder:text-slate-700 focus:ring-4 focus:ring-indigo-500/10 transition-all outline-none" 
+                                <textarea
+                                    value={editingQ.text}
+                                    onChange={e => setEditingQ({ ...editingQ, text: e.target.value })}
+                                    rows={4}
+                                    className="w-full p-6 bg-white border border-slate-200 rounded-3xl font-bold text-foreground placeholder:text-slate-700 focus:ring-4 focus:ring-indigo-500/10 transition-all outline-none"
                                 />
                             </div>
 
@@ -1382,16 +1382,16 @@ export default function ExamSheetPage() {
                                                 <div className="absolute left-4 top-1/2 -translate-y-1/2 w-8 h-8 bg-slate-50 rounded-lg flex items-center justify-center text-xs font-black text-slate-500 border border-slate-200 group-focus-within:border-indigo-500/50 group-focus-within:text-indigo-400 transition-all">
                                                     {optionLetters[oi]}
                                                 </div>
-                                                <input 
-                                                    type="text" 
-                                                    value={opt} 
-                                                    onChange={e => { 
+                                                <input
+                                                    type="text"
+                                                    value={opt}
+                                                    onChange={e => {
                                                         const o = [...editableMcqOptions];
-                                                        o[oi] = e.target.value; 
-                                                        setEditingQ({ ...editingQ, options: o }); 
-                                                    }} 
-                                                    className="w-full pl-16 pr-14 py-4 bg-white border border-slate-200 rounded-2xl text-foreground font-bold placeholder:text-slate-700 outline-none focus:border-indigo-500/30 transition-all" 
-                                                    placeholder={`Alternative ${optionLetters[oi]}…`} 
+                                                        o[oi] = e.target.value;
+                                                        setEditingQ({ ...editingQ, options: o });
+                                                    }}
+                                                    className="w-full pl-16 pr-14 py-4 bg-white border border-slate-200 rounded-2xl text-foreground font-bold placeholder:text-slate-700 outline-none focus:border-indigo-500/30 transition-all"
+                                                    placeholder={`Alternative ${optionLetters[oi]}…`}
                                                 />
                                                 {editableMcqOptions.length > 2 && (
                                                     <button
@@ -1423,13 +1423,13 @@ export default function ExamSheetPage() {
                                             {editableMcqOptions.map((_, idx) => {
                                                 const letter = optionLetters[idx];
                                                 return (
-                                                <button 
-                                                    key={letter} 
-                                                    onClick={() => setEditingQ({ ...editingQ, correct_answer: letter })} 
-                                                    className={`w-12 h-12 rounded-xl font-black transition-all ${editingQ.correct_answer === letter ? "bg-indigo-600 text-white shadow-lg shadow-indigo-600/20" : "text-slate-600 hover:text-slate-400"}`}
-                                                >
-                                                    {letter}
-                                                </button>
+                                                    <button
+                                                        key={letter}
+                                                        onClick={() => setEditingQ({ ...editingQ, correct_answer: letter })}
+                                                        className={`w-12 h-12 rounded-xl font-black transition-all ${editingQ.correct_answer === letter ? "bg-indigo-600 text-white shadow-lg shadow-indigo-600/20" : "text-slate-600 hover:text-slate-400"}`}
+                                                    >
+                                                        {letter}
+                                                    </button>
                                                 );
                                             })}
                                         </div>
@@ -1544,16 +1544,16 @@ export default function ExamSheetPage() {
                 </div>
             </Modal>
 
-            <input 
-                type="file" 
-                ref={csvInputRef} 
-                accept=".csv" 
+            <input
+                type="file"
+                ref={csvInputRef}
+                accept=".csv"
                 onChange={(e) => {
                     const file = e.target.files?.[0];
                     if (file) handleCSVUpload(file);
-                    e.target.value = ""; 
-                }} 
-                className="hidden" 
+                    e.target.value = "";
+                }}
+                className="hidden"
             />
         </div>
     );
@@ -1678,7 +1678,7 @@ function CategoryBlock({ cat, catIdx, active, onToggle, onToggleSub, onRemoveCat
                                     )}
                                 </div>
                             ))}
-                             <div className="relative flex items-center bg-slate-50/50 border border-slate-100 rounded-2xl p-1 transition-all focus-within:bg-white focus-within:shadow-sm overflow-hidden">
+                            <div className="relative flex items-center bg-slate-50/50 border border-slate-100 rounded-2xl p-1 transition-all focus-within:bg-white focus-within:shadow-sm overflow-hidden">
                                 <input type="text" value={newSub} onChange={e => setNewSub(e.target.value)} className="flex-1 min-w-0 px-4 py-2.5 bg-transparent border-none font-bold text-slate-900 text-sm outline-none placeholder:text-slate-300" placeholder="New subgroup…" />
                                 <button onClick={handleAddSub} className="shrink-0 w-9 h-9 bg-indigo-600 text-white rounded-xl hover:bg-indigo-500 transition-all active:scale-95 flex items-center justify-center shadow-sm"><Plus size={18} /></button>
                             </div>
@@ -1723,7 +1723,7 @@ function AudioConfiguration({ cat, onSaveAudio }: {
 
     // Prioritize difficulty-level audio, then sub-category, then category
     const node = diffNode || subNode || cat;
-    
+
     const [audioUrl, setAudioUrl] = useState(node?.audio_url || "");
     const [isEditing, setIsEditing] = useState(false);
     const [uploading, setUploading] = useState(false);
@@ -1756,7 +1756,7 @@ function AudioConfiguration({ cat, onSaveAudio }: {
     return (
         <div className="bg-white  rounded-[32px] p-8 border border-slate-200 shadow-sm relative overflow-hidden group/audio">
             <div className="absolute top-0 right-0 w-32 h-32 bg-indigo-500/5 blur-3xl -mr-16 -mt-16 group-hover/audio:bg-indigo-500/10 transition-colors" />
-            
+
             <div className="flex items-center justify-between mb-8 relative z-10">
                 <div className="flex items-center gap-4">
                     <div className="w-14 h-14 bg-white  border border-slate-200   rounded-2xl flex items-center justify-center text-indigo-500  shadow-inner group-hover/audio:scale-105 transition-transform"><Music size={28} /></div>
@@ -1769,7 +1769,7 @@ function AudioConfiguration({ cat, onSaveAudio }: {
                 </div>
                 <div className="flex gap-3">
                     {node?.audio_url && (
-                        <button 
+                        <button
                             onClick={() => setShowDeleteModal(true)}
                             className="w-12 h-12 flex items-center justify-center bg-white text-slate-500 rounded-xl hover:text-red-400 border border-slate-100 transition-all hover:bg-slate-50"
                             title="Purge Audio"
