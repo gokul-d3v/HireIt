@@ -87,6 +87,9 @@ jobs:
             -e RABBITMQ_QUEUE="candidate_details" \
             -e FRONTEND_URL="${{ vars.DEV_FRONTEND_URL }}" \
             -e AUDIT_LOG_COLLECTION="audit_logs" \
+            -e MSG91_BASE_URL="${{ vars.DEV_MSG91_BASE_URL }}" \
+            -e MSG91_TEMPLATE_ID="${{ vars.DEV_MSG91_TEMPLATE_ID }}" \
+            -e MSG91_AUTH_KEY="${{ secrets.DEV_MSG91_AUTH_KEY }}" \
             --restart unless-stopped \
             ghcr.io/${{ env.REPO_LOWER }}/hireit-backend-dev:latest
 
