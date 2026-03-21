@@ -301,6 +301,11 @@ export default function AssessmentPlayer({ assessmentId, onComplete }: Assessmen
             if (stream && !isRecordingRef.current && !isDemoUser.current) {
                 isRecordingRef.current = true;
                 
+                if (typeof MediaRecorder === 'undefined') {
+                    console.warn("MediaRecorder is not supported in this browser or context.");
+                    return;
+                }
+
                 // Determine supported mime type
                 const mimeType = MediaRecorder.isTypeSupported('video/webm;codecs=vp8') 
                     ? 'video/webm;codecs=vp8' 
@@ -418,6 +423,11 @@ export default function AssessmentPlayer({ assessmentId, onComplete }: Assessmen
     };
 
     const startCalibration = async () => {
+        if (typeof navigator === 'undefined' || !navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+            showToast("Camera access is not available. Please ensure you are using a secure connection (HTTPS) and a supported browser.", "error");
+            return;
+        }
+
         try {
             const s = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
             setStream(s);
@@ -431,7 +441,7 @@ export default function AssessmentPlayer({ assessmentId, onComplete }: Assessmen
             detectionInterval.current = interval;
         } catch (err) {
             console.error("Calibration failed", err);
-            showToast("Failed to access camera", "error");
+            showToast("Failed to access camera. Please check your browser permissions.", "error");
         }
     };
 
@@ -492,7 +502,13 @@ export default function AssessmentPlayer({ assessmentId, onComplete }: Assessmen
 
             // Start Audio Analysis (Voice Detection)
             if (stream && stream.getAudioTracks().length > 0) {
-                const audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
+                const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
+                if (!AudioContextClass) {
+                    console.warn("AudioContext is not supported in this browser.");
+                    return;
+                }
+
+                const audioCtx = new AudioContextClass();
                 audioContextRef.current = audioCtx;
                 const analyser = audioCtx.createAnalyser();
                 analyser.fftSize = 256;
