@@ -155,12 +155,27 @@ func main() {
 	// CORS Configuration
 	router.Use(cors.New(cors.Config{
 		AllowOriginFunc: func(origin string) bool {
-			// In production, only allow specific domains
-			if os.Getenv("APP_ENV") == "production" {
-				return normalizeOrigin(origin) == normalizeOrigin(os.Getenv("FRONTEND_URL"))
-			}
 			// In development, allow EVERYTHING to unblock testing
-			return true
+			if os.Getenv("APP_ENV") != "production" {
+				return true
+			}
+
+			normOrigin := normalizeOrigin(origin)
+
+			// Hardcode the test domain just to be sure
+			if normOrigin == "test-bet.brototype.com" || normOrigin == "https://test-bet.brototype.com" {
+				return true
+			}
+
+			// In production, allow comma-separated domains from FRONTEND_URL
+			allowedOrigins := strings.Split(os.Getenv("FRONTEND_URL"), ",")
+			for _, o := range allowedOrigins {
+				if normOrigin == normalizeOrigin(strings.TrimSpace(o)) {
+					return true
+				}
+			}
+
+			return false
 		},
 		AllowMethods:     []string{"GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"},
 		AllowHeaders:     []string{"Origin", "Content-Type", "Accept", "Authorization", "X-Requested-With"},
