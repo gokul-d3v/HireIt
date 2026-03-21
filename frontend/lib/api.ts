@@ -5,11 +5,12 @@ function trimTrailingSlash(value: string) {
 }
 
 export function getApiUrl() {
-    console.log(process.env.DEV_NEXT_PUBLIC_API_URL);
-    return trimTrailingSlash(process.env.DEV_NEXT_PUBLIC_API_URL?.trim() || `http://localhost:${DEFAULT_API_PORT}`);
+    // Note: Must use NEXT_PUBLIC_ prefix for browser availability.
+    // Your DEV_NEXT_PUBLIC_API_URL is mapped to this in the Dockerfile.
+    return trimTrailingSlash(process.env.NEXT_PUBLIC_API_URL?.trim() || `http://localhost:${DEFAULT_API_PORT}`);
 }
 
-export const API_URL = trimTrailingSlash(process.env.DEV_NEXT_PUBLIC_API_URL?.trim() || `http://localhost:${DEFAULT_API_PORT}`);
+export const API_URL = trimTrailingSlash(process.env.NEXT_PUBLIC_API_URL?.trim() || `http://localhost:${DEFAULT_API_PORT}`);
 
 export async function apiRequest(endpoint: string, method: string, body?: unknown) {
     const token = localStorage.getItem("token");

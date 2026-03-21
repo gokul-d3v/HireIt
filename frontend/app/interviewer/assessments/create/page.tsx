@@ -355,7 +355,7 @@ export default function CreateAssessmentPage() {
             try {
                 const token = localStorage.getItem("token");
                 const headers: Record<string, string> = token ? { Authorization: `Bearer ${token}` } : {};
-                const apiBase = process.env.DEV_NEXT_PUBLIC_API_URL || "http://localhost:8080";
+                const apiBase = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8080";
                 const counts: Record<string, number> = {};
                 await Promise.all(flattenedRules.map(async rule => {
                     const params = new URLSearchParams({ category: rule.category, difficulty: rule.difficulty });

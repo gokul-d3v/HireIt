@@ -165,7 +165,7 @@ export default function ExamResultsPage() {
     const getImageUrl = (path: string | undefined) => {
         if (!path) return "";
         if (path.startsWith('data:')) return path;
-        if (path.startsWith('/api/telegram')) return `${process.env.DEV_NEXT_PUBLIC_API_URL || 'http://localhost:8080'}${path}`;
+        if (path.startsWith('/api/telegram')) return `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080'}${path}`;
         return path;
     };
 

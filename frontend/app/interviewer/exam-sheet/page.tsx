@@ -34,7 +34,7 @@ import {
     toggleAudioUpload as toggleAudioUploadAction
 } from "@/lib/redux/slices/questionBankSlice";
 
-const API_BASE = process.env.DEV_NEXT_PUBLIC_API_URL || "http://localhost:8080";
+const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8080";
 
 /* ─── Data types ────────────────────────────────── */
 interface Question {
