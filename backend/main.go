@@ -162,11 +162,6 @@ func main() {
 
 			normOrigin := normalizeOrigin(origin)
 
-			// Hardcode the test domain just to be sure
-			if normOrigin == "test-bet.brototype.com" || normOrigin == "https://test-bet.brototype.com" {
-				return true
-			}
-
 			// In production, allow comma-separated domains from FRONTEND_URL
 			allowedOrigins := strings.Split(os.Getenv("FRONTEND_URL"), ",")
 			for _, o := range allowedOrigins {
