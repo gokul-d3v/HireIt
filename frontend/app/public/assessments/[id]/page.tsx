@@ -47,7 +47,7 @@ export default function PublicAssessmentLanding() {
         }
 
         if (assessmentId) {
-            const base = process.env.DEV_DEV_NEXT_PUBLIC_API_URL || "http://localhost:8080";
+            const base = process.env.DEV_DEV_DEV_NEXT_PUBLIC_API_URL || "http://localhost:8080";
             fetch(`${base}/public/assessments/${assessmentId}/metadata`)
                 .then(res => res.json())
                 .then(data => {
@@ -83,7 +83,7 @@ export default function PublicAssessmentLanding() {
 
         setSubmitting(true);
         try {
-            const base = process.env.DEV_DEV_NEXT_PUBLIC_API_URL || "http://localhost:8080";
+            const base = process.env.DEV_DEV_DEV_NEXT_PUBLIC_API_URL || "http://localhost:8080";
             const res = await fetch(`${base}/public/start-otp`, {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
@@ -112,7 +112,7 @@ export default function PublicAssessmentLanding() {
         localStorage.removeItem("user");
 
         try {
-            const base = process.env.DEV_DEV_NEXT_PUBLIC_API_URL || "http://localhost:8080";
+            const base = process.env.DEV_DEV_DEV_NEXT_PUBLIC_API_URL || "http://localhost:8080";
             const res = await fetch(`${base}/public/demo`, { method: "POST" });
             const data = await res.json();
 
@@ -146,7 +146,7 @@ export default function PublicAssessmentLanding() {
 
         setSendingOtp(true);
         try {
-            const base = process.env.DEV_DEV_NEXT_PUBLIC_API_URL || "http://localhost:8080";
+            const base = process.env.DEV_DEV_DEV_NEXT_PUBLIC_API_URL || "http://localhost:8080";
             const res = await fetch(`${base}/public/send-otp`, {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
@@ -200,7 +200,7 @@ export default function PublicAssessmentLanding() {
 
         setSubmitting(true);
         try {
-            const base = process.env.DEV_DEV_NEXT_PUBLIC_API_URL || "http://localhost:8080";
+            const base = process.env.DEV_DEV_DEV_NEXT_PUBLIC_API_URL || "http://localhost:8080";
             const res = await fetch(`${base}/public/start-otp`, {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },

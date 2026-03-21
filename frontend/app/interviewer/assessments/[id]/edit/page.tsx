@@ -85,7 +85,7 @@ export default function EditAssessmentPage() {
         // Fetch dynamic bank config
         const token = localStorage.getItem("token");
         const headers: Record<string, string> = token ? { Authorization: `Bearer ${token}` } : {};
-        const base = process.env.DEV_NEXT_PUBLIC_API_URL || "http://localhost:8080";
+        const base = process.env.DEV_DEV_NEXT_PUBLIC_API_URL || "http://localhost:8080";
         fetch(`${base}/api/admin/questions/config`, { headers })
             .then(r => r.json())
             .then(d => setBankConfig(d))

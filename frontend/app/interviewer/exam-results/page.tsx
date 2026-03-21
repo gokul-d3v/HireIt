@@ -165,7 +165,7 @@ export default function ExamResultsPage() {
     const getImageUrl = (path: string | undefined) => {
         if (!path) return "";
         if (path.startsWith('data:')) return path;
-        if (path.startsWith('/api/telegram')) return `${process.env.DEV_NEXT_PUBLIC_API_URL || 'http://localhost:8080'}${path}`;
+        if (path.startsWith('/api/telegram')) return `${process.env.DEV_DEV_NEXT_PUBLIC_API_URL || 'http://localhost:8080'}${path}`;
         return path;
     };
 
@@ -649,7 +649,7 @@ export default function ExamResultsPage() {
                                                 const opts = selectedSubmission.shuffled_options?.[qid] || q.options || [];
                                                 return (
                                                     <div key={idx} className={`bg-white rounded-xl border p-6 shadow-sm ${!isAnswered ? 'border-gray-200' :
-                                                            isCorrect ? 'border-green-200' : 'border-red-200'
+                                                        isCorrect ? 'border-green-200' : 'border-red-200'
                                                         }`}>
                                                         <div className="flex justify-between items-start mb-3">
                                                             <div className="flex-1">
@@ -733,8 +733,8 @@ export default function ExamResultsPage() {
                                                             key={i}
                                                             onClick={() => setQuizPage(i)}
                                                             className={`w-8 h-8 rounded-lg text-xs font-bold transition-all border ${i === quizPage
-                                                                    ? 'bg-indigo-600 text-white border-indigo-600 shadow-sm'
-                                                                    : 'bg-white text-gray-500 border-gray-200 hover:border-indigo-300 hover:text-indigo-600'
+                                                                ? 'bg-indigo-600 text-white border-indigo-600 shadow-sm'
+                                                                : 'bg-white text-gray-500 border-gray-200 hover:border-indigo-300 hover:text-indigo-600'
                                                                 }`}
                                                         >
                                                             {i + 1}

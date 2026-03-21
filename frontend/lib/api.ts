@@ -5,10 +5,10 @@ function trimTrailingSlash(value: string) {
 }
 
 export function getApiUrl() {
-    return trimTrailingSlash(process.env.NEXT_PUBLIC_API_URL?.trim() || `http://localhost:${DEFAULT_API_PORT}`);
+    return trimTrailingSlash(process.env.DEV_NEXT_PUBLIC_API_URL?.trim() || `http://localhost:${DEFAULT_API_PORT}`);
 }
 
-export const API_URL = trimTrailingSlash(process.env.NEXT_PUBLIC_API_URL?.trim() || `http://localhost:${DEFAULT_API_PORT}`);
+export const API_URL = trimTrailingSlash(process.env.DEV_NEXT_PUBLIC_API_URL?.trim() || `http://localhost:${DEFAULT_API_PORT}`);
 
 export async function apiRequest(endpoint: string, method: string, body?: unknown) {
     const token = localStorage.getItem("token");
@@ -70,7 +70,7 @@ export async function apiRequest(endpoint: string, method: string, body?: unknow
         console.error("API Request Error:", error);
 
         if (error instanceof TypeError) {
-            throw new Error(`Could not reach the backend at ${apiUrl}. Check NEXT_PUBLIC_API_URL, your backend server, and local CORS settings.`);
+            throw new Error(`Could not reach the backend at ${apiUrl}. Check DEV_NEXT_PUBLIC_API_URL, your backend server, and local CORS settings.`);
         }
 
         throw error;
