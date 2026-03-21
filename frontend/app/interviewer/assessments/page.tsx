@@ -77,7 +77,7 @@ export default function InterviewerAssessmentsPage() {
     };
 
     const handleShare = async (id: string) => {
-        const shareUrl = `${window.location.origin}/public/assessments/${id}`;
+        const shareUrl = `${window.location.origin}/exam/public/assessments/${id}`;
         const successful = await copyToClipboard(shareUrl);
         if (successful) {
             showToast("Assessment link copied to clipboard!", "success");
