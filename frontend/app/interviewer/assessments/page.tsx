@@ -84,7 +84,7 @@ export default function InterviewerAssessmentsPage() {
         } else {
             showToast("Failed to copy link. Please copy it manually.", "error");
         }
-    };
+    }; 
 
     const getPhases = (p1: Assessment) => {
         const p2Id = p1.next_phase_id;
