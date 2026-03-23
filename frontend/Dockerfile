@@ -10,26 +10,24 @@ RUN npm ci
 # Copy source code
 COPY . .
 
-# Set build-time argument for API URL
-# Set build-time argument for API URL
+# Build-time env
 ARG NEXT_PUBLIC_API_URL
 ENV NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL
 
-# Build application
+# Build app
 RUN npm run build
+
 
 # Production stage
 FROM node:20-alpine
 
 WORKDIR /app
 
-# Copy production needed files
-COPY --from=builder /app/package*.json ./
+# Copy standalone output (IMPORTANT)
 COPY --from=builder /app/.next/standalone ./
 COPY --from=builder /app/.next/static ./.next/static
 COPY --from=builder /app/public ./public
 
 EXPOSE 3000
 
-# Next.js 13+ default port is 3000
-CMD ["npm", "start"]
+CMD ["node", "server.js"]
