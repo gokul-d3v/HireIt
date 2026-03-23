@@ -1,8 +1,9 @@
 import type { NextConfig } from "next";
 
-const nextConfig: NextConfig = {
+const nextConfig = {
   basePath: "/exam",
-  /* config options here */
+  assetPrefix: "/exam",
+  output: "standalone",
 };
 
 export default nextConfig;
