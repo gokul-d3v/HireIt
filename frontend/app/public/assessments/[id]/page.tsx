@@ -224,7 +224,7 @@ export default function PublicAssessmentLanding() {
         }
     };
 
-    if (!loading) {
+    if (loading) {
         return (
             <div className="min-h-screen bg-gray-50 flex items-center justify-center">
                 <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600"></div>
@@ -284,7 +284,7 @@ export default function PublicAssessmentLanding() {
                         )}
                         <p className="text-gray-500 text-sm">
                             {isMockAssessment
-                                ? "This public mock assessment does not require phone verification. Start when you are ready."
+                                ? null
                                 : step === "phone"
                                     ? "Enter your registered phone number to receive an OTP."
                                     : <>OTP sent to <span className="font-semibold text-gray-700">{phone}</span>. Enter it below.</>
