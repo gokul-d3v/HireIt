@@ -77,7 +77,8 @@ func (ctrl *AssessmentController) GetAssessmentByID(c *gin.Context) {
 		return
 	}
 
-	// Inject candidate-specific generated questions
+	// Inject candidate-specific generated questions and submission status
+	var submission *models.Submission
 	if roleStr != "interviewer" {
 		userID, exists := c.Get("userID")
 		if exists {
@@ -86,10 +87,15 @@ func (ctrl *AssessmentController) GetAssessmentByID(c *gin.Context) {
 			if err == nil {
 				assessment.Questions = generatedQuestions
 			}
+			// Fetch current submission to get started_at, saved answers, etc.
+			submission, _ = ctrl.submissionService.GetCandidateResult(ctx, id, candidateID)
 		}
 	}
 
-	c.JSON(http.StatusOK, assessment)
+	c.JSON(http.StatusOK, gin.H{
+		"assessment": assessment,
+		"submission": submission,
+	})
 }
 
 func (ctrl *AssessmentController) UpdateAssessment(c *gin.Context) {
@@ -188,8 +194,9 @@ func (ctrl *AssessmentController) SaveAssessmentProgress(c *gin.Context) {
 	candidateID, _ := c.Get("userID")
 
 	var input struct {
-		Answers    []models.Answer    `json:"answers"`
-		Violations []models.Violation `json:"violations"`
+		Answers            []models.Answer    `json:"answers"`
+		Violations         []models.Violation `json:"violations"`
+		CurrentQuestionIndex int                `json:"current_question_index"`
 	}
 	if err := c.ShouldBindJSON(&input); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
@@ -199,7 +206,7 @@ func (ctrl *AssessmentController) SaveAssessmentProgress(c *gin.Context) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	err := ctrl.submissionService.SaveProgress(ctx, assessmentID, candidateID.(primitive.ObjectID).Hex(), input.Answers, input.Violations)
+	err := ctrl.submissionService.SaveProgress(ctx, assessmentID, candidateID.(primitive.ObjectID).Hex(), input.Answers, input.Violations, input.CurrentQuestionIndex)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to save progress"})
 		return

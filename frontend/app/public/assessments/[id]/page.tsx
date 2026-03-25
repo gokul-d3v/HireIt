@@ -58,12 +58,20 @@ export default function PublicAssessmentLanding() {
                     console.log("metadata title", data);
                     const token = localStorage.getItem("token");
                     const storedUser = localStorage.getItem("user");
-                    if (token && storedUser) {
+                    const activeAssessmentId = localStorage.getItem("activeAssessmentId");
+
+                    if (token && storedUser && activeAssessmentId === assessmentId) {
                         router.replace(`/public/assessments/${assessmentId}/take`);
                         return;
                     }
-                    console.log("metadata token", token);
-                    console.log("metadata storedUser", storedUser);
+
+                    // If token exists but for a different assessment, we stay on landing but don't clear yet
+                    // unless they click "Start" which we handle separately.
+                    // Or we could clear it here if it's confusing.
+                    if (token && activeAssessmentId !== assessmentId) {
+                         console.log("Existing session is for a different assessment, showing landing page");
+                    }
+
                     setLoading(false);
                 })
                 .catch(err => {
@@ -98,6 +106,8 @@ export default function PublicAssessmentLanding() {
 
             localStorage.setItem("token", data.token);
             localStorage.setItem("user", JSON.stringify(data.user));
+            localStorage.setItem("activeAssessmentId", assessmentId);
+
             showToast(`Welcome, ${data.user.name}! Starting your assessment...`, "success");
             router.push(`/public/assessments/${assessmentId}/take`);
         } catch (err: any) {

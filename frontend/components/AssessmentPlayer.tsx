@@ -222,37 +222,51 @@ export default function AssessmentPlayer({ assessmentId, onComplete }: Assessmen
 
             return newCount;
         });
-    };
+    };    const [isCompleting, setIsCompleting] = useState(false);
+    const isCompletingRef = useRef(false);
 
     useEffect(() => {
-        if (!examStarted) return;
+        if (!examStarted || isCompleting) return;
 
         const handleVisibilityChange = () => {
-            if (document.hidden) {
+            if (document.hidden && !isCompletingRef.current) {
                 handleViolation("Tab switching detected");
             }
         };
 
         const handleBlur = () => {
-            handleViolation("Application lost focus");
+            if (!isCompletingRef.current) {
+                handleViolation("Application lost focus");
+            }
         };
 
         const handleFullscreenChange = () => {
-            if (!document.fullscreenElement) {
+            if (!document.fullscreenElement && !isCompletingRef.current) {
                 handleViolation("Exited Full-Screen mode");
+            }
+        };
+
+        const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+            if (!isCompletingRef.current) {
+                e.preventDefault();
+                e.returnValue = "Are you sure you want to leave? Your exam timer will continue to run even if you close this tab.";
+                return e.returnValue;
             }
         };
 
         document.addEventListener("visibilitychange", handleVisibilityChange);
         window.addEventListener("blur", handleBlur);
         document.addEventListener("fullscreenchange", handleFullscreenChange);
+        window.addEventListener("beforeunload", handleBeforeUnload);
 
         return () => {
             document.removeEventListener("visibilitychange", handleVisibilityChange);
             window.removeEventListener("blur", handleBlur);
             document.removeEventListener("fullscreenchange", handleFullscreenChange);
+            window.removeEventListener("beforeunload", handleBeforeUnload);
         };
-    }, [examStarted]);
+    }, [examStarted, isCompleting]);
+;
 
     const captureEvidenceAndViolate = (reason: string, isFatal = true, type = "tab_switch") => {
         if (!canvasRef.current || !videoRef.current) return;
@@ -579,18 +593,17 @@ export default function AssessmentPlayer({ assessmentId, onComplete }: Assessmen
                 apiRequest("/api/assessments/submissions/my", "GET")
             ]);
 
-            // Handle new response structure { assessment, saved_answers }
-            // or fallback to old structure if API hasn't deployed fully or something
-            const assessmentData = responseData.assessment || responseData;
-            const savedAnswers = responseData.saved_answers || {};
+            // Handle new response structure { assessment, submission }
+            const assessmentData = responseData.assessment;
+            const submissionData = responseData.submission;
+            const savedAnswers = submissionData?.answers || [];
 
-            if (!assessmentData || responseData.error || !assessmentData.questions) {
-                throw new Error(responseData.error || "Assessment data is invalid or missing questions.");
+            if (!assessmentData || !assessmentData.questions) {
+                throw new Error("Assessment data is invalid or missing questions.");
             }
 
             // Check if already submitted (completed)
-            const existingSubmission = submissionsData?.find((s: any) => s.assessment_id === id && s.status !== "in_progress");
-            if (existingSubmission) {
+            if (submissionData && submissionData.status === "completed") {
                 showToast("You have already submitted this assessment.", "info");
                 if (onComplete) {
                     onComplete();
@@ -602,22 +615,36 @@ export default function AssessmentPlayer({ assessmentId, onComplete }: Assessmen
 
             setAssessment(assessmentData);
 
-            // Map saved answers back to indices if MCQ
+            // Restore answers and map back to indices if MCQ
             const restoredAnswers: Record<string, string> = {};
-            Object.entries(savedAnswers as Record<string, string>).forEach(([qid, val]) => {
-                const q = assessmentData.questions.find((q: any) => q.id === qid);
-                if (q && q.type === "MCQ") {
-                    const idx = q.options.indexOf(val);
-                    restoredAnswers[qid] = idx !== -1 ? idx.toString() : val;
+            savedAnswers.forEach((ans: any) => {
+                const q = assessmentData.questions.find((question: any) => question.id === ans.question_id);
+                if (q && q.type === "MCQ" && q.options) {
+                    const idx = q.options.indexOf(ans.value);
+                    restoredAnswers[ans.question_id] = idx !== -1 ? idx.toString() : ans.value;
                 } else {
-                    restoredAnswers[qid] = val;
+                    restoredAnswers[ans.question_id] = ans.value;
                 }
             });
             setAnswers(restoredAnswers);
 
-            // Initialize timer (duration in minutes * 60)
-            // Ideally we should adjust time based on started_at if resuming
-            setTimeLeft(assessmentData.duration * 60);
+            // Restore timer from started_at
+            if (submissionData && submissionData.started_at) {
+                const startTime = new Date(submissionData.started_at).getTime();
+                const now = Date.now();
+                const elapsedSeconds = Math.floor((now - startTime) / 1000);
+                const totalSeconds = assessmentData.duration * 60;
+                const remaining = Math.max(0, totalSeconds - elapsedSeconds);
+                setTimeLeft(remaining);
+                if (remaining > 0) {
+                    setExamStarted(true);
+                }
+                if (submissionData.current_question_index !== undefined) {
+                    setCurrentQuestionIndex(submissionData.current_question_index);
+                }
+            } else {
+                setTimeLeft(assessmentData.duration * 60);
+            }
 
         } catch (err: any) {
             console.error("Failed to fetch assessment", err);
@@ -674,9 +701,10 @@ export default function AssessmentPlayer({ assessmentId, onComplete }: Assessmen
 
             if (formattedAnswers.length === 0) return;
 
-            await apiRequest(`/api/assessments/${assessment.id}/progress`, "POST", {
+            await apiRequest(`/api/assessments/${assessment.id}/save-progress`, "POST", {
                 answers: formattedAnswers,
-                violations: violationsToSave
+                violations: violationsToSave,
+                current_question_index: currentQuestionIndex
             });
             // Quietly save, no toast needed for background save
         } catch (err) {
@@ -742,6 +770,8 @@ export default function AssessmentPlayer({ assessmentId, onComplete }: Assessmen
         if (!assessment) return;
 
         setSubmitting(true);
+        setIsCompleting(true);
+        isCompletingRef.current = true;
         if (timerRef.current) clearInterval(timerRef.current);
         setShowSubmitModal(false);
 

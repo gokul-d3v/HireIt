@@ -19,7 +19,7 @@ type SubmissionService interface {
 	GetSubmissions(ctx context.Context, assessmentID string) ([]models.Submission, error)
 	GetCandidateResult(ctx context.Context, assessmentID, candidateID string) (*models.Submission, error)
 	SubmitAssessment(ctx context.Context, assessmentID, candidateID string, answers []models.Answer, violations []models.Violation, faceSnapshots *models.FaceSnapshots) (*models.Submission, error)
-	SaveProgress(ctx context.Context, assessmentID, candidateID string, answers []models.Answer, violations []models.Violation) error
+	SaveProgress(ctx context.Context, assessmentID, candidateID string, answers []models.Answer, violations []models.Violation, currentQuestionIndex int) error
 	GetSubmissionsByCandidate(ctx context.Context, candidateID string) ([]models.Submission, error)
 	GetSubmissionsByInterviewer(ctx context.Context, interviewerID string) ([]models.Submission, error)
 	GetOrGenerateQuestions(ctx context.Context, assessmentID, candidateID string) ([]models.Question, error)
@@ -107,7 +107,7 @@ func (r *submissionService) GetCandidateResult(ctx context.Context, assessmentID
 	return r.repo.FindOne(ctx, bson.M{"assessment_id": aID, "candidate_id": cID, "deleted_at": nil})
 }
 
-func (s *submissionService) SaveProgress(ctx context.Context, assessmentID, candidateID string, answers []models.Answer, violations []models.Violation) error {
+func (s *submissionService) SaveProgress(ctx context.Context, assessmentID, candidateID string, answers []models.Answer, violations []models.Violation, currentQuestionIndex int) error {
 	aID, _ := primitive.ObjectIDFromHex(assessmentID)
 	cID, _ := primitive.ObjectIDFromHex(candidateID)
 
