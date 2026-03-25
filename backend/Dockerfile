@@ -1,5 +1,5 @@
 # Build stage
-FROM golang:1.25-alpine AS builder
+FROM golang:1.24-alpine AS builder
 
 WORKDIR /app
 
@@ -9,7 +9,7 @@ RUN apk add --no-cache git
 # Copy source code
 COPY . .
 
-# Tidy dependencies for Go 1.25
+# Use go mod tidy for 1.24 compatibility
 RUN go mod tidy
 
 # Build the application
