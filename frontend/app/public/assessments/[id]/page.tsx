@@ -4,6 +4,7 @@ import { useState, useEffect, useRef } from "react";
 import { useRouter, useParams } from "next/navigation";
 import { useToast } from "@/components/ui/Toast";
 import { Phone, ShieldCheck, ArrowRight, BookOpen, Loader2, CheckCircle, ShieldAlert } from "lucide-react";
+import { apiRequest } from "@/lib/api";
 
 export default function PublicAssessmentLanding() {
     const router = useRouter();
@@ -47,10 +48,7 @@ export default function PublicAssessmentLanding() {
         }
 
         if (assessmentId) {
-            const base = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8080";
-            console.log(base);
-            fetch(`${base}/api/public/assessments/${assessmentId}/metadata`)
-                .then(res => res.json())
+            apiRequest(`/api/public/assessments/${assessmentId}/metadata`, "GET")
                 .then(data => {
                     console.log("metadata", data);
                     setIsMockAssessment(data.is_mock === true);
@@ -95,14 +93,7 @@ export default function PublicAssessmentLanding() {
 
         setSubmitting(true);
         try {
-            const base = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8080";
-            const res = await fetch(`${base}/api/public/start-otp`, {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ phone: phone.trim(), otp: otpStr }),
-            });
-            const data = await res.json();
-            if (!res.ok) throw new Error(data.error || "Verification failed");
+            const data = await apiRequest("/api/public/start-otp", "POST", { phone: phone.trim(), otp: otpStr });
 
             localStorage.setItem("token", data.token);
             localStorage.setItem("user", JSON.stringify(data.user));
@@ -126,11 +117,9 @@ export default function PublicAssessmentLanding() {
         localStorage.removeItem("user");
 
         try {
-            const base = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8080";
-            const res = await fetch(`${base}/api/public/demo`, { method: "POST" });
-            const data = await res.json();
-
-            if (!res.ok || !data.token || !data.user) {
+            const data = await apiRequest("/api/public/demo", "POST");
+            
+            if (!data.token || !data.user) {
                 throw new Error(data.error || "Failed to start assessment");
             }
 
@@ -160,14 +149,7 @@ export default function PublicAssessmentLanding() {
 
         setSendingOtp(true);
         try {
-            const base = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8080";
-            const res = await fetch(`${base}/api/public/send-otp`, {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ phone: cleaned }),
-            });
-            const data = await res.json();
-            if (!res.ok) throw new Error(data.error || "Failed to send OTP");
+            await apiRequest("/api/public/send-otp", "POST", { phone: cleaned });
 
             showToast("OTP sent to your phone!", "success");
             setStep("otp");
@@ -214,14 +196,7 @@ export default function PublicAssessmentLanding() {
 
         setSubmitting(true);
         try {
-            const base = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8080";
-            const res = await fetch(`${base}/api/public/start-otp`, {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ phone: phone.trim(), otp: otpStr }),
-            });
-            const data = await res.json();
-            if (!res.ok) throw new Error(data.error || "Verification failed");
+            const data = await apiRequest("/api/public/start-otp", "POST", { phone: phone.trim(), otp: otpStr });
 
             localStorage.setItem("token", data.token);
             localStorage.setItem("user", JSON.stringify(data.user));

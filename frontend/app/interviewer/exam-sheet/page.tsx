@@ -4,6 +4,7 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/context/AuthContext";
 import { useToast } from "@/components/ui/Toast";
+import { apiRequest, getApiUrl } from "@/lib/api";
 import {
     Plus, Trash2, BookOpen, ChevronRight, ChevronDown,
     Upload, Music, X, RefreshCw, AlertTriangle,
@@ -33,8 +34,6 @@ import {
     setAudio as setAudioAction,
     toggleAudioUpload as toggleAudioUploadAction
 } from "@/lib/redux/slices/questionBankSlice";
-
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8080";
 
 /* ─── Data types ────────────────────────────────── */
 interface Question {
@@ -76,11 +75,6 @@ function mergeUniqueQuestions(existing: Question[], incoming: Question[]): Quest
     }
 
     return Array.from(merged.values());
-}
-
-function authHeaders(): Record<string, string> {
-    const t = typeof window !== "undefined" ? localStorage.getItem("token") : null;
-    return t ? { Authorization: `Bearer ${t}` } : {};
 }
 
 const optionLetters = ["A", "B", "C", "D"];
@@ -285,15 +279,12 @@ export default function ExamSheetPage() {
     const load = useCallback(async () => {
         setLoading(true);
         try {
-            const [res, configRes] = await Promise.all([
-                fetch(`${API_BASE}/api/admin/questions?limit=2000`, { headers: authHeaders() }),
-                fetch(`${API_BASE}/api/admin/questions/config`, { headers: authHeaders() })
+            const [data, configData] = await Promise.all([
+                apiRequest("/api/admin/questions?limit=2000", "GET"),
+                apiRequest("/api/admin/questions/config", "GET")
             ]);
 
-            const data = await res.json();
-            const configData = await configRes.json();
             const qs: Question[] = data.questions || [];
-
             const discoveryTree = buildTree(qs);
 
             if (configData.structure && configData.structure.categories?.length > 0) {
@@ -354,8 +345,7 @@ export default function ExamSheetPage() {
     useEffect(() => { load(); }, [load]);
 
     async function refresh() {
-        const res = await fetch(`${API_BASE}/api/admin/questions`, { headers: authHeaders() });
-        const data = await res.json();
+        const data = await apiRequest("/api/admin/questions", "GET");
         const qs: Question[] = data.questions || [];
         const freshDiscovery = buildTree(qs);
         dispatch(setTree(tree.map(p => {
@@ -403,11 +393,7 @@ export default function ExamSheetPage() {
                 }))
             };
             try {
-                await fetch(`${API_BASE}/api/admin/questions/structure`, {
-                    method: "POST",
-                    headers: { ...authHeaders(), "Content-Type": "application/json" },
-                    body: JSON.stringify(config)
-                });
+                await apiRequest("/api/admin/questions/structure", "POST", config);
             } catch (err) { console.error("Failed to auto-save structure", err); }
         }, 2000);
         return () => clearTimeout(saveTimer);
@@ -442,8 +428,7 @@ export default function ExamSheetPage() {
         try {
             const p = new URLSearchParams({ category: cat, difficulty: diff, page: "1", limit: "20" });
             if (sub) p.set("sub_category", sub);
-            const res = await fetch(`${API_BASE}/api/admin/questions?${p}`, { headers: authHeaders() });
-            const d = await res.json();
+            const d = await apiRequest(`/api/admin/questions?${p.toString()}`, "GET");
             const firstPageQuestions = mergeUniqueQuestions([], d.questions || []);
             setQuestions(firstPageQuestions);
             setTotalCount(d.total || 0);
@@ -461,9 +446,10 @@ export default function ExamSheetPage() {
             const p = new URLSearchParams({ category: active.category, difficulty: active.difficulty });
             if (active.sub_category) p.set("sub_category", active.sub_category);
 
-            const res = await fetch(`${API_BASE}/api/admin/questions/upload-csv?${p}`, {
+            const token = typeof window !== 'undefined' ? localStorage.getItem("token") : null;
+            const res = await fetch(`${getApiUrl()}/api/admin/questions/upload-csv?${p.toString()}`, {
                 method: "POST",
-                headers: authHeaders(),
+                headers: token ? { Authorization: `Bearer ${token}` } : {},
                 body: formData
             });
 
@@ -529,8 +515,7 @@ export default function ExamSheetPage() {
             });
             if (active.sub_category) p.set("sub_category", active.sub_category);
 
-            const res = await fetch(`${API_BASE}/api/admin/questions?${p}`, { headers: authHeaders() });
-            const d = await res.json();
+            const d = await apiRequest(`/api/admin/questions?${p.toString()}`, "GET");
             const newQs = d.questions || [];
             const mergedQuestions = mergeUniqueQuestions(questions, newQs);
             const appendedCount = mergedQuestions.length - questions.length;
@@ -580,7 +565,7 @@ export default function ExamSheetPage() {
     async function confirmDeleteQuestion() {
         if (!questionToDelete) return;
         try {
-            await fetch(`${API_BASE}/api/admin/questions/${questionToDelete}`, { method: "DELETE", headers: authHeaders() });
+            await apiRequest(`/api/admin/questions/${questionToDelete}`, "DELETE");
             setQuestions(p => p.filter(q => q.id !== questionToDelete));
             await refresh();
             showToast("Deleted", "success");
@@ -607,12 +592,7 @@ export default function ExamSheetPage() {
                 params.set("sub_category", subCategory);
             }
 
-            const res = await fetch(`${API_BASE}/api/admin/questions?${params}`, { headers: authHeaders() });
-            if (!res.ok) {
-                throw new Error("Failed to load questions for this level");
-            }
-
-            const data = await res.json();
+            const data = await apiRequest(`/api/admin/questions?${params.toString()}`, "GET");
             const batch: Question[] = data.questions || [];
             allQuestions.push(...batch);
 
@@ -630,15 +610,7 @@ export default function ExamSheetPage() {
         let deletedCount = 0;
 
         for (const question of questionsToDelete) {
-            const res = await fetch(`${API_BASE}/api/admin/questions/${question.id}`, {
-                method: "DELETE",
-                headers: authHeaders(),
-            });
-
-            if (!res.ok) {
-                throw new Error("Failed to delete one or more questions");
-            }
-
+            await apiRequest(`/api/admin/questions/${question.id}`, "DELETE");
             deletedCount += 1;
         }
 
@@ -667,16 +639,7 @@ export default function ExamSheetPage() {
             let deletedCount = 0;
 
             try {
-                const res = await fetch(`${API_BASE}/api/admin/questions?${params}`, {
-                    method: "DELETE",
-                    headers: authHeaders(),
-                });
-
-                if (!res.ok) {
-                    throw new Error("Bulk delete unavailable");
-                }
-
-                const data = await res.json().catch(() => ({}));
+                const data = await apiRequest(`/api/admin/questions?${params.toString()}`, "DELETE");
                 deletedCount = Number(data.deleted_count || 0);
             } catch {
                 const questionsForSlot = await fetchAllQuestionsForSlot(
@@ -767,18 +730,10 @@ export default function ExamSheetPage() {
 
         try {
             setImporting(true);
-            const res = await fetch(`${API_BASE}/api/admin/questions/${editingQ.id}`, {
-                method: "PUT",
-                headers: { ...authHeaders(), "Content-Type": "application/json" },
-                body: JSON.stringify(payload)
-            });
-            if (res.ok) {
-                showToast("Updated successfully", "success");
-                setEditingQ(null);
-                await selectSlot(active!.category, active!.sub_category, active!.difficulty);
-            } else {
-                showToast("Failed to update", "error");
-            }
+            await apiRequest(`/api/admin/questions/${editingQ.id}`, "PUT", payload);
+            showToast("Updated successfully", "success");
+            setEditingQ(null);
+            await selectSlot(active!.category, active!.sub_category, active!.difficulty);
         } catch { showToast("Error updating question", "error"); }
         finally { setImporting(false); }
     }
@@ -820,9 +775,8 @@ export default function ExamSheetPage() {
                     correct_answer: formQ.type === "MCQ" ? nextAnswer : "",
                 }]
             };
-            const res = await fetch(`${API_BASE}/api/admin/questions/import`, { method: "POST", headers: { ...authHeaders(), "Content-Type": "application/json" }, body: JSON.stringify(payload) });
-            const d = await res.json();
-            if (d.imported_count > 0) {
+            const data = await apiRequest("/api/admin/questions/import", "POST", payload);
+            if (data.imported_count > 0) {
                 showToast("Added!", "success");
                 setFormQ({ text: "", type: "MCQ", options: ["", ""], correct_answer: "A" });
                 await selectSlot(active.category, active.sub_category, active.difficulty);
@@ -839,8 +793,7 @@ export default function ExamSheetPage() {
             let parsed: ImportQuestion[];
             try { parsed = JSON.parse(jsonText); } catch { showToast("Invalid JSON", "error"); return; }
             const payload = { questions: parsed.map(q => ({ ...q, category: active.category, sub_category: active.sub_category, difficulty: active.difficulty })) };
-            const res = await fetch(`${API_BASE}/api/admin/questions/import`, { method: "POST", headers: { ...authHeaders(), "Content-Type": "application/json" }, body: JSON.stringify(payload) });
-            const d = await res.json();
+            const d = await apiRequest("/api/admin/questions/import", "POST", payload);
             showToast(`Imported ${d.imported_count}!`, "success");
             setJsonText(""); setShowImport(false);
             await selectSlot(active.category, active.sub_category, active.difficulty);
@@ -1743,7 +1696,12 @@ function AudioConfiguration({ cat, onSaveAudio }: {
         const fd = new FormData();
         fd.append("audio", file);
         try {
-            const res = await fetch(`${API_BASE}/api/admin/audio-upload`, { method: "POST", headers: authHeaders(), body: fd });
+            const token = typeof window !== 'undefined' ? localStorage.getItem("token") : null;
+            const res = await fetch(`${getApiUrl()}/api/admin/audio-upload`, { 
+                method: "POST", 
+                headers: token ? { Authorization: `Bearer ${token}` } : {}, 
+                body: fd 
+            });
             const data = await res.json();
             if (data.url) {
                 onSaveAudio(data.url);
@@ -1801,7 +1759,7 @@ function AudioConfiguration({ cat, onSaveAudio }: {
                     {node.audio_url ? (
                         <>
                             <div className="w-10 h-10 bg-indigo-600/10 rounded-full flex items-center justify-center text-indigo-600  border border-indigo-500/20"><Play size={16} /></div>
-                            <audio src={node.audio_url.startsWith("http") ? node.audio_url : `${API_BASE}${node.audio_url}`} controls className="h-10 flex-1 opacity-70 hover:opacity-100 transition-opacity filter   invert-0" />
+                            <audio src={node.audio_url.startsWith("http") ? node.audio_url : `${getApiUrl()}${node.audio_url}`} controls className="h-10 flex-1 opacity-70 hover:opacity-100 transition-opacity filter   invert-0" />
                         </>
                     ) : (
                         <div className="flex items-center gap-4 text-slate-600 py-2">

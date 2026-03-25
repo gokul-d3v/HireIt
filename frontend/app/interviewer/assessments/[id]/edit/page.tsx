@@ -83,11 +83,7 @@ export default function EditAssessmentPage() {
 
     useEffect(() => {
         // Fetch dynamic bank config
-        const token = localStorage.getItem("token");
-        const headers: Record<string, string> = token ? { Authorization: `Bearer ${token}` } : {};
-        const base = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8080";
-        fetch(`${base}/admin/questions/config`, { headers })
-            .then(r => r.json())
+        apiRequest("/api/admin/questions/config", "GET")
             .then(d => setBankConfig(d))
             .catch(() => { /* non-fatal */ });
     }, []);

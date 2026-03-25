@@ -83,13 +83,8 @@ export default function CreateAssessmentPage() {
     const [bankConfig, setBankConfig] = useState<BankConfig>({ categories: [], sub_categories: {}, difficulties: [] });
 
     useEffect(() => {
-        // Fetch dynamic config from question bank
-        const token = localStorage.getItem("token");
-        const headers: Record<string, string> = token ? { Authorization: `Bearer ${token}` } : {};
-
-        const base = process.env.DEV_NEXT_PUBLIC_API_URL || "http://localhost:8080";
-        fetch(`${base}/api/admin/questions/config`, { headers })
-            .then(r => r.json())
+        // Fetch dynamic bank config
+        apiRequest("/api/admin/questions/config", "GET")
             .then(d => setBankConfig(d))
             .catch(() => { /* non-fatal */ });
 
@@ -353,15 +348,12 @@ export default function CreateAssessmentPage() {
             }
             // Fetch bank counts for warnings before moving to review
             try {
-                const token = localStorage.getItem("token");
-                const headers: Record<string, string> = token ? { Authorization: `Bearer ${token}` } : {};
-                const apiBase = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8080";
                 const counts: Record<string, number> = {};
                 await Promise.all(flattenedRules.map(async rule => {
                     const params = new URLSearchParams({ category: rule.category, difficulty: rule.difficulty });
                     if (rule.sub_category) params.set("sub_category", rule.sub_category);
-                    const res = await fetch(`${apiBase}/api/admin/questions/count?${params}`, { headers });
-                    const data = await res.json();
+                    
+                    const data = await apiRequest(`/api/admin/questions/count?${params.toString()}`, "GET");
                     const key = `${rule.category}|||${rule.sub_category || ""}|||${rule.difficulty}`;
                     counts[key] = data.count || 0;
                 }));
