@@ -58,4 +58,5 @@ type Submission struct {
 	NextPhaseUnlocked bool                `bson:"next_phase_unlocked" json:"next_phase_unlocked"`
 	ShuffledOptions   map[string][]string `bson:"shuffled_options,omitempty" json:"shuffled_options,omitempty"` // question_id -> shuffled options
 	MinPassingScore   int                 `bson:"min_passing_score" json:"min_passing_score"`
+	TotalMarks        int                 `bson:"total_marks" json:"total_marks"`
 }

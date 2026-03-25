@@ -192,17 +192,37 @@ func (s *submissionService) SubmitAssessment(ctx context.Context, assessmentID, 
 		passingScore = assessment.PassingScore
 	}
 
-	// Calculate Score using the dynamically generated questions locked to this submission
+	// Calculate Score and Total Marks using the dynamically generated questions locked to this submission
 	totalScore := 0
+	totalMarks := 0
 	questionMap := make(map[string]models.Question)
 	for _, q := range submission.GeneratedQuestions {
 		questionMap[q.ID.Hex()] = q
+		totalMarks += q.Points
 	}
 
 	for i := range answers {
 		q, ok := questionMap[answers[i].QuestionID.Hex()]
 		if ok {
-			if q.Type == models.MultipleChoice && strings.TrimSpace(q.CorrectAnswer) == strings.TrimSpace(answers[i].Value) {
+			isCorrect := false
+			trimmedValue := strings.TrimSpace(answers[i].Value)
+			trimmedCorrect := strings.TrimSpace(q.CorrectAnswer)
+
+			if q.Type == models.MultipleChoice {
+				if trimmedCorrect == trimmedValue {
+					isCorrect = true
+				} else if len(trimmedCorrect) == 1 && trimmedCorrect >= "A" && trimmedCorrect <= "Z" {
+					// Fallback: check if the correct answer is a letter (A, B, C...) mapping to an option text
+					optionIdx := int(trimmedCorrect[0] - 'A')
+					if optionIdx >= 0 && optionIdx < len(q.Options) {
+						if strings.TrimSpace(q.Options[optionIdx]) == trimmedValue {
+							isCorrect = true
+						}
+					}
+				}
+			}
+
+			if isCorrect {
 				answers[i].IsCorrect = true
 				answers[i].Points = q.Points
 				totalScore += q.Points
@@ -270,6 +290,7 @@ func (s *submissionService) SubmitAssessment(ctx context.Context, assessmentID, 
 	}
 
 	submission.Score = totalScore
+	submission.TotalMarks = totalMarks
 	submission.Passed = passed
 	submission.Status = "completed"
 	submission.SubmittedAt = time.Now()
@@ -396,6 +417,7 @@ func (s *submissionService) GetOrGenerateQuestions(ctx context.Context, assessme
 		}
 		if assessment != nil {
 			submission.MinPassingScore = assessment.PassingScore
+			submission.TotalMarks = assessment.TotalMarks
 		}
 		_, err = s.repo.Create(ctx, submission)
 	} else {
