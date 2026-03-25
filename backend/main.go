@@ -145,6 +145,7 @@ func main() {
 	router := gin.New()
 	router.Use(middleware.RequestIDMiddleware())           // Assign a unique Request ID to each request
 	router.Use(middleware.RecoveryMiddleware())            // Catch panics and log them properly
+	router.Use(middleware.RateLimitMiddleware())           // Apply per-IP rate limiting (60 req/min)
 	router.Use(middleware.PrometheusMiddleware())          // Prometheus Metrics
 	router.Use(middleware.AuditMiddleware(auditLogService)) // Global Audit Logger
 

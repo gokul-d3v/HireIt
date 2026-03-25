@@ -85,8 +85,8 @@ export async function apiRequest(endpoint: string, method: string, body?: unknow
             throw new Error(errorMsg);
         }
 
-        // Return only the data portion if it matches our standard APIResponse format
-        return data.success !== undefined ? data.data : data;
+        // Return the full data to maintain compatibility with existing logic
+        return data;
     } catch (error) {
         console.error("API Request Error:", error);
 

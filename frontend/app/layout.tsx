@@ -36,8 +36,10 @@ export default function RootLayout({
         <ErrorBoundary>
           <ReduxProvider>
             <AuthProvider>
-              {children}
-              <Toaster position="top-right" />
+              <ToastProvider>
+                {children}
+                <Toaster position="top-right" />
+              </ToastProvider>
             </AuthProvider>
           </ReduxProvider>
         </ErrorBoundary>
