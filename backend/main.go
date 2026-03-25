@@ -143,7 +143,8 @@ func main() {
 
 	// Initialize Router with custom middleware for better performance
 	router := gin.New()
-	router.Use(gin.Recovery())
+	router.Use(middleware.RequestIDMiddleware())           // Assign a unique Request ID to each request
+	router.Use(middleware.RecoveryMiddleware())            // Catch panics and log them properly
 	router.Use(middleware.PrometheusMiddleware())          // Prometheus Metrics
 	router.Use(middleware.AuditMiddleware(auditLogService)) // Global Audit Logger
 
@@ -181,7 +182,7 @@ func main() {
 
 	// Health Check for monitoring
 	router.GET("/health", func(c *gin.Context) {
-		c.JSON(http.StatusOK, gin.H{
+		utils.SendSuccess(c, http.StatusOK, "System is healthy", gin.H{
 			"status": "UP",
 			"time":   time.Now().Format(time.RFC3339),
 		})

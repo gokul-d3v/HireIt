@@ -1,11 +1,11 @@
+import toast from "react-hot-toast";
+
 const DEFAULT_API_PORT = process.env.NEXT_PUBLIC_API_PORT || "8080";
 
 function trimTrailingSlash(value: string) {
     return value.replace(/\/+$/, "");
 }
 
-// Strip any trailing /api from the base URL to avoid double /api/api/ paths.
-// The /api prefix is already included in each endpoint string in the codebase.
 function trimTrailingApi(value: string) {
     return value.replace(/\/api$/, "");
 }
@@ -16,15 +16,17 @@ function buildBaseUrl() {
 }
 
 export function getApiUrl() {
-    // Note: Must use NEXT_PUBLIC_ prefix for browser availability.
-    // Your DEV_NEXT_PUBLIC_API_URL is mapped to this in the Dockerfile.
     return buildBaseUrl();
 }
 
 export const API_URL = buildBaseUrl();
 
-export async function apiRequest(endpoint: string, method: string, body?: unknown) {
-    const token = localStorage.getItem("token");
+async function delay(ms: number) {
+    return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+export async function apiRequest(endpoint: string, method: string, body?: unknown, retries = 2) {
+    const token = typeof window !== 'undefined' ? localStorage.getItem("token") : null;
     const apiUrl = getApiUrl();
 
     const headers: HeadersInit = {
@@ -43,12 +45,10 @@ export async function apiRequest(endpoint: string, method: string, body?: unknow
             cache: "no-store",
         });
 
-        // Check if response has content
         const contentType = response.headers.get("content-type");
         const text = await response.text();
 
-        // Only try to parse JSON if content-type is JSON and text is not empty
-        let data;
+        let data: any;
         if (contentType?.includes("application/json") && text) {
             try {
                 data = JSON.parse(text);
@@ -56,34 +56,49 @@ export async function apiRequest(endpoint: string, method: string, body?: unknow
                 console.error("Failed to parse JSON:", text);
                 throw new Error("Invalid JSON response from server");
             }
-        } else if (text) {
-            // Non-JSON response (might be HTML error page)
-            console.error("Non-JSON response:", text);
-            throw new Error("Server returned non-JSON response");
         } else {
-            // Empty response
-            data = {};
+            data = text ? { message: text } : {};
         }
 
         if (!response.ok) {
+            // Handle 401 specifically
             if (response.status === 401 && endpoint !== "/login" && endpoint !== "/signup") {
-                // Token invalid or expired
-                localStorage.removeItem("token");
-                localStorage.removeItem("role");
-                if (window.location.pathname !== "/login") {
-                    window.location.href = "/login";
+                if (typeof window !== 'undefined') {
+                    localStorage.removeItem("token");
+                    localStorage.removeItem("role");
+                    if (window.location.pathname !== "/login") {
+                        window.location.href = "/login";
+                    }
                 }
                 throw new Error("Session expired. Please login again.");
             }
-            throw new Error(data?.error || data?.message || `Request failed with status ${response.status}`);
+
+            // Retry for 5xx errors if method is GET
+            if (response.status >= 500 && method === "GET" && retries > 0) {
+                console.warn(`Server error ${response.status}. Retrying... (${retries} left)`);
+                await delay(1000 * (3 - retries));
+                return apiRequest(endpoint, method, body, retries - 1);
+            }
+
+            const errorMsg = data?.error || data?.message || `Request failed with status ${response.status}`;
+            toast.error(errorMsg, { id: endpoint }); // Use endpoint as id to prevent duplicate toasts
+            throw new Error(errorMsg);
         }
 
-        return data;
+        // Return only the data portion if it matches our standard APIResponse format
+        return data.success !== undefined ? data.data : data;
     } catch (error) {
         console.error("API Request Error:", error);
 
-        if (error instanceof TypeError) {
-            throw new Error(`Could not reach the backend at ${apiUrl}. Check DEV_NEXT_PUBLIC_API_URL, your backend server, and local CORS settings.`);
+        if (error instanceof TypeError && (error.message === "Failed to fetch" || error.message.includes("NetworkError"))) {
+            if (method === "GET" && retries > 0) {
+                console.warn(`Network error. Retrying... (${retries} left)`);
+                await delay(1500 * (3 - retries));
+                return apiRequest(endpoint, method, body, retries - 1);
+            }
+            const msg = "Network error. Please check your internet connection.";
+            toast.error(msg, { id: "network-error" });
+            throw new Error(msg);
         }
 
         throw error;

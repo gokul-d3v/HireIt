@@ -384,7 +384,10 @@ export default function AssessmentPlayer({ assessmentId, onComplete }: Assessmen
         const nose = landmarks[2];
 
         // 1. Centering (Horizontal)
-        const videoWidth = videoRef.current.videoWidth;
+        const video = videoRef.current;
+        if (!video) return; // Guard against null after await
+        
+        const videoWidth = video.videoWidth;
         const faceCenterX = nose[0];
         const centerOffset = Math.abs(faceCenterX - videoWidth / 2);
         const maxOffset = videoWidth * 0.15; // 15% tolerance
@@ -723,7 +726,8 @@ export default function AssessmentPlayer({ assessmentId, onComplete }: Assessmen
     };
 
     const handleAnswerChange = (value: string) => {
-        const questionId = assessment?.questions[currentQuestionIndex]?.id || "";
+        const questions = assessment?.questions || [];
+        const questionId = questions[currentQuestionIndex]?.id || "";
         setAnswers(prev => ({
             ...prev,
             [questionId]: value
@@ -745,10 +749,11 @@ export default function AssessmentPlayer({ assessmentId, onComplete }: Assessmen
             // Capture end snapshot exactly at submission
             const endSnapshot = await captureSnapshot('end');
 
-            const formattedAnswers = assessment.questions.map(q => {
+            const questions = assessment.questions || [];
+            const formattedAnswers = questions.map(q => {
                 let value = answers[q.id] || "";
                 // If MCQ, mapping index back to text
-                if (q.type === "MCQ" && value !== "") {
+                if (q.type === "MCQ" && value !== "" && q.options) {
                     const idx = parseInt(value);
                     if (!isNaN(idx) && q.options[idx]) {
                         value = q.options[idx];

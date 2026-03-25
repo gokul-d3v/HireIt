@@ -24,7 +24,7 @@ export default function AssessmentSidebar({
     canvasRef
 }: AssessmentSidebarProps) {
     const answeredCount = Object.keys(answers).length;
-    const unansweredCount = questions.length - answeredCount;
+    const unansweredCount = (questions?.length || 0) - answeredCount;
 
     return (
         <aside className="w-80 flex flex-col gap-6 sticky top-24 h-[calc(100vh-8rem)]">
@@ -71,7 +71,7 @@ export default function AssessmentSidebar({
                     Question Palette
                 </h3>
                 <div className="grid grid-cols-5 gap-3 overflow-y-auto pr-2 pb-2">
-                    {questions.map((q, idx) => {
+                    {questions?.map((q, idx) => {
                         const isCurrent = idx === currentQuestionIndex;
                         const isAnswered = answers[q.id] !== undefined && answers[q.id] !== "";
                         
