@@ -629,7 +629,7 @@ export default function AssessmentPlayer({ assessmentId, onComplete }: Assessmen
             setAnswers(restoredAnswers);
 
             // Restore timer from started_at
-            if (submissionData && submissionData.started_at) {
+            if (submissionData && submissionData.started_at && new Date(submissionData.started_at).getFullYear() > 2000) {
                 const startTime = new Date(submissionData.started_at).getTime();
                 const now = Date.now();
                 const elapsedSeconds = Math.floor((now - startTime) / 1000);

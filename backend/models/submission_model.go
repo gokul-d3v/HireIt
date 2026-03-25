@@ -42,7 +42,7 @@ type Submission struct {
 	Status         string             `bson:"status" json:"status"` // "in_progress", "submitted", "graded"
 	CreatedBy      primitive.ObjectID `bson:"created_by" json:"created_by"`
 	CreatedAt      time.Time          `bson:"created_at" json:"created_at"`
-	StartedAt      time.Time          `bson:"started_at" json:"started_at"`
+	StartedAt      time.Time          `bson:"started_at,omitempty" json:"started_at,omitempty"`
 	SubmittedAt    time.Time          `bson:"submitted_at,omitempty" json:"submitted_at,omitempty"`
 	UpdatedAt      time.Time          `bson:"updated_at" json:"updated_at"`
 	DeletedAt      *time.Time         `bson:"deleted_at,omitempty" json:"-"`
