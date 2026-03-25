@@ -91,12 +91,18 @@ export default function EditAssessmentPage() {
     const fetchAssessment = useCallback(async (id: string) => {
         try {
             const data = await apiRequest(`/api/assessments/${id}`, "GET");
-            setTitle(data.title);
-            setDescription(data.description);
-            setDuration(data.duration);
-            setTotalMarks(data.total_marks || 100);
-            setPassingScore(data.passing_score || 50);
-            setIsMock(data.is_mock || false);
+            const assessment = data.assessment;
+            
+            if (!assessment) {
+                throw new Error("Assessment data not found in response");
+            }
+
+            setTitle(assessment.title || "");
+            setDescription(assessment.description || "");
+            setDuration(assessment.duration || 60);
+            setTotalMarks(assessment.total_marks || 100);
+            setPassingScore(assessment.passing_score || 50);
+            setIsMock(assessment.is_mock || false);
 
             // Group the flat rules back into RuleGroups
             const flatRules: Array<{
@@ -106,7 +112,7 @@ export default function EditAssessmentPage() {
                 count: number;
                 points_per_question: number;
                 display_order?: number;
-            }> = data.question_rules || [];
+            }> = assessment.question_rules || [];
             const groups: RuleGroup[] = [];
 
             flatRules.forEach((rule, index) => {

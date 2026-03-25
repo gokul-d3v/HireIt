@@ -6,6 +6,7 @@ import (
 	"hireit-backend/models"
 	"hireit-backend/repositories"
 	"hireit-backend/utils"
+	"strings"
 	"time"
 
 	"go.mongodb.org/mongo-driver/bson"
@@ -52,7 +53,7 @@ func (s *assessmentService) GetAssessments(ctx context.Context, limit, skip int,
 		SetSort(bson.D{{Key: "created_at", Value: -1}})
 
 	// Security: If not interviewer, exclude questions from list view
-	if role != "interviewer" {
+	if strings.ToLower(role) != "interviewer" && strings.ToLower(role) != "admin" {
 		opts.SetProjection(bson.M{"question_rules": 0})
 	}
 

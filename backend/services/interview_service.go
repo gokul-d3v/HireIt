@@ -6,6 +6,7 @@ import (
 	"hireit-backend/models"
 	"hireit-backend/repositories"
 	"hireit-backend/utils"
+	"strings"
 	"time"
 
 	"go.mongodb.org/mongo-driver/bson"
@@ -89,7 +90,7 @@ func (s *interviewService) GetMyInterviews(ctx context.Context, userID string, r
 	uID, _ := utils.ToObjectID(userID)
 	filter := bson.M{}
 
-	if role == "interviewer" {
+	if strings.ToLower(role) == "interviewer" || strings.ToLower(role) == "admin" {
 		filter["interviewer_id"] = uID
 	} else {
 		filter["candidate_id"] = uID
@@ -102,7 +103,7 @@ func (s *interviewService) GetMyInterviews(ctx context.Context, userID string, r
 	}
 
 	// Security: If candidate, hide notes
-	if role != "interviewer" {
+	if strings.ToLower(role) != "interviewer" && strings.ToLower(role) != "admin" {
 		for i := range interviews {
 			interviews[i].Notes = ""
 		}
