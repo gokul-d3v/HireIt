@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRouter, useParams } from "next/navigation";
 import { apiRequest } from "@/lib/api";
-import { XCircle, Trophy } from "lucide-react";
+import { XCircle, Trophy, ShieldCheck } from "lucide-react";
 
 interface Submission {
     id: string;
@@ -79,9 +79,14 @@ export default function PublicResultPage() {
                         {isPassed ? 'Eligible for Next Phase' : 'Not Eligible'}
                     </div>
 
-                    <p className={`text-lg font-bold mb-8 ${isPassed ? 'text-green-600' : 'text-red-600'}`}>
+                    <p className={`text-lg font-bold mb-6 ${isPassed ? 'text-green-600' : 'text-red-600'}`}>
                         {isPassed ? '🎉 Congratulations! You Passed!' : '❌ Not Passed - Try again later.'}
                     </p>
+
+                    <div className="bg-indigo-50 border border-indigo-100 rounded-xl p-3 mb-8 flex items-center justify-center gap-2 text-indigo-700">
+                        <ShieldCheck size={16} />
+                        <span className="text-[10px] font-bold uppercase tracking-widest ">Session Protected: Accidental Tab Closure & Reload Protection Active</span>
+                    </div>
 
                     <div className={`${isPassed ? 'bg-green-50' : 'bg-red-50'} rounded-xl p-6 mb-8 border ${isPassed ? 'border-green-100' : 'border-red-100'}`}>
                         <div className={`text-sm ${isPassed ? 'text-green-600' : 'text-red-600'} font-medium uppercase tracking-wide mb-1`}>Your Score</div>

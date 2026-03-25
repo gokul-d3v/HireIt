@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { useRouter, useParams } from "next/navigation";
 import { useAuth } from "@/context/AuthContext";
 import { apiRequest } from "@/lib/api";
-import { CheckCircle, XCircle, Home, FileText, ArrowRight, Trophy, ChevronLeft, ChevronRight } from "lucide-react";
+import { CheckCircle, XCircle, Home, FileText, ArrowRight, Trophy, ChevronLeft, ChevronRight, ShieldCheck } from "lucide-react";
 
 interface Answer {
     question_id: string;
@@ -106,9 +106,14 @@ export default function AssessmentResultPage() {
                     </div>
 
                     <h1 className="text-3xl font-bold text-gray-900 mb-2">Assessment Completed!</h1>
-                    <p className={`${isPassed ? 'text-green-600' : 'text-red-600'} font-semibold mb-8`}>
+                    <p className={`text-lg font-bold mb-6 ${isPassed ? 'text-green-600' : 'text-red-600'}`}>
                         {isPassed ? '🎉 Congratulations! You Passed!' : '❌ Not Passed - Keep Trying!'}
                     </p>
+
+                    <div className="bg-indigo-50 border border-indigo-100 rounded-xl p-3 mb-8 flex items-center justify-center gap-2 text-indigo-700">
+                        <ShieldCheck size={16} />
+                        <span className="text-[10px] font-bold uppercase tracking-widest ">Session Protected: Accidental Tab Closure & Reload Protection Active</span>
+                    </div>
 
                     <div className={`${isPassed ? 'bg-green-50' : 'bg-red-50'} rounded-xl p-6 mb-8`}>
                         <div className={`text-sm ${isPassed ? 'text-green-600' : 'text-red-600'} font-medium uppercase tracking-wide mb-1`}>Your Score</div>
