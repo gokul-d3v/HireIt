@@ -4,13 +4,24 @@ function trimTrailingSlash(value: string) {
     return value.replace(/\/+$/, "");
 }
 
+// Strip any trailing /api from the base URL to avoid double /api/api/ paths.
+// The /api prefix is already included in each endpoint string in the codebase.
+function trimTrailingApi(value: string) {
+    return value.replace(/\/api$/, "");
+}
+
+function buildBaseUrl() {
+    const raw = process.env.NEXT_PUBLIC_API_URL?.trim() || `http://localhost:${DEFAULT_API_PORT}`;
+    return trimTrailingApi(trimTrailingSlash(raw));
+}
+
 export function getApiUrl() {
     // Note: Must use NEXT_PUBLIC_ prefix for browser availability.
     // Your DEV_NEXT_PUBLIC_API_URL is mapped to this in the Dockerfile.
-    return trimTrailingSlash(process.env.NEXT_PUBLIC_API_URL?.trim() || `http://localhost:${DEFAULT_API_PORT}`);
+    return buildBaseUrl();
 }
 
-export const API_URL = trimTrailingSlash(process.env.NEXT_PUBLIC_API_URL?.trim() || `http://localhost:${DEFAULT_API_PORT}`);
+export const API_URL = buildBaseUrl();
 
 export async function apiRequest(endpoint: string, method: string, body?: unknown) {
     const token = localStorage.getItem("token");
