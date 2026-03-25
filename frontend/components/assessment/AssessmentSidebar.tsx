@@ -38,7 +38,7 @@ export default function AssessmentSidebar({
                         </span>
                         <Mic size={12} className="text-gray-500" />
                     </div>
-                    <div className="relative aspect-video bg-black">
+                    <div className="relative aspect-square bg-black">
                         <video
                             ref={videoRef}
                             autoPlay
