@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"hireit-backend/models"
 	"hireit-backend/repositories"
+	"hireit-backend/utils"
 	"strings"
 	"time"
 
@@ -201,7 +202,7 @@ func (s *submissionService) SubmitAssessment(ctx context.Context, assessmentID, 
 	for i := range answers {
 		q, ok := questionMap[answers[i].QuestionID.Hex()]
 		if ok {
-			if q.Type == models.MultipleChoice && q.CorrectAnswer == answers[i].Value {
+			if q.Type == models.MultipleChoice && strings.TrimSpace(q.CorrectAnswer) == strings.TrimSpace(answers[i].Value) {
 				answers[i].IsCorrect = true
 				answers[i].Points = q.Points
 				totalScore += q.Points
@@ -276,10 +277,23 @@ func (s *submissionService) SubmitAssessment(ctx context.Context, assessmentID, 
 
 	err = s.repo.Update(ctx, submission.ID, submission)
 	if err != nil {
-		fmt.Printf("[CRITICAL ERROR] SubmitAssessment update failed: %v\n", err)
+		utils.GetLogger().Errorf("[CRITICAL ERROR] SubmitAssessment update failed: %v", err)
 		s.auditService.RecordAction(ctx, cID, submission.CandidateEmail, "SUBMIT_ASSESSMENT", "SUBMISSION", submission.ID, "ERROR", "Final DB update failed", err.Error(), nil)
 	} else {
 		s.auditService.RecordAction(ctx, cID, submission.CandidateEmail, "SUBMIT_ASSESSMENT", "SUBMISSION", submission.ID, "SUCCESS", "Assessment submitted successfully", "", nil)
+
+		// Publish exam result to betExamResultQueue (fire-and-forget)
+		totalMarks := submission.MinPassingScore // fallback
+		if assessment, aErr := s.assessmentRepo.FindByID(ctx, aID); aErr == nil {
+			totalMarks = assessment.TotalMarks
+		}
+		go func(mobile string, passed bool, marks, total int) {
+			if err := PublishExamResult(mobile, passed, marks, total); err != nil {
+				utils.GetLogger().Warnf("Failed to publish exam result to RabbitMQ: %v", err)
+			} else {
+				utils.GetLogger().Infof("Exam result published to betExamResultQueue: mobile=%s, result=%v, marks=%d/%d", mobile, passed, marks, total)
+			}
+		}(submission.CandidatePhone, passed, totalScore, totalMarks)
 	}
 	return submission, err
 }

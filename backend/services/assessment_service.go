@@ -57,7 +57,20 @@ func (s *assessmentService) GetAssessments(ctx context.Context, limit, skip int,
 	}
 
 	filter := bson.M{"deleted_at": nil}
-	return s.repo.FindAll(ctx, filter, opts)
+	assessments, err := s.repo.FindAll(ctx, filter, opts)
+	if err != nil {
+		return nil, err
+	}
+
+	// Populate computed QuestionCount for each assessment
+	for i := range assessments {
+		total := 0
+		for _, r := range assessments[i].QuestionRules {
+			total += r.Count
+		}
+		assessments[i].QuestionCount = total
+	}
+	return assessments, nil
 }
 
 func (s *assessmentService) GetAssessmentByID(ctx context.Context, idStr string, role string) (*models.Assessment, error) {

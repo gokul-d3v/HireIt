@@ -15,6 +15,8 @@ interface Assessment {
     description: string;
     duration: number;
     question_rules: any[];
+    questions?: any[];
+    question_count?: number;
     created_at: string;
     phase?: number;
     next_phase_id?: string;
@@ -165,7 +167,12 @@ export default function InterviewerAssessmentsPage() {
                                                     )}
                                                 </td>
                                                 <td className="p-4 text-gray-800 font-medium font-medium">
-                                                    {assessment.question_rules?.reduce((sum, r) => sum + (Number(r.count) || 0), 0) || 0} questions
+                                                    {(() => {
+                                                        const fromCount = assessment.question_count ?? null;
+                                                        const fromRules = assessment.question_rules?.reduce((sum, r) => sum + (Number(r.count) || 0), 0) || 0;
+                                                        const count = fromCount !== null ? fromCount : fromRules;
+                                                        return count + ' questions';
+                                                    })()}
                                                 </td>
                                                 <td className="p-4 text-gray-800 font-medium flex items-center gap-1">
                                                     <Clock size={16} /> {assessment.duration} mins

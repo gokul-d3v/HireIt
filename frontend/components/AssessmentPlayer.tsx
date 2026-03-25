@@ -794,6 +794,15 @@ export default function AssessmentPlayer({ assessmentId, onComplete }: Assessmen
                 showToast("Assessment submitted successfully!", "success");
             }
 
+            // Exit fullscreen if active
+            if (document.fullscreenElement) {
+                try {
+                    await document.exitFullscreen();
+                } catch (e) {
+                    console.warn("Failed to exit fullscreen", e);
+                }
+            }
+
             if (onComplete) {
                 onComplete();
             } else {

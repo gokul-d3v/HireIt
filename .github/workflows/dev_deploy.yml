@@ -84,6 +84,7 @@ jobs:
             -e TELEGRAM_CHAT_ID="${{ vars.DEV_TELEGRAM_CHAT_ID }}" \
             -e RABBITMQ_URL="${{ secrets.DEV_RABBITMQ_URL }}" \
             -e RABBITMQ_QUEUE="candidate_details" \
+            -e RABBITMQ_RESULT_QUEUE="${{ secrets.DEV_RABBITMQ_RESULT_QUEUE }}" \
             -e FRONTEND_URL="${{ vars.DEV_FRONTEND_URL }}" \
             -e AUDIT_LOG_COLLECTION="audit_logs" \
             -e MSG91_BASE_URL="${{ vars.DEV_MSG91_BASE_URL }}" \
