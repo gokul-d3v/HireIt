@@ -147,19 +147,18 @@ export default function AssessmentResultPage() {
                             </div>
                         );
                     })()}
-
-                    {result.next_phase_unlocked && result.next_phase_id && (
+                    {isPassed && result.next_phase_unlocked && result.next_phase_id && (
                         <div className="mb-8 p-4 bg-gradient-to-r from-indigo-50 to-purple-50 border-2 border-indigo-200 rounded-xl">
                             <div className="flex items-center justify-center gap-2 text-indigo-700 font-semibold mb-2">
                                 <Trophy size={20} />
-                                <span>Next Phase Unlocked!</span>
+                                <span className="uppercase tracking-wider text-xs font-black">Qualified</span>
                             </div>
-                            <p className="text-sm text-indigo-600 mb-4">You&apos;ve qualified for the next level!</p>
+                            <p className="text-sm text-indigo-600 mb-4 font-medium text-center">You have successfully qualified. Click below to continue.</p>
                             <button
                                 onClick={() => router.push(`/candidate/assessments/${result.next_phase_id}/take`)}
-                                className="w-full flex items-center justify-center gap-2 px-6 py-3 bg-gradient-to-r from-indigo-600 to-purple-600 text-white rounded-lg font-semibold hover:from-indigo-700 hover:to-purple-700 transition shadow-lg"
+                                className="w-full flex items-center justify-center gap-2 px-6 py-3 bg-gradient-to-r from-indigo-600 to-purple-600 text-white rounded-lg font-bold hover:from-indigo-700 hover:to-purple-700 transition shadow-lg"
                             >
-                                Proceed to Next Phase <ArrowRight size={18} />
+                                Continue <ArrowRight size={18} />
                             </button>
                         </div>
                     )}

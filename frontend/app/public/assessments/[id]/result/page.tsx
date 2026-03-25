@@ -102,14 +102,14 @@ export default function PublicResultPage() {
                         <div className="mb-0 p-4 bg-gradient-to-r from-indigo-50 to-purple-50 border-2 border-indigo-200 rounded-xl">
                             <div className="flex items-center justify-center gap-2 text-indigo-700 font-semibold mb-2">
                                 <Trophy size={18} />
-                                <span className="uppercase tracking-wider text-xs font-black">Level Up! Phase 2 Unlocked</span>
+                                <span className="uppercase tracking-wider text-xs font-black">Qualified</span>
                             </div>
-                            <p className="text-sm text-indigo-600 mb-4 font-medium">You've qualified for the next level! Complete the next phase to move forward.</p>
+                            <p className="text-sm text-indigo-600 mb-4 font-medium text-center">You have successfully qualified. Click below to continue.</p>
                             <button
                                 onClick={() => router.push(`/public/assessments/${result.next_phase_id}`)}
                                 className="w-full flex items-center justify-center gap-2 px-6 py-3 bg-gradient-to-r from-indigo-600 to-purple-600 text-white rounded-lg font-bold hover:from-indigo-700 hover:to-purple-700 transition shadow-lg"
                             >
-                                Proceed to Next Phase
+                                Continue
                             </button>
                         </div>
                     )}
