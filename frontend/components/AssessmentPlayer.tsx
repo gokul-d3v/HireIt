@@ -117,9 +117,9 @@ export default function AssessmentPlayer({ assessmentId, onComplete }: Assessmen
             try {
                 await tf.ready();
                 await blazeface.load();
-                await faceapi.nets.tinyFaceDetector.loadFromUri('/models');
-                await faceapi.nets.faceLandmark68Net.loadFromUri('/models');
-                await faceapi.nets.faceRecognitionNet.loadFromUri('/models');
+                await faceapi.nets.tinyFaceDetector.loadFromUri('/exam/models');
+                await faceapi.nets.faceLandmark68Net.loadFromUri('/exam/models');
+                await faceapi.nets.faceRecognitionNet.loadFromUri('/exam/models');
                 setModelsLoaded(true);
             } catch (err) {
                 console.error("Failed to load TFJS models", err);
