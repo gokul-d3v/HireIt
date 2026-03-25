@@ -1,5 +1,5 @@
 # Build stage
-FROM golang:1.24-alpine AS builder
+FROM golang:1.25-alpine AS builder
 
 WORKDIR /app
 
@@ -9,11 +9,8 @@ RUN apk add --no-cache git
 # Copy source code
 COPY . .
 
-# Force compatibility inside the container AFTER copying source
-RUN sed -i 's/go 1.25.0/go 1.24.0/' go.mod && \
-    go mod edit -droprequire=google.golang.org/genproto/googleapis/rpc && \
-    rm -f go.sum && \
-    go mod tidy
+# Tidy dependencies for Go 1.25
+RUN go mod tidy
 
 # Build the application
 RUN CGO_ENABLED=0 GOOS=linux go build -o main .
