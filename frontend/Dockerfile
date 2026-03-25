@@ -23,6 +23,8 @@ FROM node:20-alpine
 
 WORKDIR /app
 
+ENV HOSTNAME "0.0.0.0"
+
 # Copy standalone output (IMPORTANT)
 COPY --from=builder /app/.next/standalone ./
 COPY --from=builder /app/.next/static ./.next/static
