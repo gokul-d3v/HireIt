@@ -406,7 +406,6 @@ func (s *submissionService) GetOrGenerateQuestions(ctx context.Context, assessme
 			QuestionSetVersion:     assessment.UpdatedAt,
 			Status:                 "in_progress",
 			CreatedAt:              time.Now(),
-			StartedAt:              time.Now(),
 			UpdatedAt:              time.Now(),
 		}
 		if user != nil {
@@ -424,9 +423,6 @@ func (s *submissionService) GetOrGenerateQuestions(ctx context.Context, assessme
 		submission.GeneratedQuestions = generatedQuestions
 		submission.QuestionSetGeneratedAt = time.Now()
 		submission.QuestionSetVersion = assessment.UpdatedAt
-		if submission.StartedAt.IsZero() {
-			submission.StartedAt = time.Now()
-		}
 		submission.UpdatedAt = time.Now()
 		err = s.repo.Update(ctx, submission.ID, submission)
 	}
