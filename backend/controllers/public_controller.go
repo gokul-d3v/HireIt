@@ -100,6 +100,8 @@ func (ctrl *PublicController) StartAssessmentOTP(c *gin.Context) {
 			c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid OTP. Please try again."})
 		case "candidate not found. please check your phone number":
 			c.JSON(http.StatusNotFound, gin.H{"error": "Candidate not found. Please check your phone number."})
+		case "your access to assessments has been disabled":
+			c.JSON(http.StatusForbidden, gin.H{"error": err.Error()})
 		default:
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to validate OTP"})
 		}
