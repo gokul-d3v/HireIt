@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useRef } from "react";
 import { useRouter } from "next/navigation"; // Note: used for navigation after submit
-import { apiRequest } from "@/lib/api";
+import { apiRequest, getApiUrl } from "@/lib/api";
 import { useToast } from "@/components/ui/Toast";
 import { Modal } from "@/components/ui/Modal";
 import { Clock, CheckCircle, ChevronLeft, ChevronRight, AlertTriangle, ShieldAlert, Camera, Maximize2, Mic } from "lucide-react";
@@ -343,7 +343,8 @@ export default function AssessmentPlayer({ assessmentId, onComplete }: Assessmen
 
                     try {
                         const token = localStorage.getItem("token");
-                        const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || "http://localhost:8080"}/api/assessments/${assessmentId}/upload-evidence`, {
+                        const apiUrl = getApiUrl();
+                        const res = await fetch(`${apiUrl}/api/assessments/${assessmentId}/upload-evidence`, {
                             method: "POST",
                             headers: token ? { "Authorization": `Bearer ${token}` } : {},
                             body: formData
@@ -695,13 +696,13 @@ export default function AssessmentPlayer({ assessmentId, onComplete }: Assessmen
                 }
                 return {
                     question_id: q.id,
-                    value: value
+                            value: value
                 };
             }).filter(a => a.value !== ""); // Only save what we have
 
             if (formattedAnswers.length === 0) return;
 
-            await apiRequest(`/api/assessments/${assessment.id}/save-progress`, "POST", {
+            await apiRequest(`/api/assessments/${assessment.id}/progress`, "POST", {
                 answers: formattedAnswers,
                 violations: violationsToSave,
                 current_question_index: currentQuestionIndex
