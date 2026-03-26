@@ -52,24 +52,26 @@ func (s *assessmentService) GetAssessments(ctx context.Context, limit, skip int,
 		SetSkip(int64(skip)).
 		SetSort(bson.D{{Key: "created_at", Value: -1}})
 
-	// Security: If not interviewer, exclude questions from list view
-	if strings.ToLower(role) != "interviewer" && strings.ToLower(role) != "admin" {
-		opts.SetProjection(bson.M{"question_rules": 0})
-	}
-
 	filter := bson.M{"deleted_at": nil}
 	assessments, err := s.repo.FindAll(ctx, filter, opts)
 	if err != nil {
 		return nil, err
 	}
 
-	// Populate computed QuestionCount for each assessment
+	isInterviewer := strings.ToLower(role) == "interviewer" || strings.ToLower(role) == "admin"
+
+	// Populate computed QuestionCount and apply security rules
 	for i := range assessments {
 		total := 0
 		for _, r := range assessments[i].QuestionRules {
 			total += r.Count
 		}
 		assessments[i].QuestionCount = total
+
+		// Security: If not interviewer, exclude question rules from response
+		if !isInterviewer {
+			assessments[i].QuestionRules = nil
+		}
 	}
 	return assessments, nil
 }
@@ -87,6 +89,18 @@ func (s *assessmentService) GetAssessmentByID(ctx context.Context, idStr string,
 
 	if assessment.DeletedAt != nil {
 		return nil, errors.New("assessment deleted")
+	}
+
+	// Calculate and populate QuestionCount
+	total := 0
+	for _, r := range assessment.QuestionRules {
+		total += r.Count
+	}
+	assessment.QuestionCount = total
+
+	// Security: If not interviewer, exclude question rules
+	if strings.ToLower(role) != "interviewer" && strings.ToLower(role) != "admin" {
+		assessment.QuestionRules = nil
 	}
 
 	return assessment, nil
