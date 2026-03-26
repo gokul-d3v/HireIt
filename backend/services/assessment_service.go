@@ -1,12 +1,9 @@
-package services
-
 import (
 	"context"
 	"errors"
 	"hireit-backend/models"
 	"hireit-backend/repositories"
 	"hireit-backend/utils"
-	"strings"
 	"time"
 
 	"go.mongodb.org/mongo-driver/bson"
@@ -58,20 +55,13 @@ func (s *assessmentService) GetAssessments(ctx context.Context, limit, skip int,
 		return nil, err
 	}
 
-	isInterviewer := strings.ToLower(role) == "interviewer" || strings.ToLower(role) == "admin"
-
-	// Populate computed QuestionCount and apply security rules
+	// Populate computed QuestionCount
 	for i := range assessments {
 		total := 0
 		for _, r := range assessments[i].QuestionRules {
 			total += r.Count
 		}
 		assessments[i].QuestionCount = total
-
-		// Security: If not interviewer, exclude question rules from response
-		if !isInterviewer {
-			assessments[i].QuestionRules = nil
-		}
 	}
 	return assessments, nil
 }
@@ -97,11 +87,6 @@ func (s *assessmentService) GetAssessmentByID(ctx context.Context, idStr string,
 		total += r.Count
 	}
 	assessment.QuestionCount = total
-
-	// Security: If not interviewer, exclude question rules
-	if strings.ToLower(role) != "interviewer" && strings.ToLower(role) != "admin" {
-		assessment.QuestionRules = nil
-	}
 
 	return assessment, nil
 }
