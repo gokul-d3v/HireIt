@@ -73,6 +73,7 @@ jobs:
           docker rm hireit-backend-dev || true
           docker run -d \
             --name hireit-backend-dev \
+            --network hireit-network \
             -p 8080:8080 \
             -e APP_ENV=development \
             -e MONGO_URI="${{ secrets.DEV_MONGO_URI }}" \
@@ -100,6 +101,7 @@ jobs:
           docker rm hireit-frontend-dev || true
           docker run -d \
             --name hireit-frontend-dev \
+            --network hireit-network \
             -p 3000:3000 \
             --restart unless-stopped \
             ghcr.io/${{ env.REPO_LOWER }}/hireit-frontend-dev:latest

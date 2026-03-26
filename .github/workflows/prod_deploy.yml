@@ -74,6 +74,7 @@ jobs:
           docker rm hireit-backend-prod || true
           docker run -d \
             --name hireit-backend-prod \
+            --network hireit-network \
             -p 8080:8080 \
             -e APP_ENV=production \
             -e MONGO_URI="${{ secrets.PROD_MONGO_URI }}" \
@@ -100,6 +101,7 @@ jobs:
           docker rm hireit-frontend-prod || true
           docker run -d \
             --name hireit-frontend-prod \
+            --network hireit-network \
             -p 3000:3000 \
             --restart unless-stopped \
             ghcr.io/${{ env.REPO_LOWER }}/hireit-frontend-prod:latest
