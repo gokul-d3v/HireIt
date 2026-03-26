@@ -67,8 +67,7 @@ func main() {
 	// MongoDB Connection with optimized pool settings
 	mongoURI := os.Getenv("MONGO_URI")
 	if mongoURI == "" {
-		logger.Warn("MONGO_URI env var not set! Defaulting to localhost (will fail in production).")
-		mongoURI = "mongodb://localhost:27017"
+		logger.Warn("MONGO_URI env var not set!.")
 	} else {
 		logger.Info("MONGO_URI env var detected.")
 	}
@@ -129,6 +128,7 @@ func main() {
 	assessService := services.NewAssessmentService(assessRepo, qbRepo)
 	submissionService := services.NewSubmissionService(subRepo, assessRepo, userRepo, qbRepo, auditLogService)
 	interviewService := services.NewInterviewService(interviewRepo)
+	userService := services.NewUserService(userRepo)
 	candidateConsumer := services.NewCandidateDetailsConsumer(userRepo)
 
 	// Initialize Controllers
@@ -138,6 +138,7 @@ func main() {
 	publicCtrl := controllers.NewPublicController(authService, assessService)
 	assessCtrl := controllers.NewAssessmentController(assessService, submissionService)
 	interviewCtrl := controllers.NewInterviewController(interviewService)
+	userCtrl := controllers.NewUserController(userService)
 	teleProxyCtrl := controllers.NewTelegramProxyController()
 	questionBankController := controllers.NewQuestionBankController(qbRepo) // Initialize QuestionBankController
 
@@ -193,7 +194,7 @@ func main() {
 	router.GET("/metrics", gin.WrapH(promhttp.Handler()))
 
 	// Setup Routes
-	routes.SetupRoutes(router, authCtrl, googleCtrl, youtubeCtrl, publicCtrl, assessCtrl, interviewCtrl)
+	routes.SetupRoutes(router, authCtrl, googleCtrl, youtubeCtrl, publicCtrl, assessCtrl, interviewCtrl, userCtrl)
 
 	// Admin Question Bank routes
 	router.POST("/api/admin/questions/import", questionBankController.ImportQuestions)

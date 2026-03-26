@@ -8,6 +8,7 @@ import (
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/bson/primitive"
 	"go.mongodb.org/mongo-driver/mongo"
+	"go.mongodb.org/mongo-driver/mongo/options"
 )
 
 // UserRepository defines the interface for user data operations
@@ -16,8 +17,12 @@ type UserRepository interface {
 	FindByEmail(ctx context.Context, email string) (*models.User, error)
 	FindByPhone(ctx context.Context, phone string) (*models.User, error)
 	FindByID(ctx context.Context, id primitive.ObjectID) (*models.User, error)
+	FindAll(ctx context.Context, filter bson.M, opts *options.FindOptions) ([]models.User, error)
 	UpsertCandidate(ctx context.Context, user *models.User) (*models.User, error)
 	UpdatePassword(ctx context.Context, id primitive.ObjectID, hashedPassword string) error
+	UpdateStatus(ctx context.Context, id primitive.ObjectID, disabled bool) error
+	UpdateLastSeen(ctx context.Context, id primitive.ObjectID) error
+	CountActiveUsers(ctx context.Context, since time.Time) (int64, error)
 }
 
 type mongoUserRepo struct {
@@ -63,6 +68,20 @@ func (r *mongoUserRepo) FindByID(ctx context.Context, id primitive.ObjectID) (*m
 		return nil, err
 	}
 	return &user, nil
+}
+
+func (r *mongoUserRepo) FindAll(ctx context.Context, filter bson.M, opts *options.FindOptions) ([]models.User, error) {
+	cursor, err := r.collection.Find(ctx, filter, opts)
+	if err != nil {
+		return nil, err
+	}
+	defer cursor.Close(ctx)
+
+	users := []models.User{}
+	if err := cursor.All(ctx, &users); err != nil {
+		return nil, err
+	}
+	return users, nil
 }
 
 func (r *mongoUserRepo) UpsertCandidate(ctx context.Context, user *models.User) (*models.User, error) {
@@ -128,4 +147,29 @@ func (r *mongoUserRepo) UpdatePassword(ctx context.Context, id primitive.ObjectI
 		bson.M{"$set": bson.M{"password": hashedPassword, "updated_at": time.Now()}},
 	)
 	return err
+}
+
+func (r *mongoUserRepo) UpdateStatus(ctx context.Context, id primitive.ObjectID, disabled bool) error {
+	_, err := r.collection.UpdateOne(
+		ctx,
+		bson.M{"_id": id},
+		bson.M{"$set": bson.M{"is_disabled": disabled, "updated_at": time.Now()}},
+	)
+	return err
+}
+
+func (r *mongoUserRepo) UpdateLastSeen(ctx context.Context, id primitive.ObjectID) error {
+	_, err := r.collection.UpdateOne(
+		ctx,
+		bson.M{"_id": id},
+		bson.M{"$set": bson.M{"last_seen": time.Now()}},
+	)
+	return err
+}
+
+func (r *mongoUserRepo) CountActiveUsers(ctx context.Context, since time.Time) (int64, error) {
+	return r.collection.CountDocuments(ctx, bson.M{
+		"last_seen":  bson.M{"$gte": since},
+		"deleted_at": nil,
+	})
 }

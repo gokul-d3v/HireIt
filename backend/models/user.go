@@ -15,6 +15,8 @@ type User struct {
 	Role      string             `bson:"role" json:"role" binding:"required,oneof=candidate interviewer admin"`
 	CreatedAt time.Time          `bson:"created_at" json:"created_at"`
 	UpdatedAt time.Time          `bson:"updated_at" json:"updated_at"`
-	DeletedAt *time.Time         `bson:"deleted_at,omitempty" json:"-"`
-	IsDemo    bool               `bson:"is_demo" json:"is_demo"`
+	DeletedAt  *time.Time         `bson:"deleted_at,omitempty" json:"-"`
+	IsDemo     bool               `bson:"is_demo" json:"is_demo"`
+	IsDisabled bool               `bson:"is_disabled" json:"is_disabled"`
+	LastSeen   *time.Time         `bson:"last_seen,omitempty" json:"last_seen,omitempty"`
 }

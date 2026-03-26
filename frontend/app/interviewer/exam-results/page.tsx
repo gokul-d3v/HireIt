@@ -763,10 +763,15 @@ export default function ExamResultsPage() {
     return (
         <div className="min-h-screen bg-gray-50 p-8">
             <div className="max-w-6xl mx-auto">
-                <div className="flex justify-between items-center mb-10">
-                    <div>
-                        <h1 className="text-3xl font-black text-gray-900 tracking-tight">Exam Results</h1>
-                        <p className="text-gray-500 font-medium mt-1">Review all global candidate scores and proctoring histories.</p>
+                <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-10">
+                    <div className="flex items-center gap-4">
+                        <div className="bg-indigo-50 p-3 rounded-2xl border border-indigo-100 shadow-sm shadow-indigo-100/50">
+                            <CheckCircle className="text-indigo-600" size={32} />
+                        </div>
+                        <div>
+                            <h1 className="text-3xl font-black text-slate-900 tracking-tight">Exam Results</h1>
+                            <p className="text-slate-500 font-medium mt-1">Review all global candidate scores and proctoring histories.</p>
+                        </div>
                     </div>
                 </div>
 

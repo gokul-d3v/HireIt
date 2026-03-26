@@ -80,11 +80,18 @@ func (s *authService) Login(ctx context.Context, email, password string) (string
 		return "", "", errors.New("invalid email or password")
 	}
 
+	if user.IsDisabled {
+		return "", "", errors.New("account is disabled. please contact support")
+	}
+
 	// Compare password
 	err = bcrypt.CompareHashAndPassword([]byte(user.Password), []byte(password))
 	if err != nil {
 		return "", "", errors.New("invalid email or password")
 	}
+
+	// Update LastSeen
+	_ = s.userRepo.UpdateLastSeen(ctx, user.ID)
 
 	// Generate JWT
 	tokenString, err := s.generateJWT(user)
@@ -116,12 +123,13 @@ func (s *authService) GoogleLogin(ctx context.Context, email, name, role string)
 	if err != nil {
 		// Create new user
 		newUser := models.User{
-			Name:      name,
-			Email:     email,
-			Role:      role,
-			Password:  "", // No password for Google users
-			CreatedAt: time.Now(),
-			UpdatedAt: time.Now(),
+			Name:       name,
+			Email:      email,
+			Role:       role,
+			Password:   "", // No password for Google users
+			IsDisabled: false,
+			CreatedAt:  time.Now(),
+			UpdatedAt:  time.Now(),
 		}
 		id, err := s.userRepo.Create(ctx, &newUser)
 		if err != nil {
@@ -130,9 +138,17 @@ func (s *authService) GoogleLogin(ctx context.Context, email, name, role string)
 		newUser.ID = id
 		user = &newUser
 		isNew = true
-	} else if user.Role != role {
-		return "", "", false, errors.New("role mismatch")
+	} else {
+		if user.Role != role {
+			return "", "", false, errors.New("role mismatch")
+		}
+		if user.IsDisabled {
+			return "", "", false, errors.New("account is disabled. please contact support")
+		}
 	}
+
+	// Update LastSeen
+	_ = s.userRepo.UpdateLastSeen(ctx, user.ID)
 
 	// Generate JWT
 	tokenString, err := s.generateJWT(user)
@@ -148,6 +164,16 @@ func (s *authService) StartPublicAssessment(ctx context.Context, name, email, ph
 	email = strings.TrimSpace(strings.ToLower(email))
 	phone = utils.NormalizePhone(phone)
 
+	// Check if this user is explicitly disabled in our DB
+	existingUser, _ := s.userRepo.FindByEmail(ctx, email)
+	if existingUser == nil && phone != "" {
+		existingUser, _ = s.userRepo.FindByPhone(ctx, phone)
+	}
+
+	if existingUser != nil && existingUser.IsDisabled {
+		return "", nil, errors.New("your access to assessments has been disabled")
+	}
+
 	// Since they are demo users, do not save their personal details to the database!
 	sessionID := primitive.NewObjectID()
 
@@ -158,8 +184,8 @@ func (s *authService) StartPublicAssessment(ctx context.Context, name, email, ph
 	// Generate an entirely in-memory dummy candidate object
 	user := &models.User{
 		ID:        sessionID,
-		Name:      "Demo User",
-		Email:     "demo_" + sessionID.Hex()[:8] + "@demo.local",
+		Name:      "Guest Candidate",
+		Email:     "demo_" + sessionID.Hex()[:8] + "@internal.local",
 		Phone:     "",
 		Role:      "candidate",
 		IsDemo:    true,
@@ -181,14 +207,15 @@ func (s *authService) StartDemoAssessment(ctx context.Context) (string, *models.
 	hashedPassword, _ := bcrypt.GenerateFromPassword([]byte("demo123"), 10)
 
 	demoUser := models.User{
-		Name:      "Demo User",
-		Email:     demoEmail,
-		Phone:     "",
-		Password:  string(hashedPassword),
-		Role:      "candidate",
-		IsDemo:    true,
-		CreatedAt: time.Now(),
-		UpdatedAt: time.Now(),
+		Name:       "Guest Candidate",
+		Email:      demoEmail,
+		Phone:      "",
+		Password:   string(hashedPassword),
+		Role:       "candidate",
+		IsDemo:     true,
+		IsDisabled: false,
+		CreatedAt:  time.Now(),
+		UpdatedAt:  time.Now(),
 	}
 
 	id, err := s.userRepo.Create(ctx, &demoUser)
@@ -219,6 +246,13 @@ func (s *authService) StartAssessmentWithOTP(ctx context.Context, phone, otp str
 	if err != nil {
 		return "", nil, errors.New("candidate not found. please check your phone number")
 	}
+
+	if user.IsDisabled {
+		return "", nil, errors.New("your access to assessments has been disabled")
+	}
+
+	// Update LastSeen
+	_ = s.userRepo.UpdateLastSeen(ctx, user.ID)
 
 	tokenString, err := s.generateJWT(user)
 	if err != nil {

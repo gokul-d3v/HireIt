@@ -14,6 +14,7 @@ func SetupRoutes(r *gin.Engine,
 	publicCtrl *controllers.PublicController,
 	assessCtrl *controllers.AssessmentController,
 	interviewCtrl *controllers.InterviewController,
+	userCtrl *controllers.UserController,
 ) {
 	// Public Routes
 	AuthRoutes(r, authCtrl, googleCtrl)
@@ -24,7 +25,7 @@ func SetupRoutes(r *gin.Engine,
 	protected := r.Group("/api")
 	protected.Use(middleware.AuthMiddleware())
 	{
-		UserRoutes(protected)
+		UserRoutes(protected, userCtrl)
 		AssessmentRoutes(protected, assessCtrl)
 		InterviewRoutes(protected, interviewCtrl)
 

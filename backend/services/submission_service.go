@@ -116,8 +116,9 @@ func (s *submissionService) SaveProgress(ctx context.Context, assessmentID, cand
 		// Fetch user and assessment details for denormalized submission
 		user, _ := s.userRepo.FindByID(ctx, cID)
 		
-		// If user doesn't exist, they are a demo user. Do not store submissions in the database!
-		if user == nil || user.IsDemo {
+		// If user doesn't exist, we can't tie it to a real or demo account safely here.
+		// However, if user exists (even as demo), we SHOULD store the submission.
+		if user == nil {
 			return nil
 		}
 
@@ -187,6 +188,7 @@ func (s *submissionService) SubmitAssessment(ctx context.Context, assessmentID, 
 		if user == nil || user.IsDemo {
 			// Demo users do not generate submission documents ahead of time. Grade statelessly.
 			isDemo = true
+			err = nil // Reset error as it's expected for demo users not to have a submission doc
 			submission = &models.Submission{
 				ID:           primitive.NewObjectID(),
 				AssessmentID: aID,
@@ -355,29 +357,24 @@ func (s *submissionService) SubmitAssessment(ctx context.Context, assessmentID, 
 	submission.SubmittedAt = time.Now()
 	submission.UpdatedAt = time.Now()
 
-	if !isDemo {
-		err = s.repo.Update(ctx, submission.ID, submission)
-		if err != nil {
-			utils.GetLogger().Errorf("[CRITICAL ERROR] SubmitAssessment update failed: %v", err)
-			s.auditService.RecordAction(ctx, cID, submission.CandidateEmail, "SUBMIT_ASSESSMENT", "SUBMISSION", submission.ID, "ERROR", "Final DB update failed", err.Error(), nil)
-		} else {
-			s.auditService.RecordAction(ctx, cID, submission.CandidateEmail, "SUBMIT_ASSESSMENT", "SUBMISSION", submission.ID, "SUCCESS", "Assessment submitted successfully", "", nil)
-
-			// Publish exam result to betExamResultQueue (fire-and-forget)
-			totalMarks := submission.MinPassingScore // fallback
-			if assessment, aErr := s.assessmentRepo.FindByID(ctx, aID); aErr == nil {
-				totalMarks = assessment.TotalMarks
-			}
-			go func(mobile string, passed bool, marks, total int) {
-				if err := PublishExamResult(mobile, passed, marks, total); err != nil {
-					utils.GetLogger().Warnf("Failed to publish exam result to RabbitMQ: %v", err)
-				} else {
-					utils.GetLogger().Infof("Exam result published to betExamResultQueue: mobile=%s, result=%v, marks=%d/%d", mobile, passed, marks, total)
-				}
-			}(submission.CandidatePhone, passed, totalScore, totalMarks)
-		}
+	err = s.repo.Update(ctx, submission.ID, submission)
+	if err != nil {
+		utils.GetLogger().Errorf("[CRITICAL ERROR] SubmitAssessment update failed: %v", err)
+		s.auditService.RecordAction(ctx, cID, submission.CandidateEmail, "SUBMIT_ASSESSMENT", "SUBMISSION", submission.ID, "ERROR", "Final DB update failed", err.Error(), nil)
 	} else {
-		s.auditService.RecordAction(ctx, cID, "demo@demo.local", "SUBMIT_ASSESSMENT", "SUBMISSION", primitive.NilObjectID, "SUCCESS", "Demo assessment scored successfully statelessly", "", nil)
+		s.auditService.RecordAction(ctx, cID, submission.CandidateEmail, "SUBMIT_ASSESSMENT", "SUBMISSION", submission.ID, "SUCCESS", "Assessment submitted successfully", "", nil)
+
+		// Publish exam result to betExamResultQueue (fire-and-forget)
+		// Only publish for non-demo users if needed, or all.
+		// For now, let's keep the existing publish logic as-is or slightly adjust.
+		mobile := submission.CandidatePhone
+		if mobile != "" {
+			go func(m string, p bool, marks, total int) {
+				if err := PublishExamResult(m, p, marks, total); err != nil {
+					utils.GetLogger().Warnf("Failed to publish exam result to RabbitMQ: %v", err)
+				}
+			}(mobile, passed, totalScore, totalMarks)
+		}
 	}
 	return submission, err
 }
@@ -457,9 +454,9 @@ func (s *submissionService) GetOrGenerateQuestions(ctx context.Context, assessme
 		return nil, fmt.Errorf("failed to sample questions: %v", err)
 	}
 
-	// For demo users, return the generated questions statelessly without saving them
+	// Even for demo users, we want to lock the questions to prevent shuffling on refresh
 	user, _ := s.userRepo.FindByID(ctx, cID)
-	if user == nil || user.IsDemo {
+	if user == nil {
 		return generatedQuestions, nil
 	}
 

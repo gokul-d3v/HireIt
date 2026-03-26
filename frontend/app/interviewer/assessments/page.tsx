@@ -108,14 +108,19 @@ export default function InterviewerAssessmentsPage() {
     return (
         <div className="min-h-screen bg-gray-50 p-8">
             <div className="max-w-6xl mx-auto">
-                <div className="flex justify-between items-center mb-8">
-                    <div>
-                        <h1 className="text-2xl font-bold text-gray-900">My Assessments</h1>
-                        <p className="text-gray-700 font-medium">Manage your technical assessments and view submissions.</p>
+                <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-8">
+                    <div className="flex items-center gap-4">
+                        <div className="bg-indigo-50 p-3 rounded-2xl border border-indigo-100 shadow-sm shadow-indigo-100/50">
+                            <FileText className="text-indigo-600" size={32} />
+                        </div>
+                        <div>
+                            <h1 className="text-3xl font-black text-slate-900 tracking-tight">My Assessments</h1>
+                            <p className="text-slate-500 font-medium mt-1">Manage your technical assessments and view submissions.</p>
+                        </div>
                     </div>
-                        <button
+                    <button
                         onClick={() => router.push("/interviewer/assessments/create")}
-                        className="flex items-center gap-2 px-6 py-2.5 bg-indigo-600 text-white rounded-full hover:bg-indigo-700 transition shadow-md shadow-indigo-600/20 font-bold active:scale-95"
+                        className="flex items-center gap-2 px-6 py-2.5 bg-indigo-600 text-white rounded-full hover:bg-indigo-700 transition shadow-md shadow-indigo-600/20 font-bold active:scale-95 whitespace-nowrap"
                     >
                         <Plus size={20} /> Create New
                     </button>

@@ -3,6 +3,10 @@ import { Poppins } from "next/font/google";
 import "./globals.css";
 import { AuthProvider } from "@/context/AuthContext";
 import { ToastProvider } from "@/components/ui/Toast";
+import ReduxProvider from "@/lib/redux/ReduxProvider";
+import { Toaster } from "react-hot-toast";
+import ErrorBoundary from "@/components/ErrorBoundary";
+import HeartbeatHandler from "../components/HeartbeatHandler";
 
 const poppins = Poppins({
   weight: ["100", "200", "300", "400", "500", "600", "700", "800", "900"],
@@ -14,10 +18,6 @@ export const metadata: Metadata = {
   title: "HireIt",
   description: "AI-powered hiring and assessment platform",
 };
-
-import ReduxProvider from "@/lib/redux/ReduxProvider";
-import { Toaster } from "react-hot-toast";
-import ErrorBoundary from "@/components/ErrorBoundary";
 
 export default function RootLayout({
   children,
@@ -33,6 +33,7 @@ export default function RootLayout({
           <ReduxProvider>
             <AuthProvider>
               <ToastProvider>
+                <HeartbeatHandler />
                 {children}
                 <Toaster position="top-right" />
               </ToastProvider>

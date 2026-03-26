@@ -110,10 +110,6 @@ export default function AssessmentResultPage() {
                         {isPassed ? '🎉 Congratulations! You Passed!' : '❌ Not Passed - Keep Trying!'}
                     </p>
 
-                    <div className="bg-indigo-50 border border-indigo-100 rounded-xl p-3 mb-8 flex items-center justify-center gap-2 text-indigo-700">
-                        <ShieldCheck size={16} />
-                        <span className="text-[10px] font-bold uppercase tracking-widest ">Session Protected: Accidental Tab Closure & Reload Protection Active</span>
-                    </div>
 
                     <div className={`${isPassed ? 'bg-green-50' : 'bg-red-50'} rounded-xl p-6 mb-8`}>
                         <div className={`text-sm ${isPassed ? 'text-green-600' : 'text-red-600'} font-medium uppercase tracking-wide mb-1`}>Your Score</div>

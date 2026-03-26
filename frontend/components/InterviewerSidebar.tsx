@@ -12,6 +12,7 @@ export default function InterviewerSidebar() {
     const navItems = [
         { label: "Dashboard", icon: BarChart3, path: "/interviewer/dashboard" },
         { label: "Assessments", icon: FilePlus, path: "/interviewer/assessments" },
+        { label: "Registered Users", icon: Users, path: "/interviewer/users" },
         { label: "Exam Results", icon: FileText, path: "/interviewer/exam-results" },
         { label: "Exam Sheet", icon: BookOpen, path: "/interviewer/exam-sheet" },
         { label: "Interviews", icon: Users, path: "/interviewer/interviews" },

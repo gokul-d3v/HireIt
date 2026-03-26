@@ -1,17 +1,22 @@
 package routes
 
 import (
-	"net/http"
+	"hireit-backend/controllers"
+	"hireit-backend/middleware"
 
 	"github.com/gin-gonic/gin"
 )
 
-func UserRoutes(r *gin.RouterGroup) {
-	r.GET("/dashboard", func(c *gin.Context) {
-		role, _ := c.Get("role")
-		c.JSON(http.StatusOK, gin.H{
-			"message": "Welcome to the dashboard",
-			"role":    role,
-		})
-	})
+func UserRoutes(r *gin.RouterGroup, ctrl *controllers.UserController) {
+	// Heartbeat for anyone authenticated
+	r.POST("/users/heartbeat", ctrl.Heartbeat)
+
+	// Admin/Interviewer only
+	admin := r.Group("/admin")
+	admin.Use(middleware.RoleMiddleware("interviewer", "admin"))
+	{
+		admin.GET("/users", ctrl.ListUsers)
+		admin.PATCH("/users/:id/status", ctrl.ToggleStatus)
+		admin.GET("/users/active-count", ctrl.GetActiveCount)
+	}
 }
