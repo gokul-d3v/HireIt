@@ -124,9 +124,9 @@ func main() {
 
 	// Initialize Services
 	otpService := services.NewOTPService()
-	authService := services.NewAuthService(userRepo, otpService)
-	assessService := services.NewAssessmentService(assessRepo, qbRepo)
 	auditLogService := services.NewAuditLogService(auditLogRepo)
+	authService := services.NewAuthService(userRepo, otpService, auditLogService)
+	assessService := services.NewAssessmentService(assessRepo, qbRepo)
 	submissionService := services.NewSubmissionService(subRepo, assessRepo, userRepo, qbRepo, auditLogService)
 	interviewService := services.NewInterviewService(interviewRepo)
 	candidateConsumer := services.NewCandidateDetailsConsumer(userRepo)

@@ -168,9 +168,9 @@ export default function InterviewerAssessmentsPage() {
                                                 </td>
                                                 <td className="p-4 text-gray-800 font-medium font-medium">
                                                     {(() => {
-                                                        const fromCount = assessment.question_count ?? null;
+                                                        const fromCount = assessment.question_count || 0;
                                                         const fromRules = assessment.question_rules?.reduce((sum, r) => sum + (Number(r.count) || 0), 0) || 0;
-                                                        const count = fromCount !== null ? fromCount : fromRules;
+                                                        const count = fromCount > 0 ? fromCount : fromRules;
                                                         return count + ' questions';
                                                     })()}
                                                 </td>

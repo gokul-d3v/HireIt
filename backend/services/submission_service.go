@@ -115,6 +115,12 @@ func (s *submissionService) SaveProgress(ctx context.Context, assessmentID, cand
 	if err != nil {
 		// Fetch user and assessment details for denormalized submission
 		user, _ := s.userRepo.FindByID(ctx, cID)
+		
+		// If user doesn't exist, they are a demo user. Do not store submissions in the database!
+		if user == nil || user.IsDemo {
+			return nil
+		}
+
 		assessment, _ := s.assessmentRepo.FindByID(ctx, aID)
 
 		// Create new in-progress submission
@@ -130,12 +136,10 @@ func (s *submissionService) SaveProgress(ctx context.Context, assessmentID, cand
 			Status:       "in_progress",
 			UpdatedAt:    time.Now(),
 		}
-		if user != nil {
-			submission.CandidateName = user.Name
-			submission.CandidateEmail = user.Email
-			submission.CandidatePhone = user.Phone
-			submission.IsDemo = user.IsDemo
-		}
+		submission.CandidateName = user.Name
+		submission.CandidateEmail = user.Email
+		submission.CandidatePhone = user.Phone
+		submission.IsDemo = user.IsDemo
 		if assessment != nil {
 			submission.MinPassingScore = assessment.PassingScore
 		}
@@ -176,29 +180,84 @@ func (s *submissionService) SubmitAssessment(ctx context.Context, assessmentID, 
 	aID, _ := primitive.ObjectIDFromHex(assessmentID)
 	cID, _ := primitive.ObjectIDFromHex(candidateID)
 
+	isDemo := false
 	submission, err := s.repo.FindOne(ctx, bson.M{"assessment_id": aID, "candidate_id": cID})
 	if err != nil {
-		s.auditService.RecordAction(ctx, cID, "", "SUBMIT_ASSESSMENT", "SUBMISSION", primitive.NilObjectID, "ERROR", "Submission doc not found", err.Error(), nil)
-		return nil, errors.New("submission not found")
+		user, _ := s.userRepo.FindByID(ctx, cID)
+		if user == nil || user.IsDemo {
+			// Demo users do not generate submission documents ahead of time. Grade statelessly.
+			isDemo = true
+			submission = &models.Submission{
+				ID:           primitive.NewObjectID(),
+				AssessmentID: aID,
+				CandidateID:  cID,
+				CandidateName: "Demo User",
+				CandidateEmail: "demo@demo.local",
+				IsDemo:       true,
+			}
+		} else {
+			s.auditService.RecordAction(ctx, cID, "", "SUBMIT_ASSESSMENT", "SUBMISSION", primitive.NilObjectID, "ERROR", "Submission doc not found", err.Error(), nil)
+			return nil, errors.New("submission not found")
+		}
 	}
 
 	// Use denormalized PassingScore if available, otherwise fetch assessment
 	passingScore := submission.MinPassingScore
-	if passingScore == 0 {
-		assessment, err := s.assessmentRepo.FindByID(ctx, aID)
+	var assessment *models.Assessment
+	if passingScore == 0 || isDemo {
+		var err error
+		assessment, err = s.assessmentRepo.FindByID(ctx, aID)
 		if err != nil {
 			return nil, errors.New("assessment not found")
 		}
 		passingScore = assessment.PassingScore
+		submission.TotalMarks = assessment.TotalMarks
 	}
 
 	// Calculate Score and Total Marks using the dynamically generated questions locked to this submission
 	totalScore := 0
 	totalMarks := 0
 	questionMap := make(map[string]models.Question)
-	for _, q := range submission.GeneratedQuestions {
-		questionMap[q.ID.Hex()] = q
-		totalMarks += q.Points
+
+	if isDemo {
+		totalMarks = submission.TotalMarks // Total marks initialized from assessment
+		var qIDs []primitive.ObjectID
+		for _, ans := range answers {
+			qIDs = append(qIDs, ans.QuestionID)
+		}
+		if len(qIDs) > 0 {
+			qbEntries, _ := s.qbRepo.Find(ctx, bson.M{"_id": bson.M{"$in": qIDs}}, options.Find())
+			for _, qbe := range qbEntries {
+				// Find matching rule to get points
+				points := 0
+				if assessment != nil {
+					for _, rule := range assessment.QuestionRules {
+						if rule.Category == qbe.Category && rule.Difficulty == qbe.Difficulty {
+							if rule.SubCategory == "" || rule.SubCategory == qbe.SubCategory {
+								points = rule.PointsPerQuestion
+								break
+							}
+						}
+					}
+				}
+
+
+				q := models.Question{
+					ID:            qbe.ID,
+					Text:          qbe.Text,
+					Type:          qbe.Type,
+					Options:       qbe.Options,
+					CorrectAnswer: qbe.CorrectAnswer,
+					Points:        points,
+				}
+				questionMap[q.ID.Hex()] = q
+			}
+		}
+	} else {
+		for _, q := range submission.GeneratedQuestions {
+			questionMap[q.ID.Hex()] = q
+			totalMarks += q.Points
+		}
 	}
 
 	for i := range answers {
@@ -296,25 +355,29 @@ func (s *submissionService) SubmitAssessment(ctx context.Context, assessmentID, 
 	submission.SubmittedAt = time.Now()
 	submission.UpdatedAt = time.Now()
 
-	err = s.repo.Update(ctx, submission.ID, submission)
-	if err != nil {
-		utils.GetLogger().Errorf("[CRITICAL ERROR] SubmitAssessment update failed: %v", err)
-		s.auditService.RecordAction(ctx, cID, submission.CandidateEmail, "SUBMIT_ASSESSMENT", "SUBMISSION", submission.ID, "ERROR", "Final DB update failed", err.Error(), nil)
-	} else {
-		s.auditService.RecordAction(ctx, cID, submission.CandidateEmail, "SUBMIT_ASSESSMENT", "SUBMISSION", submission.ID, "SUCCESS", "Assessment submitted successfully", "", nil)
+	if !isDemo {
+		err = s.repo.Update(ctx, submission.ID, submission)
+		if err != nil {
+			utils.GetLogger().Errorf("[CRITICAL ERROR] SubmitAssessment update failed: %v", err)
+			s.auditService.RecordAction(ctx, cID, submission.CandidateEmail, "SUBMIT_ASSESSMENT", "SUBMISSION", submission.ID, "ERROR", "Final DB update failed", err.Error(), nil)
+		} else {
+			s.auditService.RecordAction(ctx, cID, submission.CandidateEmail, "SUBMIT_ASSESSMENT", "SUBMISSION", submission.ID, "SUCCESS", "Assessment submitted successfully", "", nil)
 
-		// Publish exam result to betExamResultQueue (fire-and-forget)
-		totalMarks := submission.MinPassingScore // fallback
-		if assessment, aErr := s.assessmentRepo.FindByID(ctx, aID); aErr == nil {
-			totalMarks = assessment.TotalMarks
-		}
-		go func(mobile string, passed bool, marks, total int) {
-			if err := PublishExamResult(mobile, passed, marks, total); err != nil {
-				utils.GetLogger().Warnf("Failed to publish exam result to RabbitMQ: %v", err)
-			} else {
-				utils.GetLogger().Infof("Exam result published to betExamResultQueue: mobile=%s, result=%v, marks=%d/%d", mobile, passed, marks, total)
+			// Publish exam result to betExamResultQueue (fire-and-forget)
+			totalMarks := submission.MinPassingScore // fallback
+			if assessment, aErr := s.assessmentRepo.FindByID(ctx, aID); aErr == nil {
+				totalMarks = assessment.TotalMarks
 			}
-		}(submission.CandidatePhone, passed, totalScore, totalMarks)
+			go func(mobile string, passed bool, marks, total int) {
+				if err := PublishExamResult(mobile, passed, marks, total); err != nil {
+					utils.GetLogger().Warnf("Failed to publish exam result to RabbitMQ: %v", err)
+				} else {
+					utils.GetLogger().Infof("Exam result published to betExamResultQueue: mobile=%s, result=%v, marks=%d/%d", mobile, passed, marks, total)
+				}
+			}(submission.CandidatePhone, passed, totalScore, totalMarks)
+		}
+	} else {
+		s.auditService.RecordAction(ctx, cID, "demo@demo.local", "SUBMIT_ASSESSMENT", "SUBMISSION", primitive.NilObjectID, "SUCCESS", "Demo assessment scored successfully statelessly", "", nil)
 	}
 	return submission, err
 }
@@ -394,10 +457,15 @@ func (s *submissionService) GetOrGenerateQuestions(ctx context.Context, assessme
 		return nil, fmt.Errorf("failed to sample questions: %v", err)
 	}
 
+	// For demo users, return the generated questions statelessly without saving them
+	user, _ := s.userRepo.FindByID(ctx, cID)
+	if user == nil || user.IsDemo {
+		return generatedQuestions, nil
+	}
+
 	// 4. Save/Update Submission with Locked Questions
 	if submission == nil {
 		// Create placeholder submission to lock questions
-		user, _ := s.userRepo.FindByID(ctx, cID)
 		submission = &models.Submission{
 			AssessmentID:           aID,
 			CandidateID:            cID,
@@ -408,12 +476,10 @@ func (s *submissionService) GetOrGenerateQuestions(ctx context.Context, assessme
 			CreatedAt:              time.Now(),
 			UpdatedAt:              time.Now(),
 		}
-		if user != nil {
-			submission.CandidateName = user.Name
-			submission.CandidateEmail = user.Email
-			submission.CandidatePhone = user.Phone
-			submission.IsDemo = user.IsDemo
-		}
+		submission.CandidateName = user.Name
+		submission.CandidateEmail = user.Email
+		submission.CandidatePhone = user.Phone
+		submission.IsDemo = user.IsDemo
 		if assessment != nil {
 			submission.MinPassingScore = assessment.PassingScore
 			submission.TotalMarks = assessment.TotalMarks

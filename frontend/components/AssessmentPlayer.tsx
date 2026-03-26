@@ -1054,7 +1054,7 @@ export default function AssessmentPlayer({ assessmentId, onComplete }: Assessmen
                                     </div>
                                 )}
 
-                                <h2 className="text-2xl font-medium text-gray-900">
+                                <h2 className="text-xl font-medium text-gray-900 whitespace-pre-wrap leading-relaxed">
                                     {currentQuestionIndex + 1}. {currentQuestion.text.replace(/^\d+\.\s*/, '')}
                                 </h2>
                             </div>
@@ -1076,7 +1076,7 @@ export default function AssessmentPlayer({ assessmentId, onComplete }: Assessmen
                                             }`}>
                                             {idx + 1}
                                         </span>
-                                        <span className="text-gray-800 font-medium">{opt}</span>
+                                        <span className="text-gray-800 font-medium whitespace-pre-wrap">{opt}</span>
                                     </button>
                                 ))}
 

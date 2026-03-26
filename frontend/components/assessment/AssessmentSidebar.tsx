@@ -70,7 +70,7 @@ export default function AssessmentSidebar({
                 <h3 className="font-bold text-gray-900 mb-4 flex items-center gap-2">
                     Question Palette
                 </h3>
-                <div className="grid grid-cols-5 gap-3 overflow-y-auto pr-2 pb-2">
+                <div className="grid grid-cols-5 gap-3 overflow-y-auto p-2">
                     {questions?.map((q, idx) => {
                         const isCurrent = idx === currentQuestionIndex;
                         const isAnswered = answers[q.id] !== undefined && answers[q.id] !== "";

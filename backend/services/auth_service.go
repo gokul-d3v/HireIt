@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
+	"go.mongodb.org/mongo-driver/bson/primitive"
 	"golang.org/x/crypto/bcrypt"
 )
 
@@ -27,15 +28,17 @@ type AuthService interface {
 }
 
 type authService struct {
-	userRepo   repositories.UserRepository
-	otpService OTPService
+	userRepo     repositories.UserRepository
+	otpService   OTPService
+	auditService AuditLogService
 }
 
 // NewAuthService creates a new implementation of AuthService
-func NewAuthService(repo repositories.UserRepository, otpService OTPService) AuthService {
+func NewAuthService(repo repositories.UserRepository, otpService OTPService, auditService AuditLogService) AuthService {
 	return &authService{
-		userRepo:   repo,
-		otpService: otpService,
+		userRepo:     repo,
+		otpService:   otpService,
+		auditService: auditService,
 	}
 }
 
@@ -145,18 +148,23 @@ func (s *authService) StartPublicAssessment(ctx context.Context, name, email, ph
 	email = strings.TrimSpace(strings.ToLower(email))
 	phone = utils.NormalizePhone(phone)
 
-	hashedPassword, _ := bcrypt.GenerateFromPassword([]byte("candidate123"), 10)
-	user, err := s.userRepo.UpsertCandidate(ctx, &models.User{
-		Name:      name,
-		Email:     email,
-		Phone:     phone,
-		Password:  string(hashedPassword),
+	// Since they are demo users, do not save their personal details to the database!
+	sessionID := primitive.NewObjectID()
+
+	// Log the actual PII via an audit log for tracking purposes securely
+	auditMsg := "Real Name: " + name + ", Phone: " + phone
+	_ = s.auditService.RecordAction(ctx, sessionID, email, "PUBLIC_EXAM_STARTED", "ASSESSMENT", primitive.NilObjectID, "INFO", "Anonymous demo user started mock exam", auditMsg, nil)
+
+	// Generate an entirely in-memory dummy candidate object
+	user := &models.User{
+		ID:        sessionID,
+		Name:      "Demo User",
+		Email:     "demo_" + sessionID.Hex()[:8] + "@demo.local",
+		Phone:     "",
 		Role:      "candidate",
+		IsDemo:    true,
 		CreatedAt: time.Now(),
 		UpdatedAt: time.Now(),
-	})
-	if err != nil {
-		return "", nil, err
 	}
 
 	tokenString, err := s.generateJWT(user)
@@ -169,7 +177,7 @@ func (s *authService) StartPublicAssessment(ctx context.Context, name, email, ph
 
 func (s *authService) StartDemoAssessment(ctx context.Context) (string, *models.User, error) {
 	// Create a unique dummy email for this demo session
-	demoEmail := "demo_" + utils.GenerateRandomString(8) + "@demo.local"
+	demoEmail := "demo_" + utils.GenerateRandomString(8) + "@demo.com"
 	hashedPassword, _ := bcrypt.GenerateFromPassword([]byte("demo123"), 10)
 
 	demoUser := models.User{
