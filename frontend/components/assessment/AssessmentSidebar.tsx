@@ -30,15 +30,15 @@ export default function AssessmentSidebar({
         <aside className="w-80 flex flex-col gap-6 sticky top-24 h-[calc(100vh-8rem)]">
             {/* Live Proctoring Monitor */}
             {videoRef && (
-                <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
-                    <div className="bg-gray-50 px-4 py-2 border-b border-gray-100 flex justify-between items-center">
-                        <span className="text-[10px] font-bold text-gray-700 uppercase tracking-widest flex items-center gap-1.5">
+                <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden flex-shrink-0">
+                    <div className="bg-gray-50 px-4 py-2 border-b border-gray-100 flex justify-between items-center text-xs font-bold text-gray-700 uppercase tracking-widest ">
+                        <span className="flex items-center gap-1.5 ">
                             <div className="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse"></div>
                             Live Proctoring
                         </span>
                         <Mic size={12} className="text-gray-500" />
                     </div>
-                    <div className="relative aspect-square bg-black">
+                    <div className="relative aspect-video bg-black">
                         <video
                             ref={videoRef}
                             autoPlay
@@ -52,7 +52,7 @@ export default function AssessmentSidebar({
             )}
 
             {/* Timer Section */}
-            <div className={`flex flex-col items-center justify-center p-6 rounded-xl shadow-lg border-b-4 transition-colors ${
+            <div className={`flex flex-col items-center justify-center p-6 rounded-xl shadow-lg border-b-4 transition-colors flex-shrink-0 ${
                 timeLeft !== null && timeLeft < 300 
                 ? "bg-red-600 border-red-800 text-white animate-pulse" 
                 : "bg-slate-900 border-slate-700 text-emerald-400"
