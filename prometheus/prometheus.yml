@@ -1,7 +1,18 @@
 global:
   scrape_interval: 15s
 
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets: ['hireit-alertmanager:9093']
+
+rule_files:
+  - '/etc/prometheus/alert_rules.yml'
+
 scrape_configs:
   - job_name: 'hireit-backend'
+    metrics_path: '/metrics'
     static_configs:
-      - targets: ['host.docker.internal:8080', 'hireit-backend-prod:8080', 'hireit-backend-dev:8080']
+      - targets: ['hireit-backend-prod:8080', 'hireit-backend-dev:8080']
+        labels:
+          env: 'production'

@@ -106,9 +106,18 @@ jobs:
             --restart unless-stopped \
             ghcr.io/${{ env.REPO_LOWER }}/hireit-frontend-dev:latest
 
+      - name: Create Monitoring Env File
+        run: |
+          cat > .env.monitoring <<EOF
+          ALERT_EMAIL_FROM=${{ secrets.ALERT_EMAIL_FROM }}
+          ALERT_EMAIL_PASSWORD=${{ secrets.ALERT_EMAIL_PASSWORD }}
+          ALERT_EMAIL_TO=${{ vars.ALERT_EMAIL_TO }}
+          GF_SECURITY_ADMIN_PASSWORD=${{ secrets.DEV_GRAFANA_PASSWORD }}
+          EOF
+
       - name: Deploy Monitoring Stack
         run: |
-          docker-compose -f docker-compose.monitoring.yml up -d
+          docker compose -f docker-compose.monitoring.yml up -d
 
       - name: Prune Dangling Images
         run: docker image prune -f

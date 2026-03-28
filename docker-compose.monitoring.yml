@@ -6,6 +6,8 @@ services:
     container_name: hireit-prometheus
     volumes:
       - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml
+      - ./prometheus/alert_rules.yml:/etc/prometheus/alert_rules.yml
+      - prometheus_data:/prometheus
     command:
       - '--config.file=/etc/prometheus/prometheus.yml'
       - '--storage.tsdb.path=/prometheus'
@@ -22,8 +24,33 @@ services:
     container_name: hireit-grafana
     ports:
       - "3001:3000"
+    volumes:
+      - grafana_data:/var/lib/grafana
+    env_file:
+      - .env.monitoring
     environment:
-      - GF_SECURITY_ADMIN_PASSWORD=admin # CHANGE THIS IN PRODUCTION
+      - GF_SECURITY_ADMIN_PASSWORD=${GF_SECURITY_ADMIN_PASSWORD}
+      - GF_SERVER_ROOT_URL=%(protocol)s://%(domain)s/grafana/
+      - GF_SERVER_SERVE_FROM_SUB_PATH=true
+    restart: unless-stopped
+    networks:
+      - hireit-network
+
+  alertmanager:
+    image: prom/alertmanager:latest
+    container_name: hireit-alertmanager
+    env_file:
+      - .env.monitoring
+    volumes:
+      - ./prometheus:/etc/alertmanager/templates
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        apk add --no-cache gettext &&
+        envsubst < /etc/alertmanager/templates/alertmanager.yml > /tmp/alertmanager.yml &&
+        /bin/alertmanager --config.file=/tmp/alertmanager.yml
+    ports:
+      - "9093:9093"
     restart: unless-stopped
     networks:
       - hireit-network
@@ -31,3 +58,7 @@ services:
 networks:
   hireit-network:
     external: true
+
+volumes:
+  prometheus_data:
+  grafana_data:
