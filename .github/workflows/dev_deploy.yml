@@ -108,15 +108,15 @@ jobs:
 
       - name: Create Monitoring Env File
         run: |
-          cat > .env.monitoring <<EOF
-          ALERT_EMAIL_FROM=${{ secrets.ALERT_EMAIL_FROM }}
-          ALERT_EMAIL_PASSWORD=${{ secrets.ALERT_EMAIL_PASSWORD }}
-          ALERT_EMAIL_TO=${{ vars.ALERT_EMAIL_TO }}
-          GF_SECURITY_ADMIN_PASSWORD=${{ secrets.DEV_GRAFANA_PASSWORD }}
-          EOF
+          printf 'ALERT_EMAIL_FROM=%s\n' "${{ secrets.ALERT_EMAIL_FROM }}" > .env.monitoring
+          printf 'ALERT_EMAIL_PASSWORD=%s\n' "${{ secrets.ALERT_EMAIL_PASSWORD }}" >> .env.monitoring
+          printf 'ALERT_EMAIL_TO=%s\n' "${{ vars.ALERT_EMAIL_TO }}" >> .env.monitoring
+          printf 'GF_SECURITY_ADMIN_PASSWORD=%s\n' "${{ secrets.DEV_GRAFANA_PASSWORD }}" >> .env.monitoring
 
       - name: Deploy Monitoring Stack
         run: |
+          docker stop hireit-prometheus hireit-grafana hireit-alertmanager 2>/dev/null || true
+          docker rm hireit-prometheus hireit-grafana hireit-alertmanager 2>/dev/null || true
           docker-compose -f docker-compose.monitoring.yml up -d
 
       - name: Prune Dangling Images
