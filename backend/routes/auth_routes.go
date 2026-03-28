@@ -8,11 +8,14 @@ import (
 )
 
 func AuthRoutes(r *gin.Engine, authCtrl *controllers.AuthController, googleCtrl *controllers.GoogleAuthController) {
-	r.POST("/signup", authCtrl.Signup)
-	r.POST("/login", authCtrl.Login)
-	r.GET("/auth/google/login", googleCtrl.GoogleLogin)
-	r.GET("/auth/google/login/callback", googleCtrl.GoogleLoginCallback)
+	api := r.Group("/api")
+	{
+		api.POST("/signup", authCtrl.Signup)
+		api.POST("/login", authCtrl.Login)
+		api.GET("/auth/google/login", googleCtrl.GoogleLogin)
+		api.GET("/auth/google/login/callback", googleCtrl.GoogleLoginCallback)
 
-	// Protected route to set password
-	r.POST("/auth/set-password", middleware.AuthMiddleware(), authCtrl.SetPassword)
+		// Protected route to set password
+		api.POST("/auth/set-password", middleware.AuthMiddleware(), authCtrl.SetPassword)
+	}
 }

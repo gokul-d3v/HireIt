@@ -35,7 +35,7 @@ export function SetPasswordModal({ isOpen, onClose }: SetPasswordModalProps) {
         setLoading(true);
 
         try {
-            await apiRequest("/auth/set-password", "POST", { password });
+            await apiRequest("/api/auth/set-password", "POST", { password });
             setSuccess(true);
             setTimeout(() => {
                 onClose();

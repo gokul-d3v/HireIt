@@ -42,7 +42,7 @@ function LoginContent() {
         const password = formData.get("password") as string;
 
         try {
-            const data = await apiRequest("/login", "POST", {
+            const data = await apiRequest("/api/login", "POST", {
                 email,
                 password,
                 role, // Pass the selected role to the API

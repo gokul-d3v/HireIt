@@ -62,7 +62,7 @@ export async function apiRequest(endpoint: string, method: string, body?: unknow
 
         if (!response.ok) {
             // Handle 401 specifically
-            if (response.status === 401 && endpoint !== "/login" && endpoint !== "/signup") {
+            if (response.status === 401 && endpoint !== "/api/login" && endpoint !== "/api/signup") {
                 if (typeof window !== 'undefined') {
                     localStorage.removeItem("token");
                     localStorage.removeItem("role");

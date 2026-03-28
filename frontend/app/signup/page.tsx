@@ -51,7 +51,7 @@ export default function SignupPage() {
 
     try {
       // 1. Signup
-      await apiRequest("/signup", "POST", {
+      await apiRequest("/api/signup", "POST", {
         name,
         email,
         password,
@@ -59,7 +59,7 @@ export default function SignupPage() {
       });
 
       // 2. Auto-Login
-      const loginData = await apiRequest("/login", "POST", {
+      const loginData = await apiRequest("/api/login", "POST", {
         email,
         password,
       });
@@ -251,7 +251,7 @@ export default function SignupPage() {
 
             <div className="mt-6 flex justify-center">
               <a
-                href={`${apiUrl}/auth/google/login?role=${role}`}
+                href={`${apiUrl}/api/auth/google/login?role=${role}`}
                 className="w-full inline-flex justify-center py-3 px-4 border border-gray-200 rounded-xl shadow-sm bg-white text-sm font-medium text-gray-500 hover:bg-gray-50 transition-colors"
               >
                 <svg className="h-5 w-5 mr-2" viewBox="0 0 24 24">
