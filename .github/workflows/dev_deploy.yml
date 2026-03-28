@@ -117,7 +117,7 @@ jobs:
 
       - name: Deploy Monitoring Stack
         run: |
-          docker compose -f docker-compose.monitoring.yml up -d
+          docker-compose -f docker-compose.monitoring.yml up -d
 
       - name: Prune Dangling Images
         run: docker image prune -f
