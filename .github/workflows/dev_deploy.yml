@@ -115,9 +115,53 @@ jobs:
 
       - name: Deploy Monitoring Stack
         run: |
-          docker stop hireit-prometheus hireit-grafana hireit-alertmanager 2>/dev/null || true
-          docker rm hireit-prometheus hireit-grafana hireit-alertmanager 2>/dev/null || true
-          docker-compose -f docker-compose.monitoring.yml up -d
+          # Force remove all old monitoring containers (including old hash-prefixed names)
+          docker ps -a --format '{{.Names}}' | grep -E 'prometheus|grafana|alertmanager' | xargs -r docker rm -f
+
+          # Pull latest images
+          docker pull prom/prometheus:latest
+          docker pull grafana/grafana:latest
+          docker pull prom/alertmanager:latest
+
+          # Start Prometheus
+          docker run -d \
+            --name hireit-prometheus \
+            --network hireit-network \
+            -p 9090:9090 \
+            -v $(pwd)/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml \
+            -v $(pwd)/prometheus/alert_rules.yml:/etc/prometheus/alert_rules.yml \
+            -v hireit_prometheus_data:/prometheus \
+            --restart unless-stopped \
+            prom/prometheus:latest \
+            --config.file=/etc/prometheus/prometheus.yml \
+            --storage.tsdb.path=/prometheus
+
+          # Start Grafana
+          docker run -d \
+            --name hireit-grafana \
+            --network hireit-network \
+            -p 3001:3000 \
+            -v hireit_grafana_data:/var/lib/grafana \
+            -e GF_SECURITY_ADMIN_PASSWORD="$(grep GF_SECURITY_ADMIN_PASSWORD .env.monitoring | cut -d= -f2-)" \
+            -e GF_SERVER_ROOT_URL='%(protocol)s://%(domain)s/grafana/' \
+            -e GF_SERVER_SERVE_FROM_SUB_PATH=true \
+            --restart unless-stopped \
+            grafana/grafana:latest
+
+          # Start Alertmanager with envsubst
+          ALERT_EMAIL_FROM=$(grep ALERT_EMAIL_FROM .env.monitoring | cut -d= -f2-)
+          ALERT_EMAIL_PASSWORD=$(grep ALERT_EMAIL_PASSWORD .env.monitoring | cut -d= -f2-)
+          ALERT_EMAIL_TO=$(grep ALERT_EMAIL_TO .env.monitoring | cut -d= -f2-)
+          export ALERT_EMAIL_FROM ALERT_EMAIL_PASSWORD ALERT_EMAIL_TO
+          envsubst < prometheus/alertmanager.yml > /tmp/alertmanager.yml
+          docker run -d \
+            --name hireit-alertmanager \
+            --network hireit-network \
+            -p 9093:9093 \
+            -v /tmp/alertmanager.yml:/etc/alertmanager/alertmanager.yml \
+            --restart unless-stopped \
+            prom/alertmanager:latest \
+            --config.file=/etc/alertmanager/alertmanager.yml
 
       - name: Prune Dangling Images
         run: docker image prune -f
