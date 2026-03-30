@@ -2,6 +2,7 @@ package services
 
 import (
 	"context"
+	"hireit-backend/metrics"
 	"hireit-backend/models"
 	"hireit-backend/repositories"
 	"time"
@@ -55,5 +56,9 @@ func (s *userService) Heartbeat(ctx context.Context, userID string) error {
 func (s *userService) GetActiveUserCount(ctx context.Context) (int64, error) {
 	// Active if seen in the last 5 minutes
 	since := time.Now().Add(-5 * time.Minute)
-	return s.repo.CountActiveUsers(ctx, since)
+	count, err := s.repo.CountActiveUsers(ctx, since)
+	if err == nil {
+		metrics.UpdateActiveUsers(float64(count))
+	}
+	return count, err
 }

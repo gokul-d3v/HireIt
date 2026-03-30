@@ -26,6 +26,8 @@ services:
       - "3001:3000"
     volumes:
       - grafana_data:/var/lib/grafana
+      - ./grafana/provisioning:/etc/grafana/provisioning
+      - ./grafana/hireit-dashboard.json:/etc/grafana/provisioning/dashboards/json/hireit-dashboard.json
     env_file:
       - .env.monitoring
     environment:
