@@ -10,6 +10,7 @@ import (
 func UserRoutes(r *gin.RouterGroup, ctrl *controllers.UserController) {
 	// Heartbeat for anyone authenticated
 	r.POST("/users/heartbeat", ctrl.Heartbeat)
+	r.GET("/users/active-count", ctrl.GetActiveCount)
 
 	// Admin/Interviewer only
 	admin := r.Group("/admin")
@@ -17,6 +18,5 @@ func UserRoutes(r *gin.RouterGroup, ctrl *controllers.UserController) {
 	{
 		admin.GET("/users", ctrl.ListUsers)
 		admin.PATCH("/users/:id/status", ctrl.ToggleStatus)
-		admin.GET("/users/active-count", ctrl.GetActiveCount)
 	}
 }

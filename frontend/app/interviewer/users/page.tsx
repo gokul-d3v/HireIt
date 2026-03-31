@@ -26,7 +26,7 @@ export default function UsersPage() {
         try {
             const [usersData, countData] = await Promise.all([
                 apiRequest("/api/admin/users", "GET"),
-                apiRequest("/api/admin/users/active-count", "GET")
+                apiRequest("/api/users/active-count", "GET")
             ]);
             setUsers(usersData || []);
             setActiveCount(countData.active_users);

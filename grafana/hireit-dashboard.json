@@ -94,7 +94,7 @@
             "uid": "prometheus"
           },
           "editorMode": "code",
-          "expr": "up{job=\"hireit-backend\"}",
+          "expr": "up{job=\"hireit-backend\", instance=~\"$instance\"}",
           "instant": true,
           "range": false,
           "refId": "A"
@@ -156,7 +156,7 @@
       },
       "targets": [
         {
-          "expr": "hireit_active_users",
+          "expr": "hireit_active_users{instance=~\"$instance\"}",
           "refId": "A"
         }
       ],
@@ -202,7 +202,7 @@
       },
       "targets": [
         {
-          "expr": "sum(rate(http_requests_total[5m]))",
+          "expr": "sum(rate(http_requests_total{instance=~\"$instance\"}[5m]))",
           "legendFormat": "Requests per second",
           "refId": "A"
         }
@@ -262,7 +262,7 @@
       },
       "targets": [
         {
-          "expr": "sum(rate(http_requests_total{status=~\"[45]..\"}[5m]))",
+          "expr": "sum(rate(http_requests_total{status=~\"[45]..\", instance=~\"$instance\"}[5m]))",
           "legendFormat": "Errors",
           "refId": "A"
         }
@@ -299,7 +299,7 @@
       },
       "targets": [
         {
-          "expr": "histogram_quantile(0.95, sum by (le, endpoint) (rate(http_request_duration_seconds_bucket[5m])))",
+          "expr": "histogram_quantile(0.95, sum by (le, endpoint) (rate(http_request_duration_seconds_bucket{instance=~\"$instance\"}[5m])))",
           "legendFormat": "latency {{endpoint}} (P95)",
           "refId": "A"
         }
@@ -330,7 +330,7 @@
       "id": 5,
       "targets": [
         {
-          "expr": "sum by (command) (rate(mongodb_command_duration_seconds_sum[5m]) / rate(mongodb_command_duration_seconds_count[5m]))",
+          "expr": "sum by (command) (rate(mongodb_command_duration_seconds_sum{instance=~\"$instance\"}[5m]) / rate(mongodb_command_duration_seconds_count{instance=~\"$instance\"}[5m]))",
           "legendFormat": "{{command}}",
           "refId": "A"
         }
@@ -361,12 +361,57 @@
       "id": 6,
       "targets": [
         {
-          "expr": "go_memstats_alloc_bytes",
+          "expr": "go_memstats_alloc_bytes{instance=~\"$instance\"}",
           "legendFormat": "Memory Allocation",
           "refId": "A"
         }
       ],
       "title": "Backend Memory Usage",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "h": 6,
+        "w": 12,
+        "x": 0,
+        "y": 25
+      },
+      "id": 8,
+      "targets": [
+        {
+          "expr": "sum by (endpoint, status) (rate(http_requests_total{status=~\"[45]..\", instance=~\"$instance\"}[5m])) > 0",
+          "format": "table",
+          "instant": true,
+          "refId": "A"
+        }
+      ],
+      "title": "Error Breakdown (Routes)",
+      "type": "table"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "h": 6,
+        "w": 12,
+        "x": 12,
+        "y": 25
+      },
+      "id": 9,
+      "targets": [
+        {
+          "expr": "sum by (endpoint) (rate(http_requests_total{status=~\"[45]..\", instance=~\"$instance\"}[5m]))",
+          "legendFormat": "{{endpoint}}",
+          "refId": "A"
+        }
+      ],
+      "title": "Top Failing Endpoints",
       "type": "timeseries"
     }
   ],
@@ -378,7 +423,31 @@
     "production"
   ],
   "templating": {
-    "list": []
+    "list": [
+      {
+        "current": {},
+        "datasource": {
+          "type": "prometheus",
+          "uid": "prometheus"
+        },
+        "definition": "label_values(up{job=\"hireit-backend\"}, instance)",
+        "hide": 0,
+        "includeAll": true,
+        "label": "Instance",
+        "multi": true,
+        "name": "instance",
+        "options": [],
+        "query": {
+          "query": "label_values(up{job=\"hireit-backend\"}, instance)",
+          "refId": "StandardVariableQuery"
+        },
+        "refresh": 1,
+        "regex": "",
+        "skipUrlSync": false,
+        "sort": 1,
+        "type": "query"
+      }
+    ]
   },
   "time": {
     "from": "now-30m",
