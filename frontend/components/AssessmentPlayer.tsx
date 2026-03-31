@@ -978,7 +978,7 @@ export default function AssessmentPlayer({ assessmentId, onComplete }: Assessmen
     }
 
     return (
-        <div ref={containerRef} className={`min-h-screen bg-gray-50 flex flex-col ${examStarted ? "z-[9999] fixed inset-0 !top-0 !left-0 !right-0 !bottom-0 !m-0 !w-screen !h-screen" : ""}`}>
+        <div ref={containerRef} className={`h-screen bg-gray-50 flex flex-col overflow-hidden ${examStarted ? "z-[9999] fixed inset-0 !top-0 !left-0 !right-0 !bottom-0 !m-0 !w-screen !h-screen" : ""}`}>
             {/* Header */}
             <div className="bg-white border-b border-gray-200 px-8 py-4 sticky top-0 z-10 shadow-sm flex justify-between items-center h-20">
                 <div className="flex items-center gap-4 flex-1">
@@ -1015,11 +1015,11 @@ export default function AssessmentPlayer({ assessmentId, onComplete }: Assessmen
             </div>
 
             {/* Main Content Layout */}
-            <div className="flex-1 p-8 max-w-[1400px] mx-auto w-full flex gap-8">
+            <div className="flex-1 p-8 max-w-[1400px] mx-auto w-full flex gap-8 overflow-hidden">
                 {/* Left Column: Question Area */}
-                <div className="flex-1">
-                    <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-8 min-h-[400px] flex flex-col">
-                        <div className="flex-1">
+                <div className="flex-1 flex flex-col h-full overflow-hidden">
+                    <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-8 flex flex-col h-full overflow-hidden">
+                        <div className="flex-1 overflow-y-auto pr-2 custom-scrollbar">
                             <div className="mb-6">
                                 <span className="inline-block px-2 py-1 text-xs font-semibold bg-indigo-50 text-indigo-700 rounded mb-2">
                                     {currentQuestion.type} &bull; {currentQuestion.points} Points
@@ -1046,7 +1046,7 @@ export default function AssessmentPlayer({ assessmentId, onComplete }: Assessmen
                                                 {currentQuestion.passage_title || "Reading Passage"}
                                             </span>
                                         </div>
-                                        <div className="max-h-72 overflow-y-auto pr-2">
+                                        <div className="pr-1">
                                             <p className="text-sm leading-relaxed text-slate-700 whitespace-pre-wrap">
                                                 {currentQuestion.passage_text}
                                             </p>
