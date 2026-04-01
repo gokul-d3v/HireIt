@@ -108,13 +108,47 @@ func (s *assessmentService) UpdateAssessment(ctx context.Context, idStr string, 
 		return err
 	}
 
-	// Check if already deleted
+	// Check if already exist and preserve metadata
 	existing, err := s.repo.FindByID(ctx, id)
 	if err != nil || existing.DeletedAt != nil {
 		return errors.New("assessment not found or deleted")
 	}
 
+	// Safe Merge: Only overwrite fields if new values are provided (non-zero/non-empty)
+	if assessment.Title == "" {
+		assessment.Title = existing.Title
+	}
+	if assessment.Description == "" {
+		assessment.Description = existing.Description
+	}
+	if assessment.Duration == 0 {
+		assessment.Duration = existing.Duration
+	}
+	if assessment.TotalMarks == 0 {
+		assessment.TotalMarks = existing.TotalMarks
+	}
+	if assessment.PassingScore == 0 {
+		assessment.PassingScore = existing.PassingScore
+	}
+	if len(assessment.QuestionRules) == 0 {
+		assessment.QuestionRules = existing.QuestionRules
+	}
+	if !assessment.IsMock && existing.IsMock {
+		// If current is false but existing was true, we might want to preserve it?
+		// Usually if it's in the JSON as false, it's false. 
+		// But for safety, we'll assume is_mock is always sent if intended.
+	}
+
+	// Preserve immutable/internal metadata
+	assessment.CreatedAt = existing.CreatedAt
+	assessment.CreatedBy = existing.CreatedBy
+	assessment.ExamPINSecret = existing.ExamPINSecret
+	if assessment.ExamPINSecret == "" {
+		// Safeguard in case existing was also empty
+		assessment.ExamPINSecret = existing.ExamPINSecret 
+	}
 	assessment.UpdatedAt = time.Now()
+
 	return s.repo.Update(ctx, id, assessment)
 }
 

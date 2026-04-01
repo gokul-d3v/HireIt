@@ -5,7 +5,7 @@ import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/context/AuthContext";
 import { apiRequest } from "@/lib/api";
-import { Plus, Trash2, Save, ArrowLeft, ArrowRight, Clock, Award, Target, FileText, CheckCircle, AlertTriangle, Copy, Check, RefreshCw } from "lucide-react";
+import { Plus, Trash2, Save, ArrowLeft, ArrowRight, Clock, Award, Target, FileText, CheckCircle, AlertTriangle, Copy, Check, RefreshCw, Loader2 } from "lucide-react";
 import { useToast } from "@/components/ui/Toast";
 import { Modal } from "@/components/ui/Modal";
 import { copyToClipboard } from "@/lib/clipboard";
@@ -464,7 +464,9 @@ export default function CreateAssessmentPage() {
                         </button>
                         <div>
                             <h1 className="text-xl font-bold text-gray-900">Create Assessment</h1>
-                            <p className="text-xs text-gray-600 font-medium">Step {step} of 3</p>
+                            <p className="text-xs text-gray-600 font-medium">
+                                {step === 4 ? "Success" : `Step ${step} of 3`}
+                            </p>
                         </div>
                     </div>
                 </div>
@@ -488,8 +490,8 @@ export default function CreateAssessmentPage() {
                 </div>
             )}
 
-            <main className={`max-w-6xl mx-auto px-4 py-8 ${step > 1 ? 'flex flex-col lg:flex-row gap-8' : ''}`}>
-                <div className={step > 1 ? 'flex-1' : 'max-w-4xl mx-auto w-full'}>
+            <main className={`max-w-6xl mx-auto px-4 py-8 ${step > 1 && step < 4 ? 'flex flex-col lg:flex-row gap-8' : ''}`}>
+                <div className={step > 1 && step < 4 ? 'flex-1' : 'max-w-4xl mx-auto w-full'}>
                     {/* Step 1: Basic Info & Configuration */}
                     {step === 1 && (
                         <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-8 space-y-6">
@@ -944,74 +946,81 @@ export default function CreateAssessmentPage() {
                     )}
 
                     {/* Step 4: Success */}
-                    {step === 4 && createdId && (
-                        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-8 text-center max-w-2xl mx-auto space-y-6">
-                            <div className="w-20 h-20 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-2 text-green-600">
-                                <Check size={40} />
-                            </div>
-                            <h2 className="text-3xl font-black text-gray-900">Assessment Created!</h2>
-                            <p className="text-gray-600 font-medium pb-2">
-                                Your assessment has been successfully created.
-                                {!isMock && " Share the rotating 4-digit PIN below with candidates — it refreshes every 30 minutes."}
-                            </p>
-
-                            {!isMock && (
-                                <div className="bg-indigo-50 border-2 border-indigo-100 rounded-2xl p-6 max-w-sm mx-auto space-y-4">
-                                    <div className="text-[10px] font-bold uppercase tracking-widest text-indigo-400">Live Access PIN</div>
-
-                                    {pinLoading ? (
-                                        <div className="flex items-center justify-center py-4">
-                                            <RefreshCw size={24} className="animate-spin text-indigo-400" />
-                                        </div>
-                                    ) : livePIN ? (
-                                        <>
-                                            <div className="flex items-center justify-between gap-4 bg-white p-4 rounded-xl border border-indigo-100 shadow-sm">
-                                                <code className="text-4xl font-mono font-black text-indigo-900 tracking-[0.3em]">
-                                                    {livePIN.pin}
-                                                </code>
-                                                <button
-                                                    onClick={async () => {
-                                                        const ok = await copyToClipboard(livePIN.pin);
-                                                        if (ok) { setCopied(true); setTimeout(() => setCopied(false), 2000); }
-                                                    }}
-                                                    className="p-2 text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors"
-                                                    title="Copy PIN"
-                                                >
-                                                    {copied ? <Check size={20} className="text-green-500" /> : <Copy size={20} />}
-                                                </button>
-                                            </div>
-                                            <div className="text-xs font-semibold text-indigo-400 flex items-center justify-center gap-1">
-                                                <Clock size={12} />
-                                                Rotates at {new Date(livePIN.rotates_at).toLocaleTimeString()}
-                                            </div>
-                                        </>
-                                    ) : null}
-
-                                    <button
-                                        onClick={handleRegenerateSecret}
-                                        disabled={pinLoading}
-                                        className="w-full flex items-center justify-center gap-2 px-4 py-2.5 border-2 border-indigo-200 text-indigo-700 font-bold rounded-xl hover:bg-indigo-100 transition disabled:opacity-50 text-sm"
-                                    >
-                                        <RefreshCw size={15} /> Regenerate PIN Secret
-                                    </button>
-                                    <p className="text-[11px] text-indigo-400">Regenerating creates a new secret — all current PINs for this exam are immediately invalidated.</p>
+                    {step === 4 && (
+                        createdId ? (
+                            <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-8 text-center max-w-2xl mx-auto space-y-6">
+                                <div className="w-20 h-20 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-2 text-green-600">
+                                    <Check size={40} />
                                 </div>
-                            )}
-
-                            <div className="pt-4">
-                                <button
-                                    onClick={() => router.push("/interviewer/assessments")}
-                                    className="px-8 py-3 bg-indigo-600 text-white rounded-xl font-bold hover:bg-indigo-700 shadow-lg shadow-indigo-200 transition-all active:scale-95"
-                                >
-                                    Return to Dashboard
-                                </button>
+                                <h2 className="text-3xl font-black text-gray-900">Assessment Created!</h2>
+                                <p className="text-gray-600 font-medium pb-2">
+                                    Your assessment has been successfully created.
+                                    {!isMock && " Share the rotating 4-digit PIN below with candidates — it refreshes every 30 minutes."}
+                                </p>
+    
+                                {!isMock && (
+                                    <div className="bg-indigo-50 border-2 border-indigo-100 rounded-2xl p-6 max-w-sm mx-auto space-y-4">
+                                        <div className="text-[10px] font-bold uppercase tracking-widest text-indigo-400">Live Access PIN</div>
+    
+                                        {pinLoading ? (
+                                            <div className="flex items-center justify-center py-4">
+                                                <RefreshCw size={24} className="animate-spin text-indigo-400" />
+                                            </div>
+                                        ) : livePIN ? (
+                                            <>
+                                                <div className="flex items-center justify-between gap-4 bg-white p-4 rounded-xl border border-indigo-100 shadow-sm">
+                                                    <code className="text-4xl font-mono font-black text-indigo-900 tracking-[0.3em]">
+                                                        {livePIN.pin}
+                                                    </code>
+                                                    <button
+                                                        onClick={async () => {
+                                                            const ok = await copyToClipboard(livePIN.pin);
+                                                            if (ok) { setCopied(true); setTimeout(() => setCopied(false), 2000); }
+                                                        }}
+                                                        className="p-2 text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors"
+                                                        title="Copy PIN"
+                                                    >
+                                                        {copied ? <Check size={20} className="text-green-500" /> : <Copy size={20} />}
+                                                    </button>
+                                                </div>
+                                                <div className="text-xs font-semibold text-indigo-400 flex items-center justify-center gap-1">
+                                                    <Clock size={12} />
+                                                    Rotates at {new Date(livePIN.rotates_at).toLocaleTimeString()}
+                                                </div>
+                                            </>
+                                        ) : null}
+    
+                                        <button
+                                            onClick={handleRegenerateSecret}
+                                            disabled={pinLoading}
+                                            className="w-full flex items-center justify-center gap-2 px-4 py-2.5 border-2 border-indigo-200 text-indigo-700 font-bold rounded-xl hover:bg-indigo-100 transition disabled:opacity-50 text-sm"
+                                        >
+                                            <RefreshCw size={15} /> Regenerate PIN Secret
+                                        </button>
+                                        <p className="text-[11px] text-indigo-400">Regenerating creates a new secret — all current PINs for this exam are immediately invalidated.</p>
+                                    </div>
+                                )}
+    
+                                <div className="pt-4">
+                                    <button
+                                        onClick={() => router.push("/interviewer/assessments")}
+                                        className="px-8 py-3 bg-indigo-600 text-white rounded-xl font-bold hover:bg-indigo-700 shadow-lg shadow-indigo-200 transition-all active:scale-95"
+                                    >
+                                        Return to Dashboard
+                                    </button>
+                                </div>
                             </div>
-                        </div>
+                        ) : (
+                            <div className="flex flex-col items-center justify-center py-20 bg-white rounded-xl shadow-sm border border-gray-200 max-w-2xl mx-auto">
+                                <Loader2 size={48} className="animate-spin text-indigo-600 mb-4" />
+                                <p className="text-gray-600 font-medium">Finalizing assessment...</p>
+                            </div>
+                        )
                     )}
                 </div>
 
                 {/* Sticky Sidebar for Steps 2 & 3 */}
-                {step > 1 && (
+                {step > 1 && step < 4 && (
                     <aside className="w-full lg:w-80 space-y-6">
                         <div className="lg:sticky lg:top-24 space-y-6">
                             <div className={`p-6 rounded-2xl border-4 border-dashed transition-all ${currentPointsTotal === Number(totalMarks) ? 'bg-green-50 border-green-200 text-green-900' : 'bg-orange-50 border-orange-200 text-orange-900'}`}>

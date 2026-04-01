@@ -111,6 +111,13 @@ export default function InterviewerAssessmentsPage() {
         return { p1, p2, p3 };
     };
 
+    const formatDate = (dateStr: string) => {
+        if (!dateStr) return "N/A";
+        const d = new Date(dateStr);
+        if (d.getFullYear() < 1971) return "N/A"; // Go zero-value is 0001
+        return d.toLocaleDateString();
+    };
+
     const filteredAssessments = (assessments || [])
         .filter(a => a.phase === 1 || !a.phase) // Show only Phase 1 or legacy assessments
         .filter(a =>
@@ -197,7 +204,7 @@ export default function InterviewerAssessmentsPage() {
                                                     <Clock size={16} /> {assessment.duration} mins
                                                 </td>
                                                 <td className="p-4 text-gray-800 font-medium">
-                                                    {new Date(assessment.created_at).toLocaleDateString()}
+                                                    {formatDate(assessment.created_at)}
                                                 </td>
                                                 <td className="p-4 text-right">
                                                     <div className="flex justify-end gap-2 items-center">
