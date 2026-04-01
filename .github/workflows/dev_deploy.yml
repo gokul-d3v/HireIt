@@ -52,6 +52,17 @@ jobs:
     needs: [build-and-push-backend, build-and-push-frontend]
     runs-on: [self-hosted, dev]
     steps:
+      - name: Pre-Checkout Cleanup
+        run: |
+          # Stop and remove monitoring containers that hold locks on directories
+          sudo docker stop hireit-grafana hireit-prometheus hireit-loki hireit-promtail hireit-alertmanager 2>/dev/null || true
+          sudo docker rm hireit-grafana hireit-prometheus hireit-loki hireit-promtail hireit-alertmanager 2>/dev/null || true
+          # Force-remove root-owned directories that Grafana/Docker leave behind
+          sudo rm -rf /home/github/actions-runner/_work/HireIt/HireIt/grafana || true
+          sudo rm -rf /home/github/actions-runner/_work/HireIt/HireIt/prometheus || true
+          # Re-own the entire workspace so the runner user can clean it
+          sudo chown -R $(whoami):$(whoami) /home/github/actions-runner/_work/HireIt/HireIt || true
+
       - name: Checkout Repository
         uses: actions/checkout@v4
         with:
