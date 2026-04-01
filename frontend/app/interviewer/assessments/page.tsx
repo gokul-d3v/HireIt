@@ -6,13 +6,14 @@ import { useAuth } from "@/context/AuthContext";
 import { apiRequest } from "@/lib/api";
 import { useToast } from "@/components/ui/Toast";
 import { Modal } from "@/components/ui/Modal";
-import { Plus, Edit, Trash2, Users, Search, Clock, FileText, Share2 } from "lucide-react";
+import { Plus, Edit, Trash2, Users, Search, Clock, FileText, Share2, Copy, Check, ShieldAlert } from "lucide-react";
 import { copyToClipboard } from "@/lib/clipboard";
 
 interface Assessment {
     id: string;
     title: string;
     description: string;
+    is_mock?: boolean;
     duration: number;
     question_rules: any[];
     questions?: any[];
@@ -32,6 +33,10 @@ export default function InterviewerAssessmentsPage() {
     const [searchTerm, setSearchTerm] = useState("");
     const [deleteModalOpen, setDeleteModalOpen] = useState(false);
     const [selectedAssessmentId, setSelectedAssessmentId] = useState<string | null>(null);
+
+    const [shareModalOpen, setShareModalOpen] = useState(false);
+    const [assessmentToShare, setAssessmentToShare] = useState<Assessment | null>(null);
+    const [copied, setCopied] = useState(false);
 
     useEffect(() => {
         if (!isLoading && (!isAuthenticated || user?.role !== "interviewer")) {
@@ -78,15 +83,24 @@ export default function InterviewerAssessmentsPage() {
         }
     };
 
-    const handleShare = async (id: string) => {
-        const shareUrl = `${window.location.origin}/exam/public/assessments/${id}`;
+    const openShareModal = (assessment: Assessment) => {
+        setAssessmentToShare(assessment);
+        setShareModalOpen(true);
+        setCopied(false);
+    };
+
+    const copyShareLink = async () => {
+        if (!assessmentToShare) return;
+        const shareUrl = `${window.location.origin}/exam/public/assessments/${assessmentToShare.id}`;
         const successful = await copyToClipboard(shareUrl);
         if (successful) {
+            setCopied(true);
+            setTimeout(() => setCopied(false), 2000);
             showToast("Assessment link copied to clipboard!", "success");
         } else {
             showToast("Failed to copy link. Please copy it manually.", "error");
         }
-    }; 
+    };
 
     const getPhases = (p1: Assessment) => {
         const p2Id = p1.next_phase_id;
@@ -217,7 +231,7 @@ export default function InterviewerAssessmentsPage() {
                                                         </div>
 
                                                         <button
-                                                            onClick={() => handleShare(assessment.id)}
+                                                            onClick={() => openShareModal(assessment)}
                                                             className="p-2 text-indigo-600 hover:bg-indigo-50 rounded-lg tooltip"
                                                             title="Share Public Link"
                                                         >
@@ -277,6 +291,51 @@ export default function InterviewerAssessmentsPage() {
                     <br />
                     This action cannot be undone.
                 </p>
+            </Modal>
+
+            <Modal
+                isOpen={shareModalOpen}
+                onClose={() => setShareModalOpen(false)}
+                title="Share Assessment"
+                footer={
+                    <button
+                        onClick={() => setShareModalOpen(false)}
+                        className="w-full px-4 py-3 leading-none font-bold text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-xl transition"
+                    >
+                        Close
+                    </button>
+                }
+            >
+                <div className="space-y-6">
+                    <p className="text-gray-600 font-medium text-sm">
+                        Candidates can use the link below to access <span className="text-gray-900 font-bold">{assessmentToShare?.title}</span>.
+                    </p>
+
+                    <div className="bg-gray-50 p-4 border border-gray-200 rounded-xl flex items-center justify-between gap-3 shadow-sm">
+                        <div className="text-sm font-mono text-gray-700 font-medium truncate flex-1 select-all">
+                            {window.location.origin}/exam/public/assessments/{assessmentToShare?.id}
+                        </div>
+                        <button
+                            onClick={copyShareLink}
+                            className="p-2 bg-white text-indigo-600 border border-gray-200 shadow-sm hover:border-indigo-200 hover:bg-indigo-50 rounded-lg transition-colors shrink-0"
+                            title="Copy Link"
+                        >
+                            {copied ? <Check size={20} className="text-green-500" /> : <Copy size={20} />}
+                        </button>
+                    </div>
+
+                    {!assessmentToShare?.is_mock && (
+                        <div className="bg-orange-50 border border-orange-200 rounded-xl p-4 flex gap-3">
+                            <ShieldAlert size={20} className="text-orange-500 shrink-0 mt-0.5" />
+                            <div>
+                                <h4 className="text-sm font-bold text-orange-900 mb-1">Access Code Required</h4>
+                                <p className="text-xs font-medium text-orange-800 leading-relaxed">
+                                    Candidates will be prompted for an Access Code to enter this assessment. You can generate or verify the current Access Code in the <strong className="text-orange-900 underline cursor-pointer" onClick={() => router.push(`/interviewer/assessments/${assessmentToShare?.id}/edit`)}>Edit Assessment</strong> page.
+                                </p>
+                            </div>
+                        </div>
+                    )}
+                </div>
             </Modal>
         </div>
     );

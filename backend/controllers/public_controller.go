@@ -155,11 +155,47 @@ func (ctrl *PublicController) GetAssessmentMetadata(c *gin.Context) {
 		return
 	}
 
+	requiresPassword := !assessment.IsMock && assessment.ExamPasswordHash != ""
+
 	c.JSON(http.StatusOK, gin.H{
-		"id":          assessment.ID.Hex(),
-		"title":       assessment.Title,
-		"duration":    assessment.Duration,
-		"is_mock":     assessment.IsMock,
-		"total_marks": assessment.TotalMarks,
+		"id":                        assessment.ID.Hex(),
+		"title":                     assessment.Title,
+		"duration":                  assessment.Duration,
+		"is_mock":                   assessment.IsMock,
+		"total_marks":               assessment.TotalMarks,
+		"requires_password":         requiresPassword,
+		"exam_password_expires_at":  assessment.ExamPasswordExpiresAt,
 	})
+}
+
+// VerifyExamPassword validates the candidate-provided access code for a non-mock assessment
+func (ctrl *PublicController) VerifyExamPassword(c *gin.Context) {
+	id := c.Param("id")
+
+	var input struct {
+		Password string `json:"password" binding:"required"`
+	}
+	if err := c.ShouldBindJSON(&input); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	if err := ctrl.assessService.VerifyExamPassword(ctx, id, input.Password); err != nil {
+		switch err.Error() {
+		case "expired":
+			c.JSON(http.StatusGone, gin.H{"error": "Exam access code has expired"})
+		case "incorrect password":
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "Incorrect access code"})
+		case "no access code configured":
+			c.JSON(http.StatusForbidden, gin.H{"error": "No access code configured for this exam"})
+		default:
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		}
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"valid": true})
 }

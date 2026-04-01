@@ -164,16 +164,6 @@ func (s *authService) StartPublicAssessment(ctx context.Context, name, email, ph
 	email = strings.TrimSpace(strings.ToLower(email))
 	phone = utils.NormalizePhone(phone)
 
-	// Check if this user is explicitly disabled in our DB
-	existingUser, _ := s.userRepo.FindByEmail(ctx, email)
-	if existingUser == nil && phone != "" {
-		existingUser, _ = s.userRepo.FindByPhone(ctx, phone)
-	}
-
-	if existingUser != nil && existingUser.IsDisabled {
-		return "", nil, errors.New("your access to assessments has been disabled")
-	}
-
 	// Since they are demo users, do not save their personal details to the database!
 	sessionID := primitive.NewObjectID()
 
@@ -245,10 +235,6 @@ func (s *authService) StartAssessmentWithOTP(ctx context.Context, phone, otp str
 	user, err := s.userRepo.FindByPhone(ctx, phone)
 	if err != nil {
 		return "", nil, errors.New("candidate not found. please check your phone number")
-	}
-
-	if user.IsDisabled {
-		return "", nil, errors.New("your access to assessments has been disabled")
 	}
 
 	// Update LastSeen

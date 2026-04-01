@@ -5,7 +5,8 @@ import { useRouter, useParams } from "next/navigation";
 import { useAuth } from "@/context/AuthContext";
 import { apiRequest } from "@/lib/api";
 import { useToast } from "@/components/ui/Toast";
-import { Plus, Trash2, Save, ArrowLeft } from "lucide-react";
+import { Plus, Trash2, Save, ArrowLeft, Copy, Check, Lock, Loader2, Clock } from "lucide-react";
+import { copyToClipboard } from "@/lib/clipboard";
 
 interface DifficultyRule {
     difficulty: string;
@@ -76,6 +77,13 @@ export default function EditAssessmentPage() {
     const [totalMarks, setTotalMarks] = useState<number | string>(100);
     const [passingScore, setPassingScore] = useState<number | string>(50);
     const [isMock, setIsMock] = useState(false);
+    
+    // Access code state
+    const [passwordExpiry, setPasswordExpiry] = useState<string>("");
+    const [generatedPassword, setGeneratedPassword] = useState<string | null>(null);
+    const [regenerating, setRegenerating] = useState(false);
+    const [copied, setCopied] = useState(false);
+
     const [ruleGroups, setRuleGroups] = useState<RuleGroup[]>([]);
     const [loading, setLoading] = useState(true);
     const [submitting, setSubmitting] = useState(false);
@@ -103,6 +111,13 @@ export default function EditAssessmentPage() {
             setTotalMarks(assessment.total_marks || 100);
             setPassingScore(assessment.passing_score || 50);
             setIsMock(assessment.is_mock || false);
+            
+            if (assessment.exam_password_expires_at) {
+                // Remove the "Z" or whatever to make it compatible with datetime-local if simple, or just slice.
+                const dt = new Date(assessment.exam_password_expires_at);
+                const localStr = new Date(dt.getTime() - dt.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
+                setPasswordExpiry(localStr);
+            }
 
             // Group the flat rules back into RuleGroups
             const flatRules: Array<{
@@ -287,7 +302,7 @@ export default function EditAssessmentPage() {
 
         setSubmitting(true);
         try {
-            await apiRequest(`/api/assessments/${params.id}`, "PUT", {
+            const payload: any = {
                 title,
                 description,
                 duration: Number(duration),
@@ -295,7 +310,13 @@ export default function EditAssessmentPage() {
                 passing_score: Number(passingScore),
                 is_mock: isMock,
                 question_rules: flattenedRules,
-            });
+            };
+
+            if (!isMock && passwordExpiry) {
+                payload.exam_password_expires_at = new Date(passwordExpiry).toISOString();
+            }
+
+            await apiRequest(`/api/assessments/${params.id}`, "PUT", payload);
             showToast("Assessment updated successfully!", "success");
             router.push("/interviewer/assessments");
         } catch (err) {
@@ -303,6 +324,34 @@ export default function EditAssessmentPage() {
             showToast(message, "error");
         } finally {
             setSubmitting(false);
+        }
+    };
+
+    const handleRegeneratePassword = async () => {
+        setRegenerating(true);
+        setGeneratedPassword(null);
+        try {
+            const payload: any = {};
+            if (passwordExpiry) {
+                payload.exam_password_expires_at = new Date(passwordExpiry).toISOString();
+            }
+            const data = await apiRequest(`/api/assessments/${params.id}/regenerate-password`, "POST", payload);
+            setGeneratedPassword(data.exam_password);
+            showToast("New access code generated!", "success");
+        } catch (err: any) {
+            showToast(err.message || "Failed to regenerate password", "error");
+        } finally {
+            setRegenerating(false);
+        }
+    };
+
+    const handleCopyPassword = async () => {
+        if (!generatedPassword) return;
+        const success = await copyToClipboard(generatedPassword);
+        if (success) {
+            setCopied(true);
+            setTimeout(() => setCopied(false), 2000);
+            showToast("Code copied to clipboard!", "success");
         }
     };
 
@@ -409,6 +458,54 @@ export default function EditAssessmentPage() {
                                 </div>
                             </label>
                         </div>
+
+                        {!isMock && (
+                            <div className="pt-6 border-t border-gray-100 flex flex-col md:flex-row gap-8">
+                                <div className="flex-1">
+                                    <h3 className="text-sm font-semibold text-gray-900 mb-4 flex items-center gap-2">
+                                        <Lock size={16} className="text-indigo-600" /> Access Settings
+                                    </h3>
+                                    
+                                    <div className="space-y-4">
+                                        <div>
+                                            <label className="block text-xs font-bold text-gray-600 uppercase tracking-widest mb-2">Code Expiry (Optional)</label>
+                                            <input
+                                                type="datetime-local"
+                                                value={passwordExpiry}
+                                                onChange={(e) => setPasswordExpiry(e.target.value)}
+                                                className="w-full p-2.5 font-bold text-gray-900 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-100 focus:border-indigo-500 focus:outline-none transition-all"
+                                            />
+                                            <p className="text-xs text-gray-500 mt-1">If set, candidate passwords will expire at this time. Save changes to apply.</p>
+                                        </div>
+
+                                        <div className="bg-indigo-50/50 rounded-xl p-4 border border-indigo-100">
+                                            <p className="text-xs text-gray-600 mb-3 font-medium">Need a new access code? Generating a new code will immediately invalidate the old one for new candidates.</p>
+                                            <button
+                                                type="button"
+                                                onClick={handleRegeneratePassword}
+                                                disabled={regenerating}
+                                                className="flex items-center gap-2 px-4 py-2 bg-white border border-indigo-200 text-indigo-700 font-bold rounded-lg hover:bg-indigo-50 transition-colors disabled:opacity-50"
+                                            >
+                                                {regenerating ? <Loader2 size={16} className="animate-spin" /> : "Regenerate Access Code"}
+                                            </button>
+                                            
+                                            {generatedPassword && (
+                                                <div className="mt-4 bg-white p-3 rounded-xl border border-indigo-100 shadow-sm flex items-center justify-between">
+                                                    <code className="text-lg font-mono font-black text-indigo-900 tracking-widest">{generatedPassword}</code>
+                                                    <button
+                                                        type="button"
+                                                        onClick={handleCopyPassword}
+                                                        className="p-2 bg-indigo-50 text-indigo-600 hover:bg-indigo-100 rounded-lg transition-colors"
+                                                    >
+                                                        {copied ? <Check size={18} className="text-green-600" /> : <Copy size={18} />}
+                                                    </button>
+                                                </div>
+                                            )}
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        )}
                     </div>
                 </div>
 

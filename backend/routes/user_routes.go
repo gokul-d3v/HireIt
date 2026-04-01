@@ -17,6 +17,6 @@ func UserRoutes(r *gin.RouterGroup, ctrl *controllers.UserController) {
 	admin.Use(middleware.RoleMiddleware("interviewer", "admin"))
 	{
 		admin.GET("/users", ctrl.ListUsers)
-		admin.PATCH("/users/:id/status", ctrl.ToggleStatus)
 	}
 }
+

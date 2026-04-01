@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef } from "react";
 import { useRouter, useParams } from "next/navigation";
 import { useToast } from "@/components/ui/Toast";
-import { Phone, ShieldCheck, ArrowRight, BookOpen, Loader2, CheckCircle, ShieldAlert } from "lucide-react";
+import { Phone, ShieldCheck, ArrowRight, BookOpen, Loader2, CheckCircle, ShieldAlert, Lock } from "lucide-react";
 import { apiRequest } from "@/lib/api";
 
 export default function PublicAssessmentLanding() {
@@ -18,7 +18,9 @@ export default function PublicAssessmentLanding() {
     const [assessmentTitle, setAssessmentTitle] = useState("");
     const [phone, setPhone] = useState("");
     const [otp, setOtp] = useState(["", "", "", ""]);
-    const [step, setStep] = useState<"phone" | "otp">("phone");
+    const [password, setPassword] = useState("");
+    const [verifyingPassword, setVerifyingPassword] = useState(false);
+    const [step, setStep] = useState<"password" | "phone" | "otp">("password");
     const [submitting, setSubmitting] = useState(false);
     const [sendingOtp, setSendingOtp] = useState(false);
     const [startingMock, setStartingMock] = useState(false);
@@ -106,6 +108,24 @@ export default function PublicAssessmentLanding() {
             setOtp(["", "", "", ""]);
             setTimeout(() => otpRefs[0].current?.focus(), 100);
             setSubmitting(false);
+        }
+    };
+
+    const handleVerifyPassword = async (e: React.FormEvent) => {
+        e.preventDefault();
+        if (!password.trim()) {
+            showToast("Please enter the access code", "error");
+            return;
+        }
+
+        setVerifyingPassword(true);
+        try {
+            await apiRequest(`/api/public/assessments/${assessmentId}/verify-password`, "POST", { password: password.trim() });
+            setStep("phone");
+        } catch (err: any) {
+            showToast(err.message || "Invalid access code", "error");
+        } finally {
+            setVerifyingPassword(false);
         }
     };
 
@@ -262,7 +282,7 @@ export default function PublicAssessmentLanding() {
                             <BookOpen size={32} />
                         </div>
                         <h1 className="text-2xl font-bold text-gray-900 mb-1">
-                            {isMockAssessment ? "Start Mock Assessment" : (step === "phone" ? "Verify Your Identity" : "Enter OTP")}
+                            {isMockAssessment ? "Start Mock Assessment" : (step === "password" ? "Enter Access Code" : step === "phone" ? "Verify Your Identity" : "Enter OTP")}
                         </h1>
                         {assessmentTitle && (
                             <div className="text-indigo-600 font-bold mb-3">{assessmentTitle}</div>
@@ -270,9 +290,11 @@ export default function PublicAssessmentLanding() {
                         <p className="text-gray-500 text-sm">
                             {isMockAssessment
                                 ? null
-                                : step === "phone"
-                                    ? "Enter your registered phone number to receive an OTP."
-                                    : <>OTP sent to <span className="font-semibold text-gray-700">{phone}</span>. Enter it below.</>
+                                : step === "password"
+                                    ? "This assessment is protected. Please enter the access code."
+                                    : step === "phone"
+                                        ? "Enter your registered phone number to receive an OTP."
+                                        : <>OTP sent to <span className="font-semibold text-gray-700">{phone}</span>. Enter it below.</>
                             }
                         </p>
                     </div>
@@ -313,9 +335,41 @@ export default function PublicAssessmentLanding() {
                     ) : (
                         <>
                             <div className="flex items-center gap-2 mb-8">
-                                <div className={`flex-1 h-1.5 rounded-full transition-all ${step === "phone" ? "bg-indigo-300" : "bg-indigo-600"}`} />
+                                <div className={`flex-1 h-1.5 rounded-full transition-all ${step === "password" ? "bg-indigo-600" : "bg-indigo-300"}`} />
+                                <div className={`flex-1 h-1.5 rounded-full transition-all ${step === "phone" ? "bg-indigo-600" : (step === "otp" ? "bg-indigo-300" : "bg-gray-200")}`} />
                                 <div className={`flex-1 h-1.5 rounded-full transition-all ${step === "otp" ? "bg-indigo-600" : "bg-gray-200"}`} />
                             </div>
+
+                            {step === "password" && (
+                                <form onSubmit={handleVerifyPassword} className="space-y-6">
+                                    <div>
+                                        <label className="block text-sm font-semibold text-gray-700 mb-2">Access Code</label>
+                                        <div className="relative">
+                                            <Lock className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
+                                            <input
+                                                type="text"
+                                                required
+                                                autoFocus
+                                                value={password}
+                                                onChange={(e) => setPassword(e.target.value)}
+                                                className="w-full pl-10 pr-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-0 focus:border-indigo-500 focus:outline-none text-gray-900 font-medium transition font-mono tracking-widest"
+                                                placeholder="Enter code..."
+                                            />
+                                        </div>
+                                    </div>
+                                    <button
+                                        type="submit"
+                                        disabled={verifyingPassword}
+                                        className="w-full flex items-center justify-center gap-2 bg-indigo-600 text-white py-3 rounded-xl font-semibold hover:bg-indigo-700 active:scale-95 transition-all disabled:opacity-70"
+                                    >
+                                        {verifyingPassword ? (
+                                            <><Loader2 size={20} className="animate-spin" /> Verifying...</>
+                                        ) : (
+                                            <>Continue <ArrowRight size={20} /></>
+                                        )}
+                                    </button>
+                                </form>
+                            )}
 
                             {step === "phone" && (
                                 <form onSubmit={handleSendOtp} className="space-y-6">

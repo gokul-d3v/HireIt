@@ -25,5 +25,7 @@ func AssessmentRoutes(r *gin.RouterGroup, assessCtrl *controllers.AssessmentCont
 		assessments.PUT("/:id", assessCtrl.UpdateAssessment)
 		assessments.DELETE("/:id", assessCtrl.DeleteAssessment)
 		assessments.GET("/:id/submissions", assessCtrl.GetSubmissions)
+		assessments.POST("/:id/regenerate-password", assessCtrl.RegeneratePassword)
 	}
 }
+

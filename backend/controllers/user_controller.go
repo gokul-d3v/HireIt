@@ -36,28 +36,6 @@ func (ctrl *UserController) ListUsers(c *gin.Context) {
 	c.JSON(http.StatusOK, users)
 }
 
-func (ctrl *UserController) ToggleStatus(c *gin.Context) {
-	id := c.Param("id")
-	var input struct {
-		IsDisabled bool `json:"is_disabled"`
-	}
-	if err := c.ShouldBindJSON(&input); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-		return
-	}
-
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-
-	err := ctrl.userService.ToggleUserStatus(ctx, id, input.IsDisabled)
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to update user status"})
-		return
-	}
-
-	c.JSON(http.StatusOK, gin.H{"message": "User status updated successfully"})
-}
-
 func (ctrl *UserController) Heartbeat(c *gin.Context) {
 	userID, exists := c.Get("userID")
 	if !exists {

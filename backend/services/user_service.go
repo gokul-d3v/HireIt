@@ -14,7 +14,6 @@ import (
 
 type UserService interface {
 	ListUsers(ctx context.Context, limit, skip int) ([]models.User, error)
-	ToggleUserStatus(ctx context.Context, id string, disabled bool) error
 	Heartbeat(ctx context.Context, userID string) error
 	GetActiveUserCount(ctx context.Context) (int64, error)
 }
@@ -37,13 +36,6 @@ func (s *userService) ListUsers(ctx context.Context, limit, skip int) ([]models.
 	return s.repo.FindAll(ctx, filter, opts)
 }
 
-func (s *userService) ToggleUserStatus(ctx context.Context, idStr string, disabled bool) error {
-	id, err := primitive.ObjectIDFromHex(idStr)
-	if err != nil {
-		return err
-	}
-	return s.repo.UpdateStatus(ctx, id, disabled)
-}
 
 func (s *userService) Heartbeat(ctx context.Context, userID string) error {
 	id, err := primitive.ObjectIDFromHex(userID)

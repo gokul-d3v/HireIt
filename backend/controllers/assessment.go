@@ -34,16 +34,29 @@ func (ctrl *AssessmentController) CreateAssessment(c *gin.Context) {
 	userID, _ := c.Get("userID")
 	assessment.CreatedBy = userID.(primitive.ObjectID)
 
+	// Parse optional exam_password_expires_at from request body
+	var reqExtra struct {
+		ExamPasswordExpiresAt *time.Time `json:"exam_password_expires_at"`
+	}
+	_ = c.ShouldBindJSON(&reqExtra) // non-fatal if not provided
+
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
-	id, err := ctrl.assessmentService.CreateAssessment(ctx, &assessment)
+	id, plainPassword, err := ctrl.assessmentService.CreateAssessment(ctx, &assessment, reqExtra.ExamPasswordExpiresAt)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create assessment"})
 		return
 	}
 
-	c.JSON(http.StatusCreated, gin.H{"message": "Assessment created successfully", "id": id})
+	resp := gin.H{"message": "Assessment created successfully", "id": id}
+	if plainPassword != "" {
+		resp["exam_password"] = plainPassword
+		if assessment.ExamPasswordExpiresAt != nil {
+			resp["exam_password_expires_at"] = assessment.ExamPasswordExpiresAt
+		}
+	}
+	c.JSON(http.StatusCreated, resp)
 }
 
 func (ctrl *AssessmentController) GetAssessments(c *gin.Context) {
@@ -266,4 +279,27 @@ func (ctrl *AssessmentController) PreviewQuestions(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, questions)
+}
+
+func (ctrl *AssessmentController) RegeneratePassword(c *gin.Context) {
+	id := c.Param("id")
+
+	var input struct {
+		ExpiresAt *time.Time `json:"exam_password_expires_at"`
+	}
+	_ = c.ShouldBindJSON(&input) // optional
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	plain, expiry, err := ctrl.assessmentService.RegeneratePassword(ctx, id, input.ExpiresAt)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to regenerate password"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"exam_password":            plain,
+		"exam_password_expires_at": expiry,
+	})
 }

@@ -48,8 +48,10 @@ type Assessment struct {
 	CreatedAt     time.Time          `bson:"created_at" json:"created_at"`
 	UpdatedAt     time.Time          `bson:"updated_at" json:"updated_at"`
 
-	PassingScore  int        `bson:"passing_score" json:"passing_score"` // Minimum score to pass
-	TotalMarks    int        `bson:"total_marks" json:"total_marks"`     // Sum of all question points
-	DeletedAt     *time.Time `bson:"deleted_at,omitempty" json:"-"`      // For soft delete
-	QuestionCount int        `bson:"-" json:"question_count"`             // Computed: sum of rule counts
+	PassingScore             int        `bson:"passing_score" json:"passing_score"`                          // Minimum score to pass
+	TotalMarks               int        `bson:"total_marks" json:"total_marks"`                              // Sum of all question points
+	DeletedAt                *time.Time `bson:"deleted_at,omitempty" json:"-"`                               // For soft delete
+	QuestionCount            int        `bson:"-" json:"question_count"`                                     // Computed: sum of rule counts
+	ExamPasswordHash         string     `bson:"exam_password_hash,omitempty" json:"-"`                       // bcrypt hash, never exposed in API
+	ExamPasswordExpiresAt    *time.Time `bson:"exam_password_expires_at,omitempty" json:"exam_password_expires_at,omitempty"`
 }

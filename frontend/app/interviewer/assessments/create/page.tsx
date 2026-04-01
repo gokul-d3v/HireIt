@@ -5,9 +5,10 @@ import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/context/AuthContext";
 import { apiRequest } from "@/lib/api";
-import { Plus, Trash2, Save, ArrowLeft, ArrowRight, Clock, Award, Target, FileText, CheckCircle, AlertTriangle } from "lucide-react";
+import { Plus, Trash2, Save, ArrowLeft, ArrowRight, Clock, Award, Target, FileText, CheckCircle, AlertTriangle, Copy, Check } from "lucide-react";
 import { useToast } from "@/components/ui/Toast";
 import { Modal } from "@/components/ui/Modal";
+import { copyToClipboard } from "@/lib/clipboard";
 
 interface DifficultyRule {
     difficulty: string;
@@ -100,6 +101,7 @@ export default function CreateAssessmentPage() {
                 if (parsed.totalMarks) setTotalMarks(parsed.totalMarks);
                 if (parsed.passingScore) setPassingScore(parsed.passingScore);
                 if (parsed.isMock !== undefined) setIsMock(parsed.isMock);
+                if (parsed.passwordExpiry) setPasswordExpiry(parsed.passwordExpiry);
                 if (parsed.ruleGroups) setRuleGroups(normalizeRuleGroups(parsed.ruleGroups));
             } catch (e) {
                 console.error("Failed to parse assessment draft", e);
@@ -117,10 +119,13 @@ export default function CreateAssessmentPage() {
     const [totalMarks, setTotalMarks] = useState<number | string>("");
     const [passingScore, setPassingScore] = useState<number | string>("");
     const [isMock, setIsMock] = useState(false);
+    const [passwordExpiry, setPasswordExpiry] = useState("");
     const [ruleGroups, setRuleGroups] = useState<RuleGroup[]>([]);
 
     const [submitting, setSubmitting] = useState(false);
     const [isConfirmModalOpen, setIsConfirmModalOpen] = useState(false);
+    const [createdData, setCreatedData] = useState<{ id: string, exam_password?: string, exam_password_expires_at?: string } | null>(null);
+    const [copied, setCopied] = useState(false);
 
     // Preview questions state
     // Bank count warnings per slot (key: "category|||sub|||difficulty")
@@ -136,10 +141,11 @@ export default function CreateAssessmentPage() {
             totalMarks,
             passingScore,
             isMock,
+            passwordExpiry,
             ruleGroups
         };
         localStorage.setItem("assessmentDraft", JSON.stringify(draft));
-    }, [step, title, description, duration, totalMarks, passingScore, isMock, ruleGroups]);
+    }, [step, title, description, duration, totalMarks, passingScore, isMock, passwordExpiry, ruleGroups]);
 
     // Auth protection
     if (isLoading) return <div className="min-h-screen flex items-center justify-center bg-gray-50 text-gray-600">Loading...</div>;
@@ -392,7 +398,7 @@ export default function CreateAssessmentPage() {
     const handleSubmit = async () => {
         setSubmitting(true);
         try {
-            const payload = {
+            const payload: any = {
                 title: title,
                 description: description,
                 duration: Number(duration),
@@ -402,18 +408,37 @@ export default function CreateAssessmentPage() {
                 question_rules: flattenedRules
             };
 
-            await apiRequest("/api/assessments", "POST", payload);
+            if (!isMock && passwordExpiry) {
+                payload.exam_password_expires_at = new Date(passwordExpiry).toISOString();
+            }
+
+            const data = await apiRequest("/api/assessments", "POST", payload);
 
             // Clear the draft after successful submission
             localStorage.removeItem("assessmentDraft");
 
             showToast(`Successfully created assessment!`, "success");
-            router.push("/interviewer/assessments");
+            setCreatedData({
+                id: data.id,
+                exam_password: data.exam_password,
+                exam_password_expires_at: data.exam_password_expires_at
+            });
+            setStep(4); // Success step
         } catch (err) {
             const message = err instanceof Error ? err.message : "Failed to create assessment";
             showToast(message, "error");
         } finally {
             setSubmitting(false);
+        }
+    };
+
+    const handleCopyPassword = async () => {
+        if (!createdData?.exam_password) return;
+        const success = await copyToClipboard(createdData.exam_password);
+        if (success) {
+            setCopied(true);
+            setTimeout(() => setCopied(false), 2000);
+            showToast("Password copied to clipboard!", "success");
         }
     };
 
@@ -437,22 +462,23 @@ export default function CreateAssessmentPage() {
                 </div>
             </div>
 
-            {/* Progress Bar */}
-            <div className="bg-white border-b border-gray-200">
-                <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
-                    <div className="flex items-center justify-between">
-                        {["Configuration", "Questions Format", "Review"].map((label, idx) => (
-                            <div key={idx} className="flex items-center flex-1">
-                                <div className={`flex items-center justify-center w-8 h-8 rounded-full ${step > idx + 1 ? 'bg-green-500' : step === idx + 1 ? 'bg-indigo-600' : 'bg-gray-300'} text-white font-semibold text-sm`}>
-                                    {step > idx + 1 ? '✓' : idx + 1}
+            {step < 4 && (
+                <div className="bg-white border-b border-gray-200">
+                    <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
+                        <div className="flex items-center justify-between">
+                            {["Configuration", "Questions Format", "Review"].map((label, idx) => (
+                                <div key={idx} className="flex items-center flex-1">
+                                    <div className={`flex items-center justify-center w-8 h-8 rounded-full ${step > idx + 1 ? 'bg-green-500' : step === idx + 1 ? 'bg-indigo-600' : 'bg-gray-300'} text-white font-semibold text-sm`}>
+                                        {step > idx + 1 ? '✓' : idx + 1}
+                                    </div>
+                                    <div className="ml-2 text-sm font-medium text-gray-700">{label}</div>
+                                    {idx < 2 && <div className={`flex-1 h-1 mx-4 ${step > idx + 1 ? 'bg-green-500' : 'bg-gray-300'}`} />}
                                 </div>
-                                <div className="ml-2 text-sm font-medium text-gray-700">{label}</div>
-                                {idx < 2 && <div className={`flex-1 h-1 mx-4 ${step > idx + 1 ? 'bg-green-500' : 'bg-gray-300'}`} />}
-                            </div>
-                        ))}
+                            ))}
+                        </div>
                     </div>
                 </div>
-            </div>
+            )}
 
             <main className={`max-w-6xl mx-auto px-4 py-8 ${step > 1 ? 'flex flex-col lg:flex-row gap-8' : ''}`}>
                 <div className={step > 1 ? 'flex-1' : 'max-w-4xl mx-auto w-full'}>
@@ -546,6 +572,23 @@ export default function CreateAssessmentPage() {
                                     </div>
                                 </label>
                             </div>
+
+                            {!isMock && (
+                                <div className="pt-4 border-t border-gray-100">
+                                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                                        Access Code Expiry (Optional)
+                                    </label>
+                                    <input
+                                        type="datetime-local"
+                                        value={passwordExpiry}
+                                        onChange={(e) => setPasswordExpiry(e.target.value)}
+                                        className="w-full md:w-1/2 p-3 font-medium text-gray-900 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-100 focus:border-indigo-600 focus:outline-none"
+                                    />
+                                    <p className="text-xs text-gray-500 mt-1">
+                                        If set, passwords for this assessment will expire at this time.
+                                    </p>
+                                </div>
+                            )}
 
                             <div className="flex justify-end pt-6 border-t border-gray-100">
                                 <button
@@ -903,6 +946,53 @@ export default function CreateAssessmentPage() {
                                             <Save size={18} /> Create Final Assessment
                                         </>
                                     )}
+                                </button>
+                            </div>
+                        </div>
+                    )}
+
+                    {/* Step 4: Success */}
+                    {step === 4 && createdData && (
+                        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-8 text-center max-w-2xl mx-auto space-y-6">
+                            <div className="w-20 h-20 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-2 text-green-600">
+                                <Check size={40} />
+                            </div>
+                            <h2 className="text-3xl font-black text-gray-900">Assessment Created!</h2>
+                            <p className="text-gray-600 font-medium pb-4">
+                                Your assessment has been successfully created.
+                                {!isMock && " Candidates will need the Access Code below to begin."}
+                            </p>
+
+                            {!isMock && createdData.exam_password && (
+                                <div className="bg-indigo-50 border-2 border-indigo-100 rounded-2xl p-6 relative max-w-sm mx-auto">
+                                    <div className="text-[10px] font-bold uppercase tracking-widest text-indigo-400 mb-2">Access Code</div>
+                                    <div className="flex items-center justify-between gap-4 bg-white p-3 rounded-xl border border-indigo-100 shadow-sm">
+                                        <code className="text-xl font-mono font-bold text-indigo-900 tracking-wider">
+                                            {createdData.exam_password}
+                                        </code>
+                                        <button
+                                            onClick={handleCopyPassword}
+                                            className="p-2 text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors"
+                                            title="Copy Code"
+                                        >
+                                            {copied ? <Check size={20} className="text-green-500" /> : <Copy size={20} />}
+                                        </button>
+                                    </div>
+                                    {createdData.exam_password_expires_at && (
+                                        <div className="text-xs font-semibold text-indigo-500 mt-4 flex items-center justify-center gap-1">
+                                            <Clock size={12} />
+                                            Expires: {new Date(createdData.exam_password_expires_at).toLocaleString()}
+                                        </div>
+                                    )}
+                                </div>
+                            )}
+
+                            <div className="pt-8">
+                                <button
+                                    onClick={() => router.push("/interviewer/assessments")}
+                                    className="px-8 py-3 bg-indigo-600 text-white rounded-xl font-bold hover:bg-indigo-700 shadow-lg shadow-indigo-200 transition-all active:scale-95"
+                                >
+                                    Return to Dashboard
                                 </button>
                             </div>
                         </div>
