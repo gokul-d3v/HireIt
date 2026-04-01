@@ -98,6 +98,7 @@ export default function AssessmentPlayer({ assessmentId, onComplete }: Assessmen
     const lastViolationTimeRef = useRef<Record<string, number>>({});
     const [stream, setStream] = useState<MediaStream | null>(null);
     const questionAudioRef = useRef<HTMLAudioElement | null>(null);
+    const blurTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
     // Snapshot State
     const [snapshots, setSnapshots] = useState<{
@@ -236,8 +237,38 @@ export default function AssessmentPlayer({ assessmentId, onComplete }: Assessmen
 
         const handleBlur = () => {
             if (!isCompletingRef.current) {
-                handleViolation("Application lost focus");
+                // 1-second grace period for accidental blurs or system popups
+                blurTimeoutRef.current = setTimeout(() => {
+                    handleViolation("Application lost focus");
+                    blurTimeoutRef.current = null;
+                }, 1000);
             }
+        };
+
+        const handleFocus = () => {
+            if (blurTimeoutRef.current) {
+                clearTimeout(blurTimeoutRef.current);
+                blurTimeoutRef.current = null;
+            }
+        };
+
+        const handleKeyDown = (e: KeyboardEvent) => {
+            // Block Inspect Element, Print, and Copy shortcuts
+            if (
+                e.key === "F12" ||
+                ((e.ctrlKey || e.metaKey) && e.shiftKey && (e.key === "I" || e.key === "J" || e.key === "C")) ||
+                ((e.ctrlKey || e.metaKey) && e.key === "u") || // View Source
+                ((e.ctrlKey || e.metaKey) && e.key === "p") || // Print
+                ((e.ctrlKey || e.metaKey) && (e.key === "c" || e.key === "v"))
+            ) {
+                e.preventDefault();
+                showToast("Action disabled for security reasons.", "error");
+            }
+        };
+
+        const handleContextMenu = (e: MouseEvent) => {
+            e.preventDefault();
+            showToast("Right-click is disabled.", "error");
         };
 
         const handleFullscreenChange = () => {
@@ -256,12 +287,18 @@ export default function AssessmentPlayer({ assessmentId, onComplete }: Assessmen
 
         document.addEventListener("visibilitychange", handleVisibilityChange);
         window.addEventListener("blur", handleBlur);
+        window.addEventListener("focus", handleFocus);
+        document.addEventListener("keydown", handleKeyDown);
+        document.addEventListener("contextmenu", handleContextMenu);
         document.addEventListener("fullscreenchange", handleFullscreenChange);
         window.addEventListener("beforeunload", handleBeforeUnload);
 
         return () => {
             document.removeEventListener("visibilitychange", handleVisibilityChange);
             window.removeEventListener("blur", handleBlur);
+            window.removeEventListener("focus", handleFocus);
+            document.removeEventListener("keydown", handleKeyDown);
+            document.removeEventListener("contextmenu", handleContextMenu);
             document.removeEventListener("fullscreenchange", handleFullscreenChange);
             window.removeEventListener("beforeunload", handleBeforeUnload);
         };
@@ -413,8 +450,8 @@ export default function AssessmentPlayer({ assessmentId, onComplete }: Assessmen
 
         // 3. Distance (Eye Gap)
         const eyeGap = Math.sqrt(Math.pow(rightEye[0] - leftEye[0], 2) + Math.pow(rightEye[1] - leftEye[1], 2));
-        const minGap = videoWidth * 0.15;
-        const maxGap = videoWidth * 0.4;
+        const minGap = videoWidth * 0.10; // Relaxed for better posture range
+        const maxGap = videoWidth * 0.5;  // Relaxed for better posture range
 
         let feedback = "";
         let correct = true;
@@ -978,7 +1015,11 @@ export default function AssessmentPlayer({ assessmentId, onComplete }: Assessmen
     }
 
     return (
-        <div ref={containerRef} className={`h-screen bg-gray-50 flex flex-col overflow-hidden ${examStarted ? "z-[9999] fixed inset-0 !top-0 !left-0 !right-0 !bottom-0 !m-0 !w-screen !h-screen" : ""}`}>
+        <div 
+            ref={containerRef} 
+            className={`h-screen bg-gray-50 flex flex-col select-none overflow-hidden ${examStarted ? "z-[9999] fixed inset-0 !top-0 !left-0 !right-0 !bottom-0 !m-0 !w-screen !h-screen" : ""}`}
+            style={{ userSelect: 'none', WebkitUserSelect: 'none' }}
+        >
             {/* Header */}
             <div className="bg-white border-b border-gray-200 px-8 py-4 sticky top-0 z-10 shadow-sm flex justify-between items-center h-20">
                 <div className="flex items-center gap-4 flex-1">
