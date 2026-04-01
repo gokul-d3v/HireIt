@@ -114,7 +114,7 @@ export default function PublicAssessmentLanding() {
     const handleVerifyPassword = async (e: React.FormEvent) => {
         e.preventDefault();
         if (!password.trim()) {
-            showToast("Please enter the access code", "error");
+            showToast("Please enter the access PIN", "error");
             return;
         }
 
@@ -123,7 +123,7 @@ export default function PublicAssessmentLanding() {
             await apiRequest(`/api/public/assessments/${assessmentId}/verify-password`, "POST", { password: password.trim() });
             setStep("phone");
         } catch (err: any) {
-            showToast(err.message || "Invalid access code", "error");
+            showToast(err.message || "Invalid access PIN", "error");
         } finally {
             setVerifyingPassword(false);
         }
@@ -282,7 +282,7 @@ export default function PublicAssessmentLanding() {
                             <BookOpen size={32} />
                         </div>
                         <h1 className="text-2xl font-bold text-gray-900 mb-1">
-                            {isMockAssessment ? "Start Mock Assessment" : (step === "password" ? "Enter Access Code" : step === "phone" ? "Verify Your Identity" : "Enter OTP")}
+                            {isMockAssessment ? "Start Mock Assessment" : (step === "password" ? "Enter Access PIN" : step === "phone" ? "Verify Your Identity" : "Enter OTP")}
                         </h1>
                         {assessmentTitle && (
                             <div className="text-indigo-600 font-bold mb-3">{assessmentTitle}</div>
@@ -291,7 +291,7 @@ export default function PublicAssessmentLanding() {
                             {isMockAssessment
                                 ? null
                                 : step === "password"
-                                    ? "This assessment is protected. Please enter the access code."
+                                    ? "This assessment is protected. Please enter the access PIN."
                                     : step === "phone"
                                         ? "Enter your registered phone number to receive an OTP."
                                         : <>OTP sent to <span className="font-semibold text-gray-700">{phone}</span>. Enter it below.</>
@@ -343,7 +343,7 @@ export default function PublicAssessmentLanding() {
                             {step === "password" && (
                                 <form onSubmit={handleVerifyPassword} className="space-y-6">
                                     <div>
-                                        <label className="block text-sm font-semibold text-gray-700 mb-2">Access Code</label>
+                                        <label className="block text-sm font-semibold text-gray-700 mb-2">Access PIN</label>
                                         <div className="relative">
                                             <Lock className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
                                             <input
@@ -353,7 +353,7 @@ export default function PublicAssessmentLanding() {
                                                 value={password}
                                                 onChange={(e) => setPassword(e.target.value)}
                                                 className="w-full pl-10 pr-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-0 focus:border-indigo-500 focus:outline-none text-gray-900 font-medium transition font-mono tracking-widest"
-                                                placeholder="Enter code..."
+                                                placeholder="Enter PIN..."
                                             />
                                         </div>
                                     </div>

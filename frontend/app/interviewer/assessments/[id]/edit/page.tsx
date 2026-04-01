@@ -5,7 +5,7 @@ import { useRouter, useParams } from "next/navigation";
 import { useAuth } from "@/context/AuthContext";
 import { apiRequest } from "@/lib/api";
 import { useToast } from "@/components/ui/Toast";
-import { Plus, Trash2, Save, ArrowLeft, Copy, Check, Lock, Loader2, Clock } from "lucide-react";
+import { Plus, Trash2, Save, ArrowLeft, Copy, Check, Lock, Loader2, Clock, RefreshCw } from "lucide-react";
 import { copyToClipboard } from "@/lib/clipboard";
 
 interface DifficultyRule {
@@ -78,10 +78,9 @@ export default function EditAssessmentPage() {
     const [passingScore, setPassingScore] = useState<number | string>(50);
     const [isMock, setIsMock] = useState(false);
     
-    // Access code state
-    const [passwordExpiry, setPasswordExpiry] = useState<string>("");
-    const [generatedPassword, setGeneratedPassword] = useState<string | null>(null);
-    const [regenerating, setRegenerating] = useState(false);
+    // Access PIN state
+    const [livePIN, setLivePIN] = useState<{ pin: string; rotates_at: string } | null>(null);
+    const [pinLoading, setPinLoading] = useState(false);
     const [copied, setCopied] = useState(false);
 
     const [ruleGroups, setRuleGroups] = useState<RuleGroup[]>([]);
@@ -95,6 +94,18 @@ export default function EditAssessmentPage() {
             .then(d => setBankConfig(d))
             .catch(() => { /* non-fatal */ });
     }, []);
+
+    const fetchPIN = useCallback(async (id: string) => {
+        setPinLoading(true);
+        try {
+            const data = await apiRequest(`/api/assessments/${id}/pin`, "GET");
+            setLivePIN({ pin: data.pin, rotates_at: data.rotates_at });
+        } catch {
+            showToast("Failed to fetch current PIN", "error");
+        } finally {
+            setPinLoading(false);
+        }
+    }, [showToast]);
 
     const fetchAssessment = useCallback(async (id: string) => {
         try {
@@ -112,11 +123,9 @@ export default function EditAssessmentPage() {
             setPassingScore(assessment.passing_score || 50);
             setIsMock(assessment.is_mock || false);
             
-            if (assessment.exam_password_expires_at) {
-                // Remove the "Z" or whatever to make it compatible with datetime-local if simple, or just slice.
-                const dt = new Date(assessment.exam_password_expires_at);
-                const localStr = new Date(dt.getTime() - dt.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
-                setPasswordExpiry(localStr);
+            // Fetch current PIN for non-mock exams
+            if (!assessment.is_mock) {
+                fetchPIN(id);
             }
 
             // Group the flat rules back into RuleGroups
@@ -162,7 +171,7 @@ export default function EditAssessmentPage() {
         } finally {
             setLoading(false);
         }
-    }, [router, showToast]);
+    }, [fetchPIN, router, showToast]);
 
     useEffect(() => {
         if (!isLoading && (!isAuthenticated || user?.role !== "interviewer")) {
@@ -312,10 +321,6 @@ export default function EditAssessmentPage() {
                 question_rules: flattenedRules,
             };
 
-            if (!isMock && passwordExpiry) {
-                payload.exam_password_expires_at = new Date(passwordExpiry).toISOString();
-            }
-
             await apiRequest(`/api/assessments/${params.id}`, "PUT", payload);
             showToast("Assessment updated successfully!", "success");
             router.push("/interviewer/assessments");
@@ -327,31 +332,26 @@ export default function EditAssessmentPage() {
         }
     };
 
-    const handleRegeneratePassword = async () => {
-        setRegenerating(true);
-        setGeneratedPassword(null);
+    const handleRegeneratePINSecret = async () => {
+        setPinLoading(true);
         try {
-            const payload: any = {};
-            if (passwordExpiry) {
-                payload.exam_password_expires_at = new Date(passwordExpiry).toISOString();
-            }
-            const data = await apiRequest(`/api/assessments/${params.id}/regenerate-password`, "POST", payload);
-            setGeneratedPassword(data.exam_password);
-            showToast("New access code generated!", "success");
+            const data = await apiRequest(`/api/assessments/${params.id}/regenerate-password`, "POST", {});
+            setLivePIN({ pin: data.pin, rotates_at: data.rotates_at });
+            showToast("New PIN secret generated!", "success");
         } catch (err: any) {
-            showToast(err.message || "Failed to regenerate password", "error");
+            showToast(err.message || "Failed to regenerate PIN secret", "error");
         } finally {
-            setRegenerating(false);
+            setPinLoading(false);
         }
     };
 
-    const handleCopyPassword = async () => {
-        if (!generatedPassword) return;
-        const success = await copyToClipboard(generatedPassword);
+    const handleCopyPIN = async () => {
+        if (!livePIN?.pin) return;
+        const success = await copyToClipboard(livePIN.pin);
         if (success) {
             setCopied(true);
             setTimeout(() => setCopied(false), 2000);
-            showToast("Code copied to clipboard!", "success");
+            showToast("PIN copied to clipboard!", "success");
         }
     };
 
@@ -467,40 +467,52 @@ export default function EditAssessmentPage() {
                                     </h3>
                                     
                                     <div className="space-y-4">
-                                        <div>
-                                            <label className="block text-xs font-bold text-gray-600 uppercase tracking-widest mb-2">Code Expiry (Optional)</label>
-                                            <input
-                                                type="datetime-local"
-                                                value={passwordExpiry}
-                                                onChange={(e) => setPasswordExpiry(e.target.value)}
-                                                className="w-full p-2.5 font-bold text-gray-900 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-100 focus:border-indigo-500 focus:outline-none transition-all"
-                                            />
-                                            <p className="text-xs text-gray-500 mt-1">If set, candidate passwords will expire at this time. Save changes to apply.</p>
-                                        </div>
-
-                                        <div className="bg-indigo-50/50 rounded-xl p-4 border border-indigo-100">
-                                            <p className="text-xs text-gray-600 mb-3 font-medium">Need a new access code? Generating a new code will immediately invalidate the old one for new candidates.</p>
-                                            <button
-                                                type="button"
-                                                onClick={handleRegeneratePassword}
-                                                disabled={regenerating}
-                                                className="flex items-center gap-2 px-4 py-2 bg-white border border-indigo-200 text-indigo-700 font-bold rounded-lg hover:bg-indigo-50 transition-colors disabled:opacity-50"
-                                            >
-                                                {regenerating ? <Loader2 size={16} className="animate-spin" /> : "Regenerate Access Code"}
-                                            </button>
+                                        <div className="bg-indigo-50/50 rounded-2xl p-6 border-2 border-indigo-100">
+                                            <div className="text-[10px] font-bold uppercase tracking-widest text-indigo-400 mb-2">Live Access PIN</div>
                                             
-                                            {generatedPassword && (
-                                                <div className="mt-4 bg-white p-3 rounded-xl border border-indigo-100 shadow-sm flex items-center justify-between">
-                                                    <code className="text-lg font-mono font-black text-indigo-900 tracking-widest">{generatedPassword}</code>
-                                                    <button
-                                                        type="button"
-                                                        onClick={handleCopyPassword}
-                                                        className="p-2 bg-indigo-50 text-indigo-600 hover:bg-indigo-100 rounded-lg transition-colors"
-                                                    >
-                                                        {copied ? <Check size={18} className="text-green-600" /> : <Copy size={18} />}
-                                                    </button>
+                                            {pinLoading ? (
+                                                <div className="flex items-center justify-center py-4">
+                                                    <RefreshCw size={24} className="animate-spin text-indigo-400" />
                                                 </div>
+                                            ) : livePIN ? (
+                                                <div className="space-y-3">
+                                                    <div className="bg-white p-4 rounded-xl border border-indigo-100 shadow-sm flex items-center justify-between">
+                                                        <code className="text-4xl font-mono font-black text-indigo-900 tracking-[0.3em]">{livePIN.pin}</code>
+                                                        <button
+                                                            type="button"
+                                                            onClick={handleCopyPIN}
+                                                            className="p-2 bg-indigo-50 text-indigo-600 hover:bg-indigo-100 rounded-lg transition-colors"
+                                                            title="Copy PIN"
+                                                        >
+                                                            {copied ? <Check size={18} className="text-green-600" /> : <Copy size={18} />}
+                                                        </button>
+                                                    </div>
+                                                    <div className="text-xs font-semibold text-indigo-400 flex items-center justify-center gap-1.5 bg-white/50 py-1 rounded-full border border-indigo-50/50">
+                                                        <Clock size={12} />
+                                                        Rotates at {new Date(livePIN.rotates_at).toLocaleTimeString()}
+                                                    </div>
+                                                </div>
+                                            ) : (
+                                                <div className="text-xs font-bold text-red-500 py-4 text-center">Failed to load PIN</div>
                                             )}
+
+                                            <div className="mt-6 pt-6 border-t border-indigo-100/50">
+                                                <p className="text-[11px] text-indigo-500 mb-3 font-medium leading-relaxed">
+                                                    Need to invalidate current codes? Regenerating the PIN secret creates a new HMAC key, immediately expiring all current PIN sessions for this exam.
+                                                </p>
+                                                <button
+                                                    type="button"
+                                                    onClick={handleRegeneratePINSecret}
+                                                    disabled={pinLoading}
+                                                    className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-white border-2 border-indigo-200 text-indigo-700 font-bold rounded-xl hover:bg-indigo-100 transition-all disabled:opacity-50 text-sm"
+                                                >
+                                                    {pinLoading ? <Loader2 size={16} className="animate-spin" /> : (
+                                                        <>
+                                                            <RefreshCw size={16} /> Regenerate PIN Secret
+                                                        </>
+                                                    )}
+                                                </button>
+                                            </div>
                                         </div>
                                     </div>
                                 </div>

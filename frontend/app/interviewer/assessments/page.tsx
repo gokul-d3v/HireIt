@@ -328,9 +328,9 @@ export default function InterviewerAssessmentsPage() {
                         <div className="bg-orange-50 border border-orange-200 rounded-xl p-4 flex gap-3">
                             <ShieldAlert size={20} className="text-orange-500 shrink-0 mt-0.5" />
                             <div>
-                                <h4 className="text-sm font-bold text-orange-900 mb-1">Access Code Required</h4>
+                                <h4 className="text-sm font-bold text-orange-900 mb-1">Access PIN Required</h4>
                                 <p className="text-xs font-medium text-orange-800 leading-relaxed">
-                                    Candidates will be prompted for an Access Code to enter this assessment. You can generate or verify the current Access Code in the <strong className="text-orange-900 underline cursor-pointer" onClick={() => router.push(`/interviewer/assessments/${assessmentToShare?.id}/edit`)}>Edit Assessment</strong> page.
+                                    Candidates will be prompted for an Access PIN to enter this assessment. You can find or regenerate the current Access PIN in the <strong className="text-orange-900 underline cursor-pointer" onClick={() => router.push(`/interviewer/assessments/${assessmentToShare?.id}/edit`)}>Edit Assessment</strong> page.
                                 </p>
                             </div>
                         </div>
