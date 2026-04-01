@@ -34,29 +34,19 @@ func (ctrl *AssessmentController) CreateAssessment(c *gin.Context) {
 	userID, _ := c.Get("userID")
 	assessment.CreatedBy = userID.(primitive.ObjectID)
 
-	// Parse optional exam_password_expires_at from request body
-	var reqExtra struct {
-		ExamPasswordExpiresAt *time.Time `json:"exam_password_expires_at"`
-	}
-	_ = c.ShouldBindJSON(&reqExtra) // non-fatal if not provided
-
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
-	id, plainPassword, err := ctrl.assessmentService.CreateAssessment(ctx, &assessment, reqExtra.ExamPasswordExpiresAt)
+	id, err := ctrl.assessmentService.CreateAssessment(ctx, &assessment)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create assessment"})
 		return
 	}
 
-	resp := gin.H{"message": "Assessment created successfully", "id": id}
-	if plainPassword != "" {
-		resp["exam_password"] = plainPassword
-		if assessment.ExamPasswordExpiresAt != nil {
-			resp["exam_password_expires_at"] = assessment.ExamPasswordExpiresAt
-		}
-	}
-	c.JSON(http.StatusCreated, resp)
+	c.JSON(http.StatusCreated, gin.H{
+		"message": "Assessment created successfully",
+		"id":      id,
+	})
 }
 
 func (ctrl *AssessmentController) GetAssessments(c *gin.Context) {
@@ -281,25 +271,49 @@ func (ctrl *AssessmentController) PreviewQuestions(c *gin.Context) {
 	c.JSON(http.StatusOK, questions)
 }
 
-func (ctrl *AssessmentController) RegeneratePassword(c *gin.Context) {
+// GetCurrentPIN returns the live 4-digit PIN and the time it next rotates.
+// Only interviewers can call this endpoint to share the PIN with candidates.
+func (ctrl *AssessmentController) GetCurrentPIN(c *gin.Context) {
 	id := c.Param("id")
 
-	var input struct {
-		ExpiresAt *time.Time `json:"exam_password_expires_at"`
-	}
-	_ = c.ShouldBindJSON(&input) // optional
-
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	plain, expiry, err := ctrl.assessmentService.RegeneratePassword(ctx, id, input.ExpiresAt)
+	pin, rotatesAt, err := ctrl.assessmentService.GetCurrentPIN(ctx, id)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to regenerate password"})
+		c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
 		return
 	}
 
 	c.JSON(http.StatusOK, gin.H{
-		"exam_password":            plain,
-		"exam_password_expires_at": expiry,
+		"pin":        pin,
+		"rotates_at": rotatesAt,
+	})
+}
+
+// RegeneratePassword regenerates the HMAC secret, which immediately invalidates
+// all current and previous PINs for this assessment.
+func (ctrl *AssessmentController) RegeneratePassword(c *gin.Context) {
+	id := c.Param("id")
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	if err := ctrl.assessmentService.RegenerateSecret(ctx, id); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to regenerate PIN secret"})
+		return
+	}
+
+	// Return the new current PIN immediately
+	pin, rotatesAt, err := ctrl.assessmentService.GetCurrentPIN(ctx, id)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch new PIN"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"message":    "PIN secret regenerated. All previous PINs are now invalid.",
+		"pin":        pin,
+		"rotates_at": rotatesAt,
 	})
 }

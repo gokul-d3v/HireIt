@@ -52,6 +52,5 @@ type Assessment struct {
 	TotalMarks               int        `bson:"total_marks" json:"total_marks"`                              // Sum of all question points
 	DeletedAt                *time.Time `bson:"deleted_at,omitempty" json:"-"`                               // For soft delete
 	QuestionCount            int        `bson:"-" json:"question_count"`                                     // Computed: sum of rule counts
-	ExamPasswordHash         string     `bson:"exam_password_hash,omitempty" json:"-"`                       // bcrypt hash, never exposed in API
-	ExamPasswordExpiresAt    *time.Time `bson:"exam_password_expires_at,omitempty" json:"exam_password_expires_at,omitempty"`
+	ExamPINSecret            string     `bson:"exam_pin_secret,omitempty" json:"-"`                          // HMAC secret for time-rotating 4-digit PIN
 }

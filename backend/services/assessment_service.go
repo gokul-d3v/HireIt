@@ -10,18 +10,18 @@ import (
 
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/mongo/options"
-	"golang.org/x/crypto/bcrypt"
 )
 
 type AssessmentService interface {
-	CreateAssessment(ctx context.Context, assessment *models.Assessment, expiresAt *time.Time) (id string, plainPassword string, err error)
+	CreateAssessment(ctx context.Context, assessment *models.Assessment) (id string, err error)
 	GetAssessments(ctx context.Context, limit, skip int, role string) ([]models.Assessment, error)
 	GetAssessmentByID(ctx context.Context, id string, role string) (*models.Assessment, error)
 	UpdateAssessment(ctx context.Context, id string, assessment *models.Assessment) error
 	DeleteAssessment(ctx context.Context, id string) error
 	SampleQuestions(ctx context.Context, rules []models.QuestionRule) ([]models.Question, error)
-	RegeneratePassword(ctx context.Context, id string, expiresAt *time.Time) (plainPassword string, expiry *time.Time, err error)
-	VerifyExamPassword(ctx context.Context, id string, password string) error
+	RegenerateSecret(ctx context.Context, id string) error
+	VerifyExamPIN(ctx context.Context, id string, pin string) error
+	GetCurrentPIN(ctx context.Context, id string) (pin string, rotatesAt time.Time, err error)
 }
 
 type assessmentService struct {
@@ -33,7 +33,7 @@ func NewAssessmentService(repo repositories.AssessmentRepository, qbRepo reposit
 	return &assessmentService{repo: repo, qbRepo: qbRepo}
 }
 
-func (s *assessmentService) CreateAssessment(ctx context.Context, assessment *models.Assessment, expiresAt *time.Time) (string, string, error) {
+func (s *assessmentService) CreateAssessment(ctx context.Context, assessment *models.Assessment) (string, error) {
 	// Sanitization
 	assessment.Title = utils.SanitizeStrict(assessment.Title)
 	assessment.Description = utils.SanitizeStrict(assessment.Description)
@@ -41,32 +41,17 @@ func (s *assessmentService) CreateAssessment(ctx context.Context, assessment *mo
 	assessment.CreatedAt = time.Now()
 	assessment.UpdatedAt = time.Now()
 
-	var plainPassword string
-
-	// Auto-generate bcrypt-hashed exam password for non-mock assessments
+	// Auto-generate a per-assessment HMAC secret for non-mock assessments.
+	// The secret never leaves the server; the PIN is derived from it on-demand.
 	if !assessment.IsMock {
-		plain := utils.GenerateRandomString(8)
-		hash, err := bcrypt.GenerateFromPassword([]byte(plain), bcrypt.DefaultCost)
-		if err != nil {
-			return "", "", err
-		}
-		assessment.ExamPasswordHash = string(hash)
-
-		// Default expiry: 7 days unless caller provides one
-		if expiresAt != nil {
-			assessment.ExamPasswordExpiresAt = expiresAt
-		} else {
-			defaultExpiry := time.Now().Add(7 * 24 * time.Hour)
-			assessment.ExamPasswordExpiresAt = &defaultExpiry
-		}
-		plainPassword = plain
+		assessment.ExamPINSecret = utils.GeneratePINSecret()
 	}
 
 	id, err := s.repo.Create(ctx, assessment)
 	if err != nil {
-		return "", "", err
+		return "", err
 	}
-	return id.Hex(), plainPassword, nil
+	return id.Hex(), nil
 }
 
 func (s *assessmentService) GetAssessments(ctx context.Context, limit, skip int, role string) ([]models.Assessment, error) {
@@ -149,47 +134,52 @@ func (s *assessmentService) SampleQuestions(ctx context.Context, rules []models.
 	return sampleQuestionsForRules(ctx, s.qbRepo, rules)
 }
 
-// RegeneratePassword creates a fresh exam password, bcrypt-hashes it, persists the hash,
-// and returns the plaintext exactly once.
-func (s *assessmentService) RegeneratePassword(ctx context.Context, idStr string, expiresAt *time.Time) (string, *time.Time, error) {
+// RegenerateSecret creates a new HMAC secret for an assessment, effectively rotating
+// all future PINs. This is the equivalent of the old "regenerate password".
+func (s *assessmentService) RegenerateSecret(ctx context.Context, idStr string) error {
 	id, err := utils.ToObjectID(idStr)
 	if err != nil {
-		return "", nil, err
+		return err
 	}
 
 	existing, err := s.repo.FindByID(ctx, id)
 	if err != nil || existing.DeletedAt != nil {
-		return "", nil, errors.New("assessment not found")
-	}
-
-	plain := utils.GenerateRandomString(8)
-	hash, err := bcrypt.GenerateFromPassword([]byte(plain), bcrypt.DefaultCost)
-	if err != nil {
-		return "", nil, err
-	}
-
-	var expiry time.Time
-	if expiresAt != nil {
-		expiry = *expiresAt
-	} else {
-		expiry = time.Now().Add(7 * 24 * time.Hour)
+		return errors.New("assessment not found")
 	}
 
 	update := &models.Assessment{
-		ExamPasswordHash:      string(hash),
-		ExamPasswordExpiresAt: &expiry,
-		UpdatedAt:             time.Now(),
+		ExamPINSecret: utils.GeneratePINSecret(),
+		UpdatedAt:     time.Now(),
 	}
-	if err := s.repo.Update(ctx, id, update); err != nil {
-		return "", nil, err
-	}
-
-	return plain, &expiry, nil
+	return s.repo.Update(ctx, id, update)
 }
 
-// VerifyExamPassword checks the provided plaintext password against the stored bcrypt hash
-// and validates the expiry. Returns nil on success.
-func (s *assessmentService) VerifyExamPassword(ctx context.Context, idStr string, password string) error {
+// GetCurrentPIN returns the current 4-digit PIN visible to the interviewer,
+// along with the time it will next rotate.
+func (s *assessmentService) GetCurrentPIN(ctx context.Context, idStr string) (string, time.Time, error) {
+	id, err := utils.ToObjectID(idStr)
+	if err != nil {
+		return "", time.Time{}, errors.New("invalid id")
+	}
+
+	assessment, err := s.repo.FindByID(ctx, id)
+	if err != nil || assessment.DeletedAt != nil {
+		return "", time.Time{}, errors.New("assessment not found")
+	}
+
+	if assessment.IsMock || assessment.ExamPINSecret == "" {
+		return "", time.Time{}, errors.New("no PIN configured for this assessment")
+	}
+
+	pin := utils.CurrentExamPIN(assessment.ExamPINSecret)
+	rotatesAt := utils.NextPINRotateAt()
+	return pin, rotatesAt, nil
+}
+
+// VerifyExamPIN checks the provided 4-digit PIN against the current (and previous)
+// 30-minute time window. Once a candidate passes this check, they do not need
+// to re-enter the PIN even if it rotates mid-exam.
+func (s *assessmentService) VerifyExamPIN(ctx context.Context, idStr string, pin string) error {
 	id, err := utils.ToObjectID(idStr)
 	if err != nil {
 		return errors.New("invalid assessment id")
@@ -200,23 +190,18 @@ func (s *assessmentService) VerifyExamPassword(ctx context.Context, idStr string
 		return errors.New("assessment not found")
 	}
 
-	// Mock exams have no password
+	// Mock exams have no PIN
 	if assessment.IsMock {
 		return nil
 	}
 
-	if assessment.ExamPasswordHash == "" {
+	if assessment.ExamPINSecret == "" {
 		return errors.New("no access code configured")
 	}
 
-	if assessment.ExamPasswordExpiresAt != nil && time.Now().After(*assessment.ExamPasswordExpiresAt) {
-		return errors.New("expired")
-	}
-
-	if err := bcrypt.CompareHashAndPassword([]byte(assessment.ExamPasswordHash), []byte(password)); err != nil {
-		return errors.New("incorrect password")
+	if !utils.VerifyExamPIN(assessment.ExamPINSecret, pin) {
+		return errors.New("incorrect pin")
 	}
 
 	return nil
 }
-

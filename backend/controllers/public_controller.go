@@ -155,20 +155,19 @@ func (ctrl *PublicController) GetAssessmentMetadata(c *gin.Context) {
 		return
 	}
 
-	requiresPassword := !assessment.IsMock && assessment.ExamPasswordHash != ""
+	requiresPassword := !assessment.IsMock && assessment.ExamPINSecret != ""
 
 	c.JSON(http.StatusOK, gin.H{
-		"id":                        assessment.ID.Hex(),
-		"title":                     assessment.Title,
-		"duration":                  assessment.Duration,
-		"is_mock":                   assessment.IsMock,
-		"total_marks":               assessment.TotalMarks,
-		"requires_password":         requiresPassword,
-		"exam_password_expires_at":  assessment.ExamPasswordExpiresAt,
+		"id":                assessment.ID.Hex(),
+		"title":             assessment.Title,
+		"duration":          assessment.Duration,
+		"is_mock":           assessment.IsMock,
+		"total_marks":       assessment.TotalMarks,
+		"requires_password": requiresPassword,
 	})
 }
 
-// VerifyExamPassword validates the candidate-provided access code for a non-mock assessment
+// VerifyExamPassword validates the candidate-provided 4-digit PIN for a non-mock assessment
 func (ctrl *PublicController) VerifyExamPassword(c *gin.Context) {
 	id := c.Param("id")
 
@@ -180,15 +179,13 @@ func (ctrl *PublicController) VerifyExamPassword(c *gin.Context) {
 		return
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	if err := ctrl.assessService.VerifyExamPassword(ctx, id, input.Password); err != nil {
+	if err := ctrl.assessService.VerifyExamPIN(ctx, id, input.Password); err != nil {
 		switch err.Error() {
-		case "expired":
-			c.JSON(http.StatusGone, gin.H{"error": "Exam access code has expired"})
-		case "incorrect password":
-			c.JSON(http.StatusUnauthorized, gin.H{"error": "Incorrect access code"})
+		case "incorrect pin":
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "Incorrect PIN. Please check the code with your interviewer."})
 		case "no access code configured":
 			c.JSON(http.StatusForbidden, gin.H{"error": "No access code configured for this exam"})
 		default:
